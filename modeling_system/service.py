@@ -21,6 +21,7 @@ class UnconfiguredNative:
         raise ValueError('Native adapter is unconfigured for this character/workspace. Bind and verify the native owner before native operations; recorded analysis remains available.')
 
 READ_OPERATIONS={'capabilities','runtime_status','inspect_situation','inspect_workflow','read_record',
+                 'read_component_catalog','locate_component','select_component',
                  'retrieve_experience','decision_workspace','semantic_impact','inspect_operations','check_reuse',
                  'package_readiness','evidence_manifest','operation_context','select_generation_route','inspect_recipe','recipe_template'}
 
@@ -296,6 +297,51 @@ class ModelingService:
         """Retain ordered surface alternatives, source-edge gaps and exact selected-section relations; no anatomical admission or native effects."""
         from .surface_correspondence import inspect
         return inspect(self, case_path, expected_state)
+
+    def record_topology_lineage(self, case_path: str) -> dict:
+        """Retain exact operation-produced topology relations bound to an original receipt; never infer proximity or write native geometry."""
+        from .topology_lineage import record
+        return record(self, case_path)
+
+    def inspect_execution_receipt(self, case_path: str) -> dict:
+        """Inspect pinned operation or worker evidence without replaying any effect."""
+        from .execution_receipts import inspect
+        return inspect(self, case_path)
+
+    def build_component_catalog(self, state: str, object_name: str, connectivity: str = 'shared_edge', max_triangles: int | None = None) -> dict:
+        """Retain a compact exact-revision catalog of disconnected recorded triangles with lazy members and explicit edge/vertex connectivity."""
+        from .component_catalog import build
+        return build(self, state, object_name, connectivity, max_triangles)
+
+    def read_component_catalog(self, catalog: str, offset: int = 0, limit: int = 20, max_chars: int = 8000, order: str = 'largest') -> dict:
+        """Read bounded component metrics without materializing all component members or contacting native geometry."""
+        from .component_catalog import read
+        return read(self, catalog, offset, limit, max_chars, order)
+
+    def locate_component(self, catalog: str, triangle: int) -> dict:
+        """Locate one exact recorded triangle in its immutable catalog; no anatomy or proximity mapping."""
+        from .component_catalog import locate
+        return locate(self, catalog, triangle)
+
+    def select_component(self, catalog: str, component: str, expected_state: str, expected_geometry_hash: str | None = None, members: str = 'triangles', offset: int = 0, limit: int = 256, max_chars: int = 8000) -> dict:
+        """Read one component's exact members after verifying source revision and geometry; this does not select or modify Blender objects."""
+        from .component_catalog import select
+        return select(self, catalog, component, expected_state, expected_geometry_hash, members, offset, limit, max_chars)
+
+    def inspect_graph_path(self, case_path: str, expected_state: dict, max_nodes: int = 100000, max_edges: int = 500000) -> dict:
+        """Retain bounded shortest-path evidence in an exact selected graph; exhaustion stays incomplete and no result establishes global or anatomical reachability."""
+        from .graph_paths import inspect
+        return inspect(self, case_path, expected_state, max_nodes, max_edges)
+
+    def compose_topology_lineage(self, lineages: list[str]) -> dict:
+        """Compose matching topology revisions while preserving introduced ancestry and original operation records."""
+        from .topology_lineage import compose
+        return compose(self, lineages)
+
+    def remap_topology_selection(self, lineage: str, selection: list[str], expected_source: str, direction: str = 'forward', policy: str = 'strict') -> dict:
+        """Retain exact selection remapping; strict mode exposes partial-ancestry ambiguity without emitting a selector."""
+        from .topology_lineage import remap
+        return remap(self, lineage, selection, expected_source, direction, policy)
 
     def analyze_repair(self, case_path: str, proposed_delta: list[float] | None = None, max_seconds: float = 20) -> dict:
         """Retain bounded offline coupled XYZ fit/preservation diagnostics and evidence-acquisition nominations; never apply or dispatch."""

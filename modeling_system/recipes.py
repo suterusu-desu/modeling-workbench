@@ -12,6 +12,7 @@ from .runtime import LOADED
 from .store import atomic_write, canonical, digest
 
 OUTPUTS = {
+    'inspect_graph_path': {'analysis','status','summary','native_ready','target_admission','reads'},
     'inspect_surface_correspondence': {'analysis','status','summary','next_actions','native_ready','target_admission','reads'},
     'inspect_target_domain': {'analysis','status','summary','next_actions','native_ready','target_admission','reads'},
     'inspect_control_coverage': {'analysis','status','summary','next_actions','native_ready','controllability','reads'},

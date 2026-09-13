@@ -194,6 +194,30 @@
       "route": "inspect_surface_correspondence",
       "implementation": "core",
       "verification": "Synthetic counterexamples preserve unsupported stations, foreground alternatives, exact source-edge gaps, ambiguous branches and unknown coverage. Planar disconnection does not prove full-surface disconnection; no anatomical admission or continuous correspondence claim."
+    },
+    {
+      "name": "Exact declared topology lineage",
+      "route": "record_topology_lineage / compose_topology_lineage / remap_topology_selection",
+      "implementation": "core",
+      "verification": "Synthetic split, merge, deletion, introduced ancestry and composition regressions. Requires an independently verified native producer for actual topology changes; receipt binding alone does not prove native lineage."
+    },
+    {
+      "name": "Bounded paths in selected recorded graphs",
+      "route": "inspect_graph_path",
+      "implementation": "core",
+      "verification": "Pinned graph and independent node/edge selections, shortest-path ambiguity and explicit budget exhaustion. A possible graph route does not prove anatomical or continuous surface correspondence."
+    },
+    {
+      "name": "Lazy recorded component catalogs",
+      "route": "build_component_catalog / read_component_catalog / locate_component / select_component",
+      "implementation": "core",
+      "verification": "Exact stored topology identity, declared connectivity, compact metrics and bounded member selection; read/locate/select do not write. Connected components are not automatically semantic regions."
+    },
+    {
+      "name": "Execution receipt and worker completion contracts",
+      "route": "inspect_execution_receipt / worker_contract.WorkerContract / worker_contract.verify_manifest",
+      "implementation": "core",
+      "verification": "Pinned operation-specific mappings separate effect, bytes, process, required outputs and independent verification. Standalone finalizer requires preflight, checks and protected source hashes before exclusive completion publication; no native replay or appearance approval."
     }
   ],
   "limits": [
