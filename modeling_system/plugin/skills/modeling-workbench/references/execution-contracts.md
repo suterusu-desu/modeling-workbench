@@ -4,20 +4,24 @@ Two verified wrapper mistakes motivate this pair of tools. A wrapper required a 
 
 ## Worker completion contract
 
-Declare the contract before work, run `preflight()`, record named checks while working, and call `finalize()` once. The completion file is written atomically only after every required artifact exists inside the output directory, every required check was recorded as a literal `True`, no recorded check failed, and every protected source still hashes to its declaration. Otherwise a failure report is written and `ContractFailure` is raised; with `--python-exit-code` the process exits nonzero, no completion file exists, and the launcher classifies the run as failed for the right reason.
+Declare the contract before work, run `preflight()`, record named checks while working, and call `finalize()` once. The completion file is written atomically only after every required artifact exists inside the output directory, every required check was recorded as a literal `True`, no recorded check failed, and every protected source still hashes to its declaration. If finalization detects an unsatisfied contract, a failure report is written and `ContractFailure` is raised; with `--python-exit-code` the process exits nonzero, no completion file exists, and the launcher classifies the run as failed for the right reason.
 
 ```python
-import sys
+import sys, json, os
+from pathlib import Path
 sys.path.insert(0, JOB['workbench_source'])                 # pinned checkout or installed package parent
 from modeling_system.worker_contract import WorkerContract  # or load worker_contract.py as a file
 
 contract = WorkerContract(OUT_DIR, completion_file='inventory.json',
-    required_artifacts=['source-inventory.json', 'head-arrays.npz', 'candidate.blend',
+    required_artifacts=['preflight.json', 'source-inventory.json', 'head-arrays.npz', 'candidate.blend',
                         {'name': 'source.fbx', 'sha256': JOB['asset_sha256'], 'role': 'copied pinned source'}],
     required_checks=['autoexec_disabled', 'source_hash_verified', 'head_mesh_present'],
     protected_sources=[{'path': JOB['source_asset'], 'sha256': JOB['asset_sha256'], 'role': 'pinned source asset'}],
     label=JOB['case'])
-contract.preflight()                                        # refuses before any work: names, output dir, source hashes
+preflight = contract.preflight()                            # refuses before native work
+with (Path(OUT_DIR) / 'preflight.json').open('x', encoding='utf-8') as f:
+    json.dump(preflight, f, allow_nan=False)
+    f.flush(); os.fsync(f.fileno())                          # retain before a native crash can erase context
 contract.check('autoexec_disabled', not bpy.context.preferences.filepaths.use_scripts_auto_execute)
 ...                                                         # import, inventory, save; use contract.fail(reason) for an explicit refusal
 contract.check('source_hash_verified', sha(source) == JOB['asset_sha256'], detail={'sha256': JOB['asset_sha256']})
@@ -25,6 +29,14 @@ contract.check('head_mesh_present', head is not None)
 contract.finalize(extra={'status': 'source_setup_inventoried', 'case': JOB['case']})
 raise SystemExit(0)
 ```
+
+### Save geometry before rendering
+
+A successful preflight return and in-memory check records do not survive a hard process crash by themselves. Retain the preflight result as a separately named required artifact before native effects. Keep each invocation in a new isolated output directory; an existing preflight file is evidence to reconcile, not a reason to truncate it. A partial preflight file is not completion proof.
+
+Save and verify the candidate and numerical roundtrip outputs before entering rendering or another failure-prone stage. Persist the exact checkpoint path/hash and completed numerical checks as their own intermediate record. Finalize the full worker only after its declared renders and other outputs exist and checks pass. A saved checkpoint or preflight record must never be called the final inventory for an unfinished run. A hard native crash may bypass Python exception handling and produce neither a contract failure report nor a completion manifest; inspect the original launcher receipt and independently verify whatever durable artifacts survived.
+
+If rendering fails, preserve that invocation and its failed receipt. The native owner may use the saved candidate for a separately identified render/reopen continuation under existing scope, with input hashes and a contract matching that continuation. Do not reconstruct successful completion for the original run, silently reuse its output directory, or replay geometry just to regenerate a completion marker. Rendering route selection remains environment-specific and must be verified by the owner.
 
 Declarations are validated in the constructor: `completion_file` (single filename), a nonempty `required_artifacts` list, an explicit `required_checks` list and an explicit `protected_sources` list are all required, so a missing declaration fails before work rather than after it. Artifact names are bounded relative POSIX names: no drive, backslash, absolute prefix, empty, `.` or `..` segment, more than eight segments or 200 characters. At finalize each name is resolved under the output directory and refused if any segment is a symbolic link or junction or the resolved path leaves the directory. Names may carry an expected `sha256`, which binds a copied import to its pinned source.
 
