@@ -1,0 +1,19 @@
+{
+  "name": "modeling-workbench",
+  "version": "0.2.0",
+  "description": "Numerical scene reasoning, exact-view reference generation, guide-constrained Blender trials and motion evidence.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Modeling Workbench",
+    "shortDescription": "Inspect geometry, capture exact views and improve character motion.",
+    "longDescription": "A coherent local modeling workflow linking native Blender state, image and guide references, recoverable edits, motion comparisons and retained lessons.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Inspect the current modeling situation and use the workbench to improve the character within its active scope."
+  },
+  "mcpServers": "./.mcp.json"
+}

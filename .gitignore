@@ -1,0 +1,19 @@
+# This checkout contains reusable source only. Private workspaces live elsewhere.
+__pycache__/
+*.pyc
+.venv/
+.runtime/
+.modeling/
+build/
+dist/
+*.egg-info/
+*.blend
+*.blend1
+*.npz
+*.png
+*.mp4
+*.zip
+*.log
+modeling-workspace.json
+.mcp.json
+modeling_system/plugin/.mcp.json

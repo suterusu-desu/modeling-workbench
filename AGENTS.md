@@ -1,0 +1,10 @@
+# Reusable modeling workbench
+
+Read README.md and the packaged modeling-workbench skill before changing workflow behavior.
+The repository contains generic tools, methods, adapter contracts and synthetic tests. Character identity, art, models, job history, personal locations, credentials and native rig bindings belong in separate private workspaces.
+
+Keep source, installed package, bound workspace, running adapter and operator adoption distinct. The tools cannot claim modeling quality on an untested character. Preserve exact workflow evidence privately and extract only reviewed general methods and synthetic regressions into this repository.
+
+Use explicit workspace bindings. Never invent anatomy, correspondence, target depth or native qualification. Native operations need a verified adapter, sole owner, expected state and recoverable change. Never clear an original rejection to admit a repaired derivative.
+
+Do not commit runtime exports or character evidence. Run the synthetic suite and source-distribution checks for behavior changes. Use the repository owner's configured identity and GitHub noreply address for commits; check both author and committer. Keep publication visibility unchanged unless explicitly requested.

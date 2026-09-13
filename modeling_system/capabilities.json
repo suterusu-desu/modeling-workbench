@@ -1,0 +1,174 @@
+{
+  "schema_version": 4,
+  "status": "Portable core; native operations require a separately bound and verified workspace adapter",
+  "principle": "The workflow is reusable; character evidence and native bindings are separate private inputs.",
+  "capabilities": [
+    {
+      "name": "Question and situation entry point",
+      "route": "open_question / inspect_situation",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Complete recorded numerical geometry and hidden dependencies",
+      "route": "synchronize_scene / query_live_geometry / import_scene / native_prepare_state / read_record",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Historical geometry queries independent of live Blender",
+      "route": "query_geometry / compare_geometry / project_points",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Exact camera-linked observation bundle",
+      "route": "capture_view_bundle / ingest_capture / record_observation",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Current viewport screenshots and arbitrary views",
+      "route": "native_capture_view / native_set_display",
+      "implementation": "native",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Native modeling, shape keys, rig and material edits",
+      "route": "begin_experiment / propose_change / apply_trial / native_apply_proposal",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Registered guide fitting and matching display",
+      "route": "qualify_guide / integrate_guide / native_integrate_guide / native_set_display",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Depth, actual sections and corresponding material paths",
+      "route": "query_geometry / native_inspect_feature / capture_view_bundle / native_set_display",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Semantic binding validity and explicit repair",
+      "route": "native_inspect_feature / native_apply_proposal",
+      "implementation": "native",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Whole motion, close-ups, combinations and replay",
+      "route": "native_capture_motion / ingest_motion_capture / assess_motion_continuity / compare_motion / import_motion / export_replay / analyze_video",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Checkpoint preservation and independent native reopen",
+      "route": "native_save_checkpoint / native_prepare_reopen / retain_candidate / reject_trial",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Source avatar construction study",
+      "route": "native_inspect_feature / query_geometry / recorded advanced proposals",
+      "implementation": "native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Image generation with character references",
+      "route": "request_reference / claim_job / reconcile_job / review_reference + installed image-generation transport",
+      "implementation": "external transport + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "3D guide generation and import",
+      "route": "prepare_guide / reject_guide / qualify_guide / integrate_guide + existing Tripo/Meshy transports",
+      "implementation": "external transport + native + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Source-first video generation and frame analysis",
+      "route": "request_reference(kind=video) / analyze_video / compare_motion + existing video transport",
+      "implementation": "external transport + core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Native file and export access",
+      "route": "native_export_native / native_apply_proposal",
+      "implementation": "native",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Continuous decisions, lessons and outcomes",
+      "route": "record_outcome / retrieve_experience / read_record",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Decision-point applicable procedures and selection policy",
+      "route": "operation_context / select_generation_route",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Recoverable decision workspace and independent judgments",
+      "route": "open_episode / revise_episode / decision_workspace / run_episode_operation / reconcile_episode",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Direct Python and transport operation journal",
+      "route": "public ModelingService methods / inspect_operations / reconcile_operation",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Bidirectional semantic graph and dependency distinctions",
+      "route": "record_dependencies / register_semantic_graph / validate_semantics / semantic_impact",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Dependency-bound numerical intervention response",
+      "route": "register_response / predict_response / compare_prediction / adapt_ancestry_response / check_reuse",
+      "implementation": "core with explicit sparse/pointwise and historical ancestry adapters",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Supported method promotion",
+      "route": "promote_procedure / retrieve_experience",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Exact ordered source motion schedule",
+      "route": "schedule_ordered_motion",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Portable explicit binding and evidence package",
+      "route": "evidence_manifest / export_package / package_readiness / verify_installation",
+      "implementation": "core and packaging",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Read-only decision lookup with explicit context retention",
+      "route": "operation_context / select_generation_route / capture_operation_context",
+      "implementation": "core",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Bounded coupled XYZ repair diagnosis and acquisition nominations",
+      "route": "analyze_repair / read_record",
+      "implementation": "core; offline only",
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    }
+  ],
+  "limits": [
+    "No character data or provider authorization is distributed.",
+    "Native adapter and character-specific anatomy/rig mappings must be supplied and qualified per workspace.",
+    "Recorded analysis and synthetic transfer tests do not establish modeling quality on a new character."
+  ]
+}

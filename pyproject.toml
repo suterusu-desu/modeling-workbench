@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modeling-workbench"
+version = "0.2.0"
+description = "Numerical scene reasoning and exact-view character modeling workflows"
+requires-python = ">=3.12"
+dependencies = ["mcp>=2.2,<3", "numpy>=2,<3", "scipy>=1.16,<2", "Pillow>=12,<13", "imageio-ffmpeg>=0.6,<1"]
+
+[project.scripts]
+modeling-workbench-mcp = "modeling_system.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["modeling_system"]
+
+[tool.setuptools.package-data]
+modeling_system = ["capabilities.json", "procedures.json", "distribution-files.json", "distribution-pyproject.toml", "requirements-lock.txt", "plugin/launch.py", "plugin/.codex-plugin/plugin.json", "plugin/skills/modeling-workbench/*.md", "plugin/skills/modeling-workbench/references/*.md"]

@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "procedures": [
+    {
+      "id": "source-before-reconstruction",
+      "stages": [
+        "generation",
+        "source_review",
+        "guide_qualification"
+      ],
+      "conditions": {},
+      "instruction": "The inspected screenshot supplies view/crop/pose; accepted artwork supplies likeness and intended anatomy. Review recognizable source before reconstructing unknown depth. Geometric support is qualified after delivery, before fitting.",
+      "source_queries": [
+        "The inspected screenshot supplies view/crop/pose; accepted artwork supplies likeness and intended anatomy. Review recognizable source before reconstructing unknown depth. Geometric support is qualified after delivery, before fitting."
+      ],
+      "limits": [
+        "A useful source is not a qualified 3D target"
+      ],
+      "operations": [
+        "request_reference",
+        "review_reference",
+        "prepare_guide",
+        "qualify_guide",
+        "reject_guide"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Retained method"
+        }
+      ]
+    },
+    {
+      "id": "connected-skin-support",
+      "stages": [
+        "generation",
+        "guide_qualification"
+      ],
+      "conditions": {
+        "observed_failure": [
+          "missing connected skin",
+          "lash-only reconstruction",
+          "shadow relief"
+        ]
+      },
+      "instruction": "For observed omission of support, make complete connected foreground skin explicit. Inspect actual connected skin and its depth; exclude unsupported lash/shadow relief and artificial borders/back geometry. This is not a universal ban on crops.",
+      "source_queries": [
+        "For observed omission of support, make complete connected foreground skin explicit. Inspect actual connected skin and its depth; exclude unsupported lash/shadow relief and artificial borders/back geometry. This is not a universal ban on crops."
+      ],
+      "limits": [
+        "Generated extras alone do not reject useful interior skin; qualify explicit support and exclusions"
+      ],
+      "operations": [
+        "review_reference",
+        "reject_guide",
+        "qualify_guide"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Retained method"
+        }
+      ]
+    },
+    {
+      "id": "connected-interior-qualification",
+      "stages": [
+        "guide_qualification",
+        "intervention"
+      ],
+      "conditions": {},
+      "instruction": "Qualify useful connected interior skin separately from incised margin, ripples, artificial shell/back/brow/lash/perimeter. Generated extras alone do not reject useful interior support. Use actual matched sections, registration and ocular relationships, retaining exclusions and source-review limitations.",
+      "source_queries": [
+        "Qualify useful connected interior skin separately from incised margin, ripples, artificial shell/back/brow/lash/perimeter. Generated extras alone do not reject useful interior support. Use actual matched sections, registration and ocular relationships, retaining exclusions and source-review limitations."
+      ],
+      "limits": [
+        "This qualification rule does not imply a source omission or authorize regeneration"
+      ],
+      "operations": [
+        "qualify_guide",
+        "reject_guide",
+        "query_geometry"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Retained method"
+        }
+      ]
+    },
+    {
+      "id": "provider-identity-recovery",
+      "stages": [
+        "generation",
+        "recovery",
+        "guide_qualification"
+      ],
+      "conditions": {},
+      "instruction": "Reread workspace policy, source review and actual live panel before claim. A scoped exception remains source/experiment bound. Preserve one durable job; reconcile uncertainty and actual exported output identity before another submission. Requested topology and actual geometry remain separate facts.",
+      "source_queries": [
+        "Reread workspace policy, source review and actual live panel before claim. A scoped exception remains source/experiment bound. Preserve one durable job; reconcile uncertainty and actual exported output identity before another submission. Requested topology and actual geometry remain separate facts."
+      ],
+      "limits": [
+        "A recorded preflight is operator evidence, not independent website inspection",
+        "No software test authorizes spending"
+      ],
+      "operations": [
+        "inspect_workflow",
+        "claim_job",
+        "reconcile_job"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Retained method"
+        }
+      ]
+    },
+    {
+      "id": "guide-constrained-intervention",
+      "stages": [
+        "intervention",
+        "prediction",
+        "review"
+      ],
+      "conditions": {},
+      "instruction": "Load actual feature bindings and require guide/depth/corresponding-section constraints DURING every correction, including smoothing. Check whole head and enlarged feature joins/corners, multiple angles and relevant guide poses/in-betweens. Keep provisional restrictions separate from user obligations.",
+      "source_queries": [
+        "Load actual feature bindings and require guide/depth/corresponding-section constraints DURING every correction, including smoothing. Check whole head and enlarged feature joins/corners, multiple angles and relevant guide poses/in-betweens. Keep provisional restrictions separate from user obligations."
+      ],
+      "limits": [
+        "Improved local metrics do not imply appearance acceptance",
+        "Finite motion checks do not prove every continuous pose"
+      ],
+      "operations": [
+        "begin_experiment",
+        "propose_change",
+        "apply_trial",
+        "compare_geometry",
+        "retain_candidate"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Retained method"
+        }
+      ]
+    },
+    {
+      "id": "save-before-judgment",
+      "stages": [
+        "recovery",
+        "review",
+        "closure"
+      ],
+      "conditions": {},
+      "instruction": "Preserve and save retained native work immediately with the preceding checkpoint. Consequential retention needs independent native reopen. A saved result may carry pending causal/artistic judgment; reconcile the same trial rather than repeating an uncertain mutation.",
+      "source_queries": [
+        "Preserve and save retained native work immediately with the preceding checkpoint. Consequential retention needs independent native reopen. A saved result may carry pending causal/artistic judgment; reconcile the same trial rather than repeating an uncertain mutation."
+      ],
+      "limits": [
+        "Local retention and user appearance acceptance remain independent"
+      ],
+      "operations": [
+        "resolve_trial",
+        "retain_candidate",
+        "record_outcome"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Retained method"
+        }
+      ]
+    },
+    {
+      "id": "review-state-and-rejection-recovery",
+      "stages": [
+        "review",
+        "recovery",
+        "intervention"
+      ],
+      "conditions": {},
+      "instruction": "Record static rejection independently of native rollback and saved/applied status. Existing rollback_trial requires the exact after.expected_state; review-only pose or view changes can invalidate that broad token. Do not reset review state or relax the guard. The sole native owner may use a new guarded transaction from freshly verified actual working state toward an explicitly authorized comparison baseline, retaining actual-before plus comparison arrays and both trial histories. This is an available continuation pattern, not automatic rollback or evidence of candidate retention.",
+      "source_queries": [
+        "Record static rejection independently of native rollback and saved/applied status. Existing rollback_trial requires the exact after.expected_state; review-only pose or view changes can invalidate that broad token. Do not reset review state or relax the guard. The sole native owner may use a new guarded transaction from freshly verified actual working state toward an explicitly authorized comparison baseline, retaining actual-before plus comparison arrays and both trial histories. This is an available continuation pattern, not automatic rollback or evidence of candidate retention."
+      ],
+      "limits": [
+        "Content-verified dependency-specific rollback is not implemented",
+        "Do not overwrite later user geometry, pose or viewing intent",
+        "Measured target coverage and defect ownership remain separate from a proposed causal explanation"
+      ],
+      "operations": [
+        "reconcile_episode",
+        "inspect_workflow",
+        "begin_experiment",
+        "propose_change",
+        "apply_trial"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Retained method"
+        }
+      ]
+    }
+  ]
+}
