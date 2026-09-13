@@ -25,7 +25,7 @@ recipe = work.run_recipe_step(recipe["recipe"], "coverage", recipe["revision"])
 
 Each instance belongs to one workspace and episode; the key identifies that instance, not its display name. A different key creates an independent run. Identical creation retries recover the same instance. The episode receives a workflow link; if `episode_link_pending` is returned, append that link through `revise_episode` after inspecting the current episode revision.
 
-`inspect_recipe(recipe_id)` is read-only. It reports exact input content revisions, each step's status and dependencies, review questions, bounded evidence reads and result expansion descriptors. Execute returned `operation`/`arguments` descriptors to read evidence. The instance `detail` exposes pinned inputs, template ID and historical attempts. It also appears in `decision_workspace` workflow summaries.
+`inspect_recipe(recipe_id)` is read-only. It reports exact input content revisions, each step's status and dependencies, review questions, bounded evidence reads and result expansion descriptors. Execute returned `operation`/`arguments` descriptors to read evidence. The instance `detail` exposes pinned inputs, template ID and historical attempts. Since 0.2.5, the default `decision_workspace` includes compact recipe step states and the direct inspection route. Running or uncertain recipe reservations block episode closure even if interruption occurred before an operation lease was created.
 
 ## Review, change inputs and recover
 

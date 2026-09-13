@@ -63,6 +63,8 @@ def summary(service, raw, item):
             reviews[w['review']]={k:v for k,v in review.items() if k in ('disposition','region','guard_band_pixels','conflicts','judgment_source')}
             reviews[w['review']]['expand']=record_read(w['review'])
         value['expand']=record_read(w['revision'])
+        if w['kind']=='diagnostic_recipe':
+            value.update({k:w[k] for k in ('steps','next_read','reason') if k in w})
         workflows.append(value)
     result['workflows']=workflows;result['source_reviews']=reviews
     result['question']={'role':raw['question']['role'],

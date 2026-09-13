@@ -151,6 +151,26 @@ class RecipeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'changed'):
                 self.s.run_recipe_step(state['recipe'],'coverage',old)
 
+    def test_default_workspace_exposes_recipe_steps_and_inspection_route(self):
+        state=self.create()
+        row=next(w for w in self.s.decision_workspace(episode=self.episode)['workflows'] if w['handle']==state['recipe'])
+        self.assertEqual(row['next_read'],dict(operation='inspect_recipe',arguments=dict(recipe=state['recipe'])))
+        self.assertEqual(row['steps'][0]['status'],'ready')
+
+    def test_recipe_reserved_before_lease_blocks_episode_closure(self):
+        state=self.create()
+        with patch.object(self.s,'_run_episode_operation',side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):self.step(state,'coverage')
+        view=self.s.decision_workspace(episode=self.episode)
+        row=next(w for w in view['workflows'] if w['handle']==state['recipe'])
+        self.assertEqual(row['status'],'needs_reconciliation')
+        with self.assertRaisesRegex(RuntimeError,'Close requires reconciled'):
+            self.s.reconcile_episode(self.episode,view['revision'],
+                character={'status':'unresolved','reason':'Offline only'},
+                method={'status':'unresolved','reason':'Interrupted recipe'},
+                evidence=[{'kind':'file','path':str(self.base.image),'role':'fixture'}],
+                applicability='Synthetic reserved attempt',close=True)
+
     def test_selected_step_does_not_materialize_unrelated_case(self):
         state=self.create()
         item=self.s.ledger.read(state['recipe'])
