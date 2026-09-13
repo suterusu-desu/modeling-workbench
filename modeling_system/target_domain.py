@@ -127,11 +127,11 @@ def inspect(service, case_path, expected_state):
     actions=[]
     if not inventory['independent_of_support_mask'] or scope['status']!='complete_for_declared_screen':
         actions.append('Inspect missing geometric-screen coverage independently of the authored deformation mask.')
-    if summary['candidates_outside_authored_mask']:
-        actions.append('Review mask-excluded geometric candidates against anatomy and support; mask disagreement alone does not admit targets or relax protection.')
+    if any(candidate[i] and not inside[i] and correspondence.get(ids[i],{}).get('status') in (None,'unresolved') for i in range(n)):
+        actions.append('Review mask-excluded geometric candidates whose region correspondence is still unresolved; mask disagreement alone does not admit targets or relax protection.')
     if summary['candidates_with_unknown_numeric_labels']:
         actions.append('Preserve unknown numeric labels explicitly. Independently reviewed region correspondence can be supported without inventing missing label values.')
-    if summary['candidates_without_supported_correspondence']:
+    if any(candidate[i] and correspondence.get(ids[i],{}).get('status') in (None,'unresolved') for i in range(n)):
         actions.append('Review candidate region correspondence independently of geometric hits, numeric labels and support-mask membership.')
     if summary['unselected_candidates_without_exclusion_provenance']:
         actions.append('Record why candidate points remain outside the fit; distinguish protection, context, trial restrictions and unresolved qualification.')

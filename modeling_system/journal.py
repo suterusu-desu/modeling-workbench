@@ -177,6 +177,7 @@ def calls(store, episode=None):
 
 
 def reconcile(service, handle, observed=None, evidence_paths=None):
+    completion_repair=None
     if len(handle)!=32 or any(c not in '0123456789abcdef' for c in handle):
         raise ValueError('Invalid operation handle')
     folder=service.store.root/'calls'/handle
@@ -221,14 +222,25 @@ def reconcile(service, handle, observed=None, evidence_paths=None):
             if completion.get('operation_handle')==handle:
                 with service.ledger._lock(lease['episode']):
                     lease_path=service.store.root/'episode-leases'/lease['episode']/(lease['id']+'.json')
-                    value=json.loads(lease_path.read_bytes());value.update(status=completion['completion_disposition'],operation_handle=handle)
+                    value=json.loads(lease_path.read_bytes());value.update(status=completion['completion_disposition'],operation_handle=handle,result_status=completion.get('result_status'))
                     atomic_write(lease_path,canonical(value))
+                completion_repair=dict(path=str(marker),status='existing receipt; lease finalized',disposition=completion['completion_disposition'])
         elif (outcome.get('status')=='returned' or outcome.get('effect_status')=='refused before mutation dispatch') and not any(e['status']!='returned' for e in effect_rows(folder)):
             with service.ledger._lock(lease['episode']):
                 lease_path=service.store.root/'episode-leases'/lease['episode']/(lease['id']+'.json')
                 value=json.loads(lease_path.read_bytes())
-                value.update(status='finished' if outcome.get('result',{}).get('status') not in ('failed','needs attention','conflicting') else 'needs effect reconciliation',operation_handle=handle)
+                if (value.get('id')!=lease['id'] or value.get('episode')!=lease['episode']
+                        or value.get('operation_handle') not in (None,handle)):
+                    raise ValueError('Lease identity differs from the original operation')
+                from .leases import mark_return,completion_status
+                terminal=dict(outcome.get('result',{}),operation_handle=handle)
+                if outcome.get('effect_status')=='refused before mutation dispatch':
+                    terminal['effect_status']='refused before mutation dispatch'
+                mark_return(service,value,terminal)
+                value.update(status=completion_status(terminal),operation_handle=handle,result_status=terminal.get('status'))
                 atomic_write(lease_path,canonical(value))
+                completion_repair=dict(path=str(marker),status='recovered from original durable result',disposition=value['status'])
     return dict(operation_handle=handle, operation_fact=record, outcome=outcome,
+                completion_repair=completion_repair,
                 effect_status=next(r['effect_status'] for r in calls(service.store) if r['handle']==handle),
                 recovery='Index repaired; effect uncertainty and active leases remain separate. No provider/native operation was repeated')

@@ -17,7 +17,9 @@ def digest(data):
 def atomic_write(path, data):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    # Do not append to the destination name: a valid Windows path can then
+    # exceed MAX_PATH, and a valid long basename can exceed NAME_MAX on POSIX.
+    temp = path.with_name(uuid.uuid4().hex + '.tmp')
     try:
         with temp.open('xb') as stream:
             stream.write(data)

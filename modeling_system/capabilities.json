@@ -182,6 +182,12 @@
       "route": "inspect_target_domain",
       "implementation": "core",
       "verification": "Synthetic regressions distinguish candidate selection, mask membership, unknown numeric labels, reviewed region correspondence and independent edge-check families. Native target admission and appearance remain unproved."
+    },
+    {
+      "name": "Missing completion receipt recovery without effect replay",
+      "route": "reconcile_operation",
+      "implementation": "core",
+      "verification": "Short atomic temporary names avoid valid-destination path inflation. Synthetic long-path and unknown-effect tests plus isolated copies of real failed completion records verify public metadata repair. Original operation outcomes remain unchanged."
     }
   ],
   "limits": [

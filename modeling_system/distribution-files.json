@@ -56,6 +56,7 @@
     "service.py",
     "store.py",
     "target_domain.py",
+    "test_atomic_repair.py",
     "test_bounded_reads.py",
     "test_control_coverage.py",
     "test_decisions.py",

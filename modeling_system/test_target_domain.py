@@ -48,6 +48,7 @@ class TargetDomainTests(unittest.TestCase):
         row=next(p for p in p['points'] if p['id']=='12')
         self.assertEqual(row['semantics'],{'row':None,'column':None})
         self.assertEqual(row['numeric_label_status'],'unknown')
+        self.assertTrue(any('Review mask-excluded' in a for a in r['next_actions']))
         canonical(p);self.assertFalse(r['native_ready']);self.assertFalse(r['target_admission'])
 
     def test_new_check_does_not_grant_target_admission_or_replace_other_families(self):
@@ -74,6 +75,13 @@ class TargetDomainTests(unittest.TestCase):
         row=next(x for x in p['points'] if x['id']=='12')
         self.assertEqual(row['correspondence_status'],'supported')
         self.assertEqual(row['numeric_label_status'],'unknown')
+        self.assertFalse(any('Review mask-excluded' in a or 'Review candidate region' in a for a in r['next_actions']))
+
+    def test_rejected_correspondence_is_not_automatically_reopened(self):
+        self.case['correspondence_reviews']=[dict(points=['10','11','12'],status='rejected',reason='Wrong region',evidence=['fixture review'])]
+        r,_=self.run_case()
+        self.assertFalse(any('Review mask-excluded' in a or 'Review candidate region' in a for a in r['next_actions']))
+        self.assertFalse(r['target_admission'])
 
     def test_mask_filtered_inventory_cannot_claim_independent_completeness(self):
         self.case['inventory']['independent_of_support_mask']=False
