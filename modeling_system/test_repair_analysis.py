@@ -81,6 +81,18 @@ class RepairTests(unittest.TestCase):
         self.assertTrue(full['constraints'][0]['outputs'])
         self.assertTrue(any(n['surface'] and n['region'] for n in full['acquisition_nominations']))
 
+    def test_optimizer_stop_is_not_geometric_infeasibility_or_generation_need(self):
+        # An unsuccessful numerical termination must not be relabeled as a
+        # missing surface or insufficient controls, even with a returned point.
+        with patch('modeling_system.repair_analysis.linprog',return_value=SimpleNamespace(
+                status=4,message='Synthetic numerical stop',x=np.zeros(3))):
+            result,full=self.run_case()
+        codes={d['code'] for d in full['diagnostics']}
+        self.assertIn('solver_unresolved',codes)
+        self.assertTrue(codes.isdisjoint({'missing_target','insufficient_controls','conflicting_constraints'}))
+        self.assertFalse(result['native_ready'])
+        self.assertTrue(all(n['generation']=='not_justified_by_this_diagnostic' for n in full['acquisition_nominations']))
+
     def test_grouped_nomination_keeps_exact_rows_and_thin_visible_view(self):
         target=self.case['targets'][0]; target['support']['status']='missing'
         other=copy.deepcopy(target); other.update(id='fit-Y',terms=[dict(output=0,direction=[0,1,0])])

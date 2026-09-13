@@ -20,6 +20,14 @@ class GeometryTests(unittest.TestCase):
             result=geometry.nearest_surface(self.a,point)
             np.testing.assert_allclose(result['point'],expected)
 
+    def test_endpoint_displacement_does_not_claim_out_and_back_travel(self):
+        middle=dict(self.a,co=self.a['co']+np.array([3.,4.,0.]))
+        endpoint=geometry.compare(self.a,self.a)
+        outward=geometry.compare(self.a,middle);returning=geometry.compare(middle,self.a)
+        self.assertEqual(endpoint['maximum_distance'],0.)
+        self.assertEqual(outward['maximum_distance']+returning['maximum_distance'],10.)
+        self.assertIn('cumulative travel is not measured',endpoint['measurement'])
+
     def test_degenerate_triangle_and_no_supported_surface(self):
         a={'co':np.array([[0.,0,0],[0,0,0],[2,0,0]]),'tri':self.a['tri']}
         np.testing.assert_allclose(geometry.nearest_surface(a,[1,3,0])['point'],[1,0,0])

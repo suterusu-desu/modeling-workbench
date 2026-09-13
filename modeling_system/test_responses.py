@@ -51,6 +51,29 @@ class ResponseTests(unittest.TestCase):
         changed=self.s.store.put('dependency_state',value)
         with self.assertRaises(ValueError):self.s.predict_response(response,changed,{'0':.1},[ev])
 
+    def test_scalar_match_exposes_unmeasured_neighbors_and_precision_scope(self):
+        response,dep,ev=self.response();original=self.s.read_record(response)
+        path=self.root/'single-output.npz'
+        np.savez_compressed(path,data=[1.],indices=[0],indptr=[0,1],shape=[1,3],
+            baseline_input=[0.,0.,2.],baseline_output=[0.],output_ids=[0])
+        spec=original['spec'];spec['influence']=dict(included=['vertex 0'],missing=['neighbors 1 and 2'],
+            boundary=['triangle one-ring'],complete_for_controls=[])
+        response=self.s.register_response(dep,original['semantic_validation'],spec,str(path),[ev])['response']
+        prediction=self.s.predict_response(response,dep,{'0':0.},[ev])
+        report=self.s.compare_prediction(prediction['prediction'],self.state,'Face',1,1e-9,
+            dict(whole='pending',close='pending',angles=[],guide_depth_sections='synthetic plane',
+                 motion='pending',appearance='pending',evidence=[ev]))
+        self.assertEqual(report['numerical_status'],'matches')
+        scope=report['comparison_scope']
+        self.assertEqual(scope['output_ids'],[0])
+        self.assertEqual(scope['unmeasured_topological_neighbors'],[1,2])
+        self.assertEqual(scope['baseline_state'],self.state)
+        self.assertEqual(scope['native_state'],self.state)
+        self.assertEqual(scope['axis'],1)
+        self.assertEqual(scope['geometric_tolerance'],1e-9)
+        self.assertIn('Not established',scope['native_storage_precision'])
+        self.assertFalse(report['influence']['complete_for_this_change'])
+
     def test_piecewise_prediction_crosses_branch_correctly(self):
         response,dep,ev=self.response('exact_piecewise')
         p=self.s.predict_response(response,dep,{'0':.4},[ev])

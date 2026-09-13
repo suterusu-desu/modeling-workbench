@@ -134,7 +134,7 @@ class EpisodeTests(unittest.TestCase):
         with self.assertRaises(Conflict):self.s.reconcile_episode(e['episode'],pending['revision'],close=True)
         done=self.s.reconcile_episode(e['episode'],pending['revision'],
             character={'status':'unresolved','reason':'Appearance not judged'},
-            method={'status':'rejected','reason':'Local metric did not improve connected form'},
+            method={'status':'rejected','reason':'Local metric did not improve connected form','integration':{'disposition':'not_generalizable','reason':'Retain this failed fixture as a counterexample; no successful rule established'}},
             evidence=[{'kind':'file','path':str(self.image),'role':'comparison'}],
             applicability='This fixture only',unresolved=['Appearance'],close=True)
         self.assertEqual(done['status'],'closed')
@@ -142,7 +142,7 @@ class EpisodeTests(unittest.TestCase):
     def test_read_transports_do_not_write_or_advertise_missing_operation(self):
         self.episode()
         before=sorted(str(p) for p in self.s.store.root.rglob('*'))
-        for op,args in [('inspect_situation',{}),('decision_workspace',{}),('retrieve_experience',{'query':'L62 local bend'})]:
+        for op,args in [('inspect_situation',{}),('decision_workspace',{}),('retrieve_experience',{'query':'local surface bend'})]:
             value=self.s.execute(op,args)
             self.assertNotEqual(value['status'],'failed')
         after=sorted(str(p) for p in self.s.store.root.rglob('*'))

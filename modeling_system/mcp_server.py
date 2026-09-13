@@ -3,6 +3,7 @@ import argparse
 import functools
 import inspect
 import json
+from pathlib import Path
 from typing import Any
 import anyio
 from mcp.server import MCPServer
@@ -34,7 +35,8 @@ NATIVE_DESCRIPTIONS={
 class ModelingMCP(MCPServer):
     def __init__(self, service):
         self.domain=service
-        super().__init__('modeling-workbench',title='Modeling Workbench',version='0.1.0',
+        version=json.loads((Path(__file__).parent/'plugin'/'.codex-plugin'/'plugin.json').read_text(encoding='utf-8'))['version']
+        super().__init__('modeling-workbench',title='Modeling Workbench',version=version,
                          description='Numerical scene reasoning, exact-view reference loops, recoverable Blender trials and motion evidence.')
         for name in service.operations():
             fn=getattr(service,name)

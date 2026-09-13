@@ -2,6 +2,26 @@
   "schema_version": 1,
   "procedures": [
     {
+      "id": "solver-termination-is-not-geometric-infeasibility",
+      "stages": ["diagnosis", "intervention", "method_integration"],
+      "conditions": {"observed_failure": "optimizer stopped without success"},
+      "instruction": "Preserve the exact stopped candidate and distinguish termination status, independently measured constraint feasibility and stationarity. A line-search or convergence stop alone does not establish impossible geometry, missing guide shape or a need for generation. When the problem supports it, test numerical rescaling of the unchanged objective and constraints in a separate bounded trial, compare actual geometry change, and retain all statuses.",
+      "source_queries": ["solver termination feasibility stationarity unchanged constraints objective scaling"],
+      "limits": ["A bounded diagnostic rule, not automatic optimizer recovery", "Do not change constraints or clamp geometry to relabel a numerical stop", "Stationarity tests require a justified model and appropriate residuals; they do not prove global optimality or shape quality", "Native writeback, triangle support, motion and appearance remain separate evidence"],
+      "operations": ["analyze_repair", "record_outcome", "reconcile_episode", "retrieve_experience"],
+      "citations": []
+    },
+    {
+      "id": "evidence-to-method-integration",
+      "stages": ["method_integration", "review", "recovery", "diagnosis"],
+      "conditions": {},
+      "instruction": "Retain a narrowly demonstrated method gain at any modeling phase without waiting for whole-character success. Preserve exact executable inputs, protected context, artistic variables, qualified support/exclusions and failed alternatives. Close an episode with an implemented procedure/tool/rule, bounded experimental recipe, or explicit not-generalizable result. Retrieve by mechanism and verify actual use; distinguish source, installed, runtime and operator adoption.",
+      "source_queries": ["supported diagnostic method integration mechanism applicability counterexamples actual use"],
+      "limits": ["Character and method judgments stay separate", "Local retention does not prove live adoption or cross-character quality", "Saving and recovery never wait for integration prose"],
+      "operations": ["record_outcome", "reconcile_episode", "promote_procedure", "retrieve_experience", "runtime_status"],
+      "citations": []
+    },
+    {
       "id": "source-before-reconstruction",
       "stages": [
         "generation",

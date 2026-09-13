@@ -18,7 +18,7 @@ class RecoveryRaceTests(unittest.TestCase):
     def close(self,e):
         return self.s.reconcile_episode(e['episode'],e['revision'],
             character={'status':'unresolved','reason':'no appearance judgment'},
-            method={'status':'unresolved','reason':'no causal judgment'},
+            method={'status':'unresolved','reason':'no causal judgment','integration':{'disposition':'not_generalizable','reason':'Infrastructure fixture makes no modeling-method claim'}},
             evidence=[{'kind':'file','path':str(self.image),'role':'actual fixture evidence'}],
             applicability='fixture only',close=True)
 

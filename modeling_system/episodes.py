@@ -338,6 +338,8 @@ def reconcile_episode(service,episode,expected_revision,character,method,evidenc
         view=workspace(service,episode,detail='links')
         if pending or any(w['status'] in PENDING for w in view['workflows']) or any(c['retention']!='indexed' or c['effect_status']=='unknown' for c in view['operations']):
             raise Conflict('Close requires reconciled operations/jobs and explicit judgments, which may be unresolved')
+    from .learning import integration_disposition
+    method=integration_disposition(service,method,close)
     payload=dict(episode=episode,character=character,method=method,evidence=pinned,applicability=applicability,
                  unresolved=unresolved,next_question=next_question,user_appearance_acceptance='not implied')
     key=service.store.put('episode_judgment',payload)
@@ -346,4 +348,5 @@ def reconcile_episode(service,episode,expected_revision,character,method,evidenc
                     dict(judgment=key,judgment_status='pending' if pending else 'recorded'),
                     lambda:guard_closure(service,episode) if close else None,allowed={'active','closed'})
     return dict(episode=episode,revision=updated['revision'],judgment=key,judgment_status=updated['data']['judgment_status'],
-                status=updated['status'],save_dependency='None; native save/recovery is available even with pending judgment')
+                status=updated['status'],method_integration=(method or {}).get('integration') or {'disposition':'pending'},
+                save_dependency='None; native save/recovery is available even with pending judgment')

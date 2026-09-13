@@ -124,6 +124,7 @@ def compare(before, after, correspondence='triangles'):
     distance = np.linalg.norm(delta,axis=1)
     worst = np.argsort(distance)[-5:][::-1]
     return {'changed_vertices': int(np.any(delta != 0,axis=1).sum()),
+            'measurement':'Endpoint displacement; cumulative travel is not measured without ordered intermediate states',
             'maximum_distance': float(distance.max(initial=0)),
             'axis_minimum': delta.min(axis=0).tolist() if len(delta) else [0,0,0],
             'axis_maximum': delta.max(axis=0).tolist() if len(delta) else [0,0,0],

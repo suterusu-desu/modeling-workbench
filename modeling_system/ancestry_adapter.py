@@ -33,9 +33,9 @@ def adapt(service,npz_path,schema_path,verification_path):
                  topology=provenance['raw_topology'],modifiers=provenance['source_modifiers'],support=provenance['support_contract'],
                  frame=source_schema['coordinates'],current_maximum_error=current_error,quarter_maximum_error=quarter_error,
                  measured_outputs=len(converted['output_ids']),raw_controls=len(converted['baseline_input']),
-                 limits=['Historical scoped reconstruction, not current T13 validation or final appearance',
+                 limits=['Historical scoped reconstruction, not current working-state validation or final appearance',
                          'Y-only at fixed XZ/pose/topology/modifiers/ocular surfaces',
-                         '950 captured outputs are not a complete character influence boundary',
+                         'Captured outputs alone do not establish a complete character influence boundary',
                          'Do not use current derivative as a finite-change rule across support branches'],
                  next='Bind only matching historical dependencies and valid semantics; expand complete influence before native use')
     return dict(adapter_evidence=service.store.put('response_adapter',payload),**payload)

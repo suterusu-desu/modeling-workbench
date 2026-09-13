@@ -117,7 +117,11 @@ class ModelingService:
                     next='Use completed evidence when suitable. Any new HD dispatch requires a distinct explicit scoped policy authorization; a use_case label cannot bypass claim guards.')
 
     def inspect_situation(self, question: str | None = None, live: bool = False) -> dict:
-        """Read the current modeling question and applicable authority; optionally inspect live freshness."""
+        """Read a question record ID, or focus current context with ordinary question text; text never changes the selected question. live=False never contacts Blender."""
+        focus=None
+        if question is not None and not (len(question)==64 and all(c in '0123456789abcdef' for c in question)):
+            if not question.strip():raise ValueError('Supply a question record ID or nonempty focus text')
+            focus=question;question=None
         selection=None
         if question is None and self.store.current() is None and self.binding.get('selected_episode'):
             episode=self.ledger.read(self.binding['selected_episode'])
@@ -125,6 +129,9 @@ class ModelingService:
             question=episode['intent']['question']
             selection=dict(episode=episode['handle'],revision=episode['revision'],meaning='Read-only selected package episode; historical question, not live state or a production selector update')
         result=self.wb.inspect_situation(question)
+        if focus is not None:
+            result['requested_focus']=focus
+            result['experience']=self.retrieve_experience(focus)
         if selection:result['selection_basis']=selection
         result['authority']=[str(self.workspace/e['path']) for e in self.binding.get('authority',[])]
         if self.policy_path.exists():
@@ -161,6 +168,22 @@ class ModelingService:
     def run_episode_operation(self, episode: str, operation: str, arguments: dict) -> dict:
         """Run an existing operation with automatic episode linkage; exact inputs/result survive failure of later judgment/indexing."""
         if operation in ('run_episode_operation','execute'): raise ValueError('Recursive episode execution is not allowed')
+        # Bind before acquiring a lease: a typo must not manufacture an unknown
+        # native effect with no callable operation to reconcile.
+        try:
+            if operation.startswith('native_'):
+                from .native_bridge import validate_arguments
+                args=dict(arguments);owner=args.pop('owner',None)
+                validate_arguments(operation[7:],args)
+                if operation!='native_inspect_live' and (not isinstance(owner,str) or not owner.strip()):
+                    raise ValueError('Native changes require a stable owner')
+            else:
+                if operation not in self.operations():raise ValueError('Unknown domain operation')
+                inspect.signature(getattr(self,operation)).bind(**arguments)
+            canonical(arguments)
+        except (TypeError,ValueError,NativeBridgeError) as error:
+            raise PreconditionRefusal(str(error),'run_episode_operation.argument_binding',
+                dict(mutation_dispatched=False,lease_acquired=False,operation=operation)) from error
         lease=acquire(self,episode,operation)
         token=EPISODE.set(episode);lease_token=LEASE.set(lease)
         result={'status':'failed','reason':'Invocation did not return; effect requires reconciliation'}
@@ -184,8 +207,13 @@ class ModelingService:
         from .operation_reads import read
         return read(self,episode,handle,view,selection,path,offset,limit,max_chars,expected_view)
 
-    def reconcile_operation(self, handle: str, observed: dict | None = None, evidence_paths: list[str] | None = None) -> dict:
-        """Recover a produced operation result or attach actual missing outcome evidence; never repeat native/provider effects."""
+    def reconcile_operation(self, handle: str, observed: dict | None = None, evidence_paths: list[str] | None = None,
+                            episode: str | None = None, expected_lease: str | None = None) -> dict:
+        """Recover a call without replay. For a legacy unlinked argument-refusal lease, supply episode, lease handle/hash from inspect_operations, and exact refusal evidence; active/ambiguous effects remain blocked."""
+        if episode is not None:
+            from .leases import reconcile_unlinked
+            return reconcile_unlinked(self,episode,handle,expected_lease,observed,evidence_paths)
+        if expected_lease is not None:raise ValueError('expected_lease requires episode')
         from .journal import reconcile
         return reconcile(self,handle,observed,evidence_paths)
 

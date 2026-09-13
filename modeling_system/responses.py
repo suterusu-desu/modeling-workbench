@@ -158,12 +158,24 @@ def compare_native(service,prediction,native_state,object_name,axis,tolerance,in
     if model['spec']['output_domain']['frame']!='world':
         raise ValueError('Native comparison currently accepts recorded world coordinates only; explicitly transform/rebind local response first')
     difference=actual['co'][ids,axis]-np.asarray(pred['predicted'])
+    incident=np.any(np.isin(actual['tri'],ids),axis=1)
+    neighbors=np.setdiff1d(np.unique(actual['tri'][incident]),ids)
+    comparison_scope=dict(baseline_state=base['state'],native_state=native_state,
+        prediction=prediction,object=object_name,frame='world',axis=axis,output_ids=ids.tolist(),
+        compared_vertices=len(ids),object_vertices=len(actual['co']),
+        unmeasured_topological_neighbors=neighbors.tolist(),
+        neighbor_coverage='One triangle ring only; proximity contacts, cross-object neighbors and other axes are not measured by this comparison',
+        recorded_coordinate_dtype=str(actual['co'].dtype),
+        native_storage_precision='Not established by the exported array dtype; inspect the native adapter receipt',
+        geometric_tolerance=tolerance,
+        measurement='Prediction versus this recorded state only; writeback/reopen equivalence needs separate matched comparisons')
     order=np.argsort(np.abs(difference))[::-1]
     error=float(np.max(np.abs(difference))) if len(ids) else 0
     payload=dict(prediction=prediction,native_state=native_state,object=object_name,axis=axis,tolerance=tolerance,
                  maximum_error=error,p95_error=float(np.percentile(np.abs(difference),95)),
                  worst=[dict(native_vertex=int(ids[i]),error=float(difference[i])) for i in order[:8]],
                  numerical_status='matches' if error<=tolerance else 'regression',
+                 comparison_scope=comparison_scope,
                  inspection=dict(inspection,evidence=[pin_link(service,l) for l in inspection['evidence']]),
                  user_appearance_acceptance='not implied; numerical agreement is not appearance approval',
                  influence=pred['influence'])

@@ -4,7 +4,7 @@ import os
 import sys
 import uuid
 from contextvars import ContextVar
-from .store import atomic_write,canonical
+from .store import atomic_write,canonical,digest
 from .ledger import Conflict
 
 LEASE = ContextVar('modeling_episode_lease',default=None)
@@ -61,7 +61,8 @@ def status(value,root=None):
 def list_leases(service,episode):
     rows=[]
     for p in (service.store.root/'episode-leases'/episode).glob('*.json'):
-        value=json.loads(p.read_bytes());value['observed_status']=status(value,service.store.root);value['path']=str(p);rows.append(value)
+        raw=p.read_bytes();value=json.loads(raw);value['lease_revision']=digest(raw)
+        value['observed_status']=status(value,service.store.root);value['path']=str(p);rows.append(value)
     return rows
 
 
@@ -78,13 +79,13 @@ def acquire(service,episode,operation):
 def finish(service,lease,result):
     with service.ledger._lock(lease['episode']):
         value=dict(lease,status=completion_status(result),
-                   operation_handle=result.get('operation_handle'),result_status=result.get('status'))
+                   operation_handle=result.get('operation_handle') or lease.get('operation_handle'),result_status=result.get('status'))
         atomic_write(service.store.root/'episode-leases'/lease['episode']/(lease['id']+'.json'),canonical(value))
 
 
 def mark_return(service,lease,result):
     """Independent return marker precedes mutable lease finalization."""
-    marker=dict(lease_id=lease['id'],episode=lease['episode'],operation_handle=result.get('operation_handle'),
+    marker=dict(lease_id=lease['id'],episode=lease['episode'],operation_handle=result.get('operation_handle') or lease.get('operation_handle'),
                 completion_disposition=completion_status(result),
                 result_status=result.get('status'))
     atomic_write(service.store.root/'episode-completions'/lease['episode']/(lease['id']+'.json'),canonical(marker))
@@ -94,3 +95,55 @@ def guard_closure(service,episode):
     # Called while holding the episode ledger lock; acquisition cannot race it.
     blocking=[r for r in list_leases(service,episode) if r['observed_status'] not in ('finished','finished; lease finalization pending') and r['id']!=(LEASE.get() or {}).get('id')]
     if blocking:raise Conflict('Episode has active or unresolved operation leases; indexing a timeout does not resolve its effect')
+
+
+def reconcile_unlinked(service,episode,handle,expected,observed,evidence_paths):
+    """Narrow legacy recovery: terminal reconciliation call rejected at Python binding.
+
+    Absence of a handle, a dead process or a later good scene is never proof of
+    no effect. Require the immutable original refusal plus the operator's exact
+    lease/receipt association. Other ambiguous orphan kinds remain blocked.
+    """
+    from .operation_reads import identifier
+    import inspect
+    identifier(episode,64,'episode');identifier(handle,32,'lease handle')
+    identifier(expected,64,'expected lease revision')
+    if not observed or observed.get('effect_status')!='confirmed_not_applied' or observed.get('lease_id')!=handle or not observed.get('basis') or not evidence_paths:
+        raise ValueError('Require confirmed_not_applied, exact lease_id, receipt-association basis and original evidence paths')
+    receipt=service.store.get(observed.get('refusal_record',''),'operation')
+    if receipt.get('operation')!='reconcile_operation' or receipt.get('status')!='failed' or receipt.get('error_type')!='TypeError' or receipt.get('operation_handle'):
+        raise ValueError('Require the original unlinked reconcile_operation argument-refusal record')
+    arguments=receipt.get('arguments',{})
+    # Check a real binding failure, not any arbitrary TypeError from inside a
+    # callable body. Exact old Python refusal text remains in the original record.
+    try:inspect.signature(service.reconcile_operation).bind(**arguments)
+    except TypeError as error:
+        detail=str(error)
+    else:raise ValueError('Arguments bind successfully; no proof of pre-invocation refusal')
+    if not receipt.get('summary','').endswith(detail):
+        raise ValueError('Original refusal does not match the argument-binding failure')
+    with service.ledger._lock(episode):
+        path=service.store.root/'episode-leases'/episode/(handle+'.json')
+        raw=path.read_bytes();value=json.loads(raw)
+        if digest(raw)!=expected:raise Conflict('Lease changed; reread before reconciliation')
+        if value.get('id')!=handle or value.get('episode')!=episode:raise ValueError('Lease identity mismatch')
+        if value.get('operation')!='reconcile_operation' or value.get('operation_handle') or value.get('status')!='needs effect reconciliation' or value.get('result_status')!='failed':
+            raise ValueError('Only a terminal unlinked reconciliation refusal is supported; active or ambiguous leases remain blocked')
+        marker=service.store.root/'episode-completions'/episode/(handle+'.json')
+        completion=json.loads(marker.read_bytes())
+        if completion.get('lease_id')!=handle or completion.get('episode')!=episode or completion.get('operation_handle') or completion.get('result_status')!='failed' or completion.get('completion_disposition')!='needs effect reconciliation':
+            raise ValueError('Original terminal return marker does not match this unlinked failure')
+        for p in (service.store.root/'calls').glob('*/intent.json'):
+            intent=json.loads(p.read_bytes())
+            if (intent.get('lease') or {}).get('id')==handle:
+                raise ValueError('A callable intent exists; reconcile its operation handle instead')
+        resolution=dict(lease_id=handle,prior_lease_revision=expected,observed=observed,
+            evidence=[service.store.blob(p) for p in evidence_paths],refusal_record=observed['refusal_record'],
+            basis='Verified terminal argument refusal; exact lease association attested by operator from original evidence',
+            native_or_provider_replayed=False)
+        key=service.store.put('lease_resolution',resolution)
+        value.update(status='finished',reconciliation=resolution,resolution_record=key)
+        atomic_write(path,canonical(value))
+    return dict(lease_id=handle,episode=episode,lease_revision=digest(canonical(value)),resolution=key,
+        effect_status='refused before mutation dispatch',status='completed',
+        recovery='Original refusal and completion marker preserved; only this lease finalized, no operation replayed')

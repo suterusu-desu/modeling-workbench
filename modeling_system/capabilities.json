@@ -136,10 +136,10 @@
       "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
     },
     {
-      "name": "Supported method promotion",
-      "route": "promote_procedure / retrieve_experience",
+      "name": "Evidence-linked method integration and promotion",
+      "route": "record_outcome / reconcile_episode / promote_procedure / retrieve_experience",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "test_method_integration exercises local diagnostic promotion, fresh-process mechanism retrieval and actual use with unresolved character status. Close-out requires integration and separate adoption dispositions; native, provider and appearance outcomes need workspace evidence."
     },
     {
       "name": "Exact ordered source motion schedule",

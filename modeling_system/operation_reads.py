@@ -49,7 +49,9 @@ def read(service, episode, handle, view, selection, path, offset, limit, max_cha
         if view=='lease':
             if episode is None: raise ValueError('Exact lease read requires episode')
             p=service.store.root/'episode-leases'/episode/(handle+'.json')
-            value=json.loads(p.read_bytes())
+            raw=p.read_bytes();value=json.loads(raw)
+            from .store import digest
+            value['lease_revision']=digest(raw)
             if value['id']!=handle or value['episode']!=episode: raise ValueError('Lease identity mismatch')
             value['observed_status']=lease_status(value,service.store.root)
         else:
