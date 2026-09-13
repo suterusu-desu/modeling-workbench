@@ -155,6 +155,17 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(result['summary']['candidates_outside_authored_mask'],1)
         self.assertFalse(result['target_admission'])
 
+    def test_surface_correspondence_uses_pinned_recipe_route(self):
+        from .test_surface_correspondence import SurfaceCorrespondenceTests
+        target=SurfaceCorrespondenceTests();target.setUp();self.addCleanup(target.doCleanups)
+        target.run_case()
+        self.template['steps'][0]['operation']='inspect_surface_correspondence'
+        self.bindings['coverage']=self.ref(target.root/'case.json');self.bindings['state']=target.state
+        state=self.step(self.create(),'coverage')
+        result=self.s.store.get(self.rows(state)['coverage']['result'],'recipe_step_result')
+        self.assertEqual(result['summary']['transition_relations'],{'selection_gap':2})
+        self.assertFalse(result['target_admission'])
+
     def test_stale_revision_cannot_dispatch(self):
         state=self.create();old=state['revision']
         state=self.s.revise_recipe_inputs(state['recipe'],old,{'view_note':'changed'})

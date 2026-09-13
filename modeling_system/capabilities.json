@@ -188,6 +188,12 @@
       "route": "reconcile_operation",
       "implementation": "core",
       "verification": "Short atomic temporary names avoid valid-destination path inflation. Synthetic long-path and unknown-effect tests plus isolated copies of real failed completion records verify public metadata repair. Original operation outcomes remain unchanged."
+    },
+    {
+      "name": "Ordered surface alternatives and selected-section connectivity",
+      "route": "inspect_surface_correspondence",
+      "implementation": "core",
+      "verification": "Synthetic counterexamples preserve unsupported stations, foreground alternatives, exact source-edge gaps, ambiguous branches and unknown coverage. Planar disconnection does not prove full-surface disconnection; no anatomical admission or continuous correspondence claim."
     }
   ],
   "limits": [

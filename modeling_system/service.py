@@ -292,6 +292,11 @@ class ModelingService:
         from .target_domain import inspect
         return inspect(self, case_path, expected_state)
 
+    def inspect_surface_correspondence(self, case_path: str, expected_state: dict) -> dict:
+        """Retain ordered surface alternatives, source-edge gaps and exact selected-section relations; no anatomical admission or native effects."""
+        from .surface_correspondence import inspect
+        return inspect(self, case_path, expected_state)
+
     def analyze_repair(self, case_path: str, proposed_delta: list[float] | None = None, max_seconds: float = 20) -> dict:
         """Retain bounded offline coupled XYZ fit/preservation diagnostics and evidence-acquisition nominations; never apply or dispatch."""
         from .repair_analysis import analyze
