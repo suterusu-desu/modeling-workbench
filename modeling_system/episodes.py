@@ -153,6 +153,14 @@ def summarize_workflow(service,handle):
         review=intent.get('reviewed_source')
         if review:
             result['source_review']=service.store.get(review,'reference_review')
+    elif item['kind']=='diagnostic_recipe':
+        try:
+            recipe=service.inspect_recipe(handle)
+            result.update(purpose='Reusable offline diagnostic recipe',
+                steps=[{k:v for k,v in step.items() if k in ('id','kind','status','blocked_by')} for step in recipe['steps']],
+                next_read=dict(operation='inspect_recipe',arguments=dict(recipe=handle)))
+        except (ValueError,KeyError,RuntimeError,OSError) as error:
+            result.update(status='needs inspection',reason=str(error))
     elif item['kind']=='experiment':
         result.update(hypothesis=intent.get('hypothesis'),state=intent.get('state'),
                       checkpoint=data.get('checkpoint'),native_trial=data.get('native_trial'),

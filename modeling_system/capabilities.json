@@ -170,6 +170,12 @@
       "route": "inspect_control_coverage / read_record",
       "implementation": "core; offline retained structural diagnosis",
       "verification": "Synthetic omission, incomplete-universe, restriction, drift and fresh-process recovery tests. Does not establish native control quality."
+    },
+    {
+      "name": "Recoverable reusable offline diagnostic recipes",
+      "route": "recipe_template / create_recipe / inspect_recipe / revise_recipe_inputs / run_recipe_step / review_recipe_step / recover_recipe_step",
+      "implementation": "core",
+      "verification": "Synthetic tests cover pinned inputs, invalidation, review dependencies, scoped instances and recovery without replay. Actual operator adoption is separately evidenced; no native/provider execution."
     }
   ],
   "limits": [

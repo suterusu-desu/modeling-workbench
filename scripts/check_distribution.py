@@ -10,7 +10,7 @@ else:
     files=[p for p in root.rglob('*') if p.is_file() and not any(x in p.parts for x in
         ('.git','.venv','.runtime','.modeling','__pycache__','build','dist')) and not any(x.endswith('.egg-info') for x in p.parts)]
 allowed_roots={'modeling_system','scripts','.github'}
-allowed_files={'README.md','AGENTS.md','DEVELOPING.md','pyproject.toml','.gitignore','.gitattributes'}
+allowed_files={'README.md','AGENTS.md','DEVELOPING.md','DESIGN.md','IMPLEMENTATION-QUEUE.md','pyproject.toml','.gitignore','.gitattributes'}
 errors=[]
 private_terms=[t.strip().casefold() for t in os.environ.get('MODELING_PRIVATE_TERMS','').split(',') if t.strip()]
 for p in files:

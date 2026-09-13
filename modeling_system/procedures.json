@@ -2,6 +2,36 @@
   "schema_version": 1,
   "procedures": [
     {
+      "id": "reuse-offline-diagnostic-recipe",
+      "stages": [
+        "diagnosis",
+        "review",
+        "recovery"
+      ],
+      "conditions": {
+        "observed_failure": "repeated diagnostics lose exact dependencies or review state"
+      },
+      "instruction": "Instantiate a bounded recipe in the active episode for repeated offline coverage and repair analyses. Pin cases and assets, review exact upstream evidence, include reviewed downstream inputs in applicability, and inspect current ready/reusable/stale states. Recover a known operation result without replay. Retain separate character and method judgments.",
+      "source_queries": [
+        "repeated diagnostic recipe dependencies stale review pinned input crash recovery"
+      ],
+      "limits": [
+        "Only supported offline diagnostic operations",
+        "Retained input reuse does not establish live freshness",
+        "Review acceptance is not native or appearance authorization"
+      ],
+      "operations": [
+        "recipe_template",
+        "create_recipe",
+        "inspect_recipe",
+        "revise_recipe_inputs",
+        "run_recipe_step",
+        "review_recipe_step",
+        "recover_recipe_step"
+      ],
+      "citations": []
+    },
+    {
       "id": "reverse-control-coverage-before-repeat-fit",
       "stages": ["diagnosis", "intervention", "review"],
       "conditions": {"observed_failure": "target changed or accurate native prediction still fails connected shape"},

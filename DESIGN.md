@@ -6,9 +6,9 @@ The durable unit is a decision episode: intent, exact state, observations and ta
 
 `inspect_control_coverage` adds the reverse question missing from forward response evidence: which known controls can structurally reach the current targets, which were omitted, and why was freedom excluded? Pinned sparse ancestry, exact state and ordered identities yield a bounded summary with complete stored detail. The report explicitly leaves useful controllability unproved. `analyze_repair` assesses only the supplied finite coupled problem; native realization, connected-form review and method integration remain separate steps.
 
-## Proposed reusable recipe layer
+## Delivered offline recipe layer
 
-This is a planned capability, not a new executor or a delivered API. Retained method instructions currently describe sequences; episodes record executions; neither instantiates a reusable typed dependency graph.
+Version 0.2.4 adds a bounded typed dependency graph over the existing offline diagnostic operations. `recipe_template`, `create_recipe`, `inspect_recipe`, `revise_recipe_inputs`, `run_recipe_step`, `review_recipe_step` and `recover_recipe_step` share the existing service, episode leases and durable operation journal. The [operator contract](modeling_system/plugin/skills/modeling-workbench/references/recipes.md) defines the delivered subset. Native/provider nodes and aggregate cost previews below remain future work.
 
 The smallest coherent recipe is a versioned declarative description with a question, typed external inputs, operation nodes, output references, applicability dependencies and review gates. Instantiate it in one private workspace/episode with scoped node IDs. Resolve node operations through the existing service and journal. Native operations retain the sole owner; provider operations retain source-bound claim/reconcile and actual authorization. Never embed private character data or credentials in a generic recipe.
 
@@ -16,9 +16,11 @@ Plan evaluation should return ready, waiting for evidence/review, reusable, stal
 
 Execution is incremental. The graph asks the existing execution boundary to perform one ready operation and records its receipt. It does not replay completed side effects after a crash, treat an unknown job as done, auto-rerun stale paid nodes, or bypass an artistic review gate. Recovery reconciles the same operation/job identity. Aggregate cost previews preserve distinct currencies, unknown future steps and authorization scopes; quotes do not grant spending authority.
 
-Begin with a synthetic offline diagnostic recipe: pinned inputs -> reverse control coverage -> qualified response analysis -> review gate -> retained outcome. Use ordinary service calls and immutable results. A later bounded native batch may reduce transport overhead for a proven deterministic sequence, but episode journaling alone does not provide native atomicity. Topology lineage, component catalogs and library import require their own verified adapter contracts; do not add overlapping batch languages.
+The bundled diagnostic template follows pinned inputs -> reverse control coverage -> scope review -> response analysis -> diagnostic review. The scope review includes the downstream case in its input dependencies, so changing that case invalidates its prior review. Review records retain exact upstream evidence and input identities. Episode judgment and method integration remain explicit existing operations. A later bounded native batch may reduce transport overhead for a proven deterministic sequence, but episode journaling alone does not provide native atomicity. Topology lineage, component catalogs and library import require their own verified adapter contracts; do not add overlapping batch languages.
 
-Acceptance before implementation adoption:
+Inspection never materializes cases or dispatches an operation. Execution restores only the selected step's pinned file inputs and reserves its existing operation handle before dispatch. Result-index failure recovers the original durable result without repeating the analysis. Per-node keys include relevant inputs, upstream result identities and loaded source; a corrected review invalidates dependent uses. Package changes invalidate conservatively. Case rebinds are explicit; retained evidence does not assert live freshness. Native modeling continues on its verified environment while the new offline slice is adopted separately. See the [implementation queue](IMPLEMENTATION-QUEUE.md) for remaining contracts and evidence needed to select them.
+
+Acceptance before operator adoption (source tests are necessary but do not prove actual use):
 
 - Two instances with identical display names cannot share operation/job identities or private bindings.
 - Missing outputs, cycles and unsupported operations fail before effects.

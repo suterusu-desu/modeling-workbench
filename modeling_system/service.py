@@ -22,7 +22,7 @@ class UnconfiguredNative:
 
 READ_OPERATIONS={'capabilities','runtime_status','inspect_situation','inspect_workflow','read_record',
                  'retrieve_experience','decision_workspace','semantic_impact','inspect_operations','check_reuse',
-                 'package_readiness','evidence_manifest','operation_context','select_generation_route'}
+                 'package_readiness','evidence_manifest','operation_context','select_generation_route','inspect_recipe','recipe_template'}
 
 
 class ModelingService:
@@ -167,7 +167,10 @@ class ModelingService:
 
     def run_episode_operation(self, episode: str, operation: str, arguments: dict) -> dict:
         """Run an existing operation with automatic episode linkage; exact inputs/result survive failure of later judgment/indexing."""
-        if operation in ('run_episode_operation','execute'): raise ValueError('Recursive episode execution is not allowed')
+        return self._run_episode_operation(episode, operation, arguments)
+
+    def _run_episode_operation(self, episode, operation, arguments, prepared=None):
+        if operation in ('run_episode_operation','run_recipe_step','execute'): raise ValueError('Recursive episode execution is not allowed')
         # Bind before acquiring a lease: a typo must not manufacture an unknown
         # native effect with no callable operation to reconcile.
         try:
@@ -188,6 +191,12 @@ class ModelingService:
         token=EPISODE.set(episode);lease_token=LEASE.set(lease)
         result={'status':'failed','reason':'Invocation did not return; effect requires reconciliation'}
         try:
+            if prepared:
+                try:
+                    prepared(lease)
+                except Exception:
+                    result.update(effect_status='refused before mutation dispatch',reason='Dispatch reservation could not be retained')
+                    raise
             result=self.execute(operation,arguments)
             return result
         finally:
@@ -237,6 +246,41 @@ class ModelingService:
         """Promote explicit supported method judgments with limits/executables; reusable level requires distinct episode reuse."""
         from .learning import promote
         return promote(self,procedure_id,judgments,instruction,stages,conditions,limits,counterexamples or [],executable_paths or [],level)
+
+    def recipe_template(self, name: str = 'diagnostic-review') -> dict:
+        """Read a bundled generic offline recipe; returns its template and content identity without writing."""
+        from .recipes import bundled_template
+        return bundled_template(name)
+
+    def create_recipe(self, episode: str, template: dict, bindings: dict, idempotency_key: str) -> dict:
+        """Instantiate a bounded offline diagnostic recipe with typed pinned inputs in one episode; no analysis dispatch."""
+        from .recipes import create
+        return create(self, episode, template, bindings, idempotency_key)
+
+    def inspect_recipe(self, recipe: str) -> dict:
+        """Read exact ready/reusable/stale/blocked/review/uncertain recipe steps without executing or writing."""
+        from .recipes import inspect_recipe
+        return inspect_recipe(self, recipe)
+
+    def revise_recipe_inputs(self, recipe: str, expected_revision: str, bindings: dict) -> dict:
+        """Replace named recipe inputs with explicit new pinned evidence; retain earlier results and invalidate affected uses."""
+        from .recipes import revise_inputs
+        return revise_inputs(self, recipe, expected_revision, bindings)
+
+    def run_recipe_step(self, recipe: str, step: str, expected_revision: str) -> dict:
+        """Run one ready offline analysis through the existing episode journal, or reuse its exact result; never replay uncertain work."""
+        from .recipes import run_step
+        return run_step(self, recipe, step, expected_revision)
+
+    def review_recipe_step(self, recipe: str, step: str, expected_revision: str, decision: str, reason: str, evidence: list[dict]) -> dict:
+        """Retain an explicit accepted/rejected diagnostic review bound to current inputs/results; no native or appearance authorization."""
+        from .recipes import review_step
+        return review_step(self, recipe, step, expected_revision, decision, reason, evidence)
+
+    def recover_recipe_step(self, recipe: str, step: str, expected_revision: str) -> dict:
+        """Recover an interrupted recipe's known durable operation result without rerunning the analysis; uncertainty stays blocked."""
+        from .recipes import recover_step
+        return recover_step(self, recipe, step, expected_revision)
 
     def inspect_control_coverage(self, case_path: str, expected_state: dict) -> dict:
         """Retain offline reverse target ancestry, omitted controls and explicit restrictions; no native effects or controllability claim."""
@@ -663,5 +707,5 @@ class ModelingService:
 # MCP/CLI. Reads are intentionally not recorded. Facade calls establish scope;
 # nested public operations belong to the enclosing operation's complete result.
 for _name in ModelingService.operations():
-    if _name not in READ_OPERATIONS | {'run_episode_operation', 'reconcile_operation'}:
+    if _name not in READ_OPERATIONS | {'run_episode_operation', 'run_recipe_step', 'reconcile_operation'}:
         setattr(ModelingService, _name, recorded(getattr(ModelingService, _name)))

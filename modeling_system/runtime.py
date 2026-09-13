@@ -10,6 +10,7 @@ def source_manifest(root=None):
     root = Path(root or Path(__file__).parent)
     paths = list(root.glob('*.py')) + list(root.glob('*.json'))
     paths += list((root / 'plugin').rglob('*.md'))
+    paths += list((root / 'recipe_templates').glob('*.json'))
     rows = {p.relative_to(root).as_posix(): digest(p.read_bytes()) for p in sorted(paths)}
     return dict(files=rows, revision=digest(canonical(rows)))
 
