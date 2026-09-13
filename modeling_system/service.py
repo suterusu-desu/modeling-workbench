@@ -287,6 +287,11 @@ class ModelingService:
         from .control_coverage import inspect
         return inspect(self, case_path, expected_state)
 
+    def inspect_target_domain(self, case_path: str, expected_state: dict) -> dict:
+        """Retain offline geometric-candidate, authored-mask, unknown-semantic and named transition-check coverage; no target admission or native effects."""
+        from .target_domain import inspect
+        return inspect(self, case_path, expected_state)
+
     def analyze_repair(self, case_path: str, proposed_delta: list[float] | None = None, max_seconds: float = 20) -> dict:
         """Retain bounded offline coupled XYZ fit/preservation diagnostics and evidence-acquisition nominations; never apply or dispatch."""
         from .repair_analysis import analyze

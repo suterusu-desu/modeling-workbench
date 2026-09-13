@@ -176,6 +176,12 @@
       "route": "recipe_template / create_recipe / inspect_recipe / revise_recipe_inputs / run_recipe_step / review_recipe_step / recover_recipe_step",
       "implementation": "core",
       "verification": "Synthetic tests cover pinned inputs, invalidation, review dependencies, scoped instances and recovery without replay. Actual operator adoption is separately evidenced; no native/provider execution."
+    },
+    {
+      "name": "Independent target-domain and named transition coverage",
+      "route": "inspect_target_domain",
+      "implementation": "core",
+      "verification": "Synthetic regressions distinguish candidate selection, mask membership, unknown numeric labels, reviewed region correspondence and independent edge-check families. Native target admission and appearance remain unproved."
     }
   ],
   "limits": [

@@ -9,6 +9,7 @@ from unittest.mock import patch
 from . import test_decisions as episode_cases
 from . import test_control_coverage as coverage_cases
 from . import test_repair_analysis as repair_cases
+from . import test_target_domain as target_cases
 from .service import ModelingService
 from .store import canonical, digest
 
@@ -143,6 +144,16 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(self.rows(state)['coverage']['status'],'reusable')
         self.assertEqual(self.rows(state)['scope_review']['status'],'stale')
         self.assertEqual(self.rows(state)['repair']['status'],'blocked')
+
+    def test_target_domain_uses_same_pinning_and_episode_execution(self):
+        target=target_cases.TargetDomainTests();target.setUp();self.addCleanup(target.doCleanups)
+        target.run_case()
+        self.template['steps'][0]['operation']='inspect_target_domain'
+        self.bindings['coverage']=self.ref(target.root/'case.json');self.bindings['state']=target.state
+        state=self.step(self.create(),'coverage')
+        result=self.s.store.get(self.rows(state)['coverage']['result'],'recipe_step_result')
+        self.assertEqual(result['summary']['candidates_outside_authored_mask'],1)
+        self.assertFalse(result['target_admission'])
 
     def test_stale_revision_cannot_dispatch(self):
         state=self.create();old=state['revision']

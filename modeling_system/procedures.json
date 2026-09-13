@@ -2,6 +2,31 @@
   "schema_version": 1,
   "procedures": [
     {
+      "id": "independent-target-domain-and-transition-coverage",
+      "stages": [
+        "diagnosis",
+        "review"
+      ],
+      "conditions": {
+        "observed_failure": "mask-filtered targets unknown labels or fit-only gradient edges"
+      },
+      "instruction": "Use inspect_target_domain on pinned independent geometric inventory and exact selected-fit/response/mask evidence. Preserve unknown numeric labels separately from supported region correspondence. Inspect fit-to-context coverage per named metric; guide gradients and native quad normal preservation do not substitute for each other. Newly found candidates require owner qualification; no automatic mask relaxation or admission.",
+      "source_queries": [
+        "target domain authored mask anatomical coverage unknown material labels transition edges fit context"
+      ],
+      "limits": [
+        "Recorded offline inventory; no new visibility measurement",
+        "Numeric labels and region correspondence have separate evidence",
+        "No target admission, solver or native mutation"
+      ],
+      "operations": [
+        "inspect_target_domain",
+        "create_recipe",
+        "record_outcome"
+      ],
+      "citations": []
+    },
+    {
       "id": "reuse-offline-diagnostic-recipe",
       "stages": [
         "diagnosis",

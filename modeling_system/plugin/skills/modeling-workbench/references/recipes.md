@@ -1,6 +1,6 @@
 # Reusable offline diagnostic recipes
 
-Use a recipe when a repeated diagnostic has meaningful dependencies and review decisions worth retaining. For a single analysis, direct service calls remain sufficient. Version 1 supports only `inspect_control_coverage` and `analyze_repair`; it cannot mutate Blender or dispatch generation.
+Use a recipe when a repeated diagnostic has meaningful dependencies and review decisions worth retaining. For a single analysis, direct service calls remain sufficient. Version 1 supports `inspect_control_coverage`, `inspect_target_domain` and `analyze_repair`; it cannot mutate Blender or dispatch generation.
 
 ## Start and inspect
 
