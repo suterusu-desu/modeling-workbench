@@ -1,5 +1,7 @@
 # Native adapter boundary
 
+The native bridge imports the selected installation under an isolated package namespace. An older `modeling_system` already loaded in Blender cannot redirect dispatch through its cached package path, and its modules are not reloaded by the new bridge. The bound private adapter must still preserve and verify actual ownership, native state and its own dependencies; namespace separation does not establish native capability or permission to switch a running study.
+
 The reusable package owns recorded geometry, numerical queries, source lineage, decisions, response analysis, operation journals, episode leases and transport schemas. A private workspace owns its native scene/rig integration. No specific scene names, controls, vertex identities, coordinate scale, guide registry or external helper paths ship in the tools repository.
 
 Set `native_adapter` to `blender_json_v1` only after the private adapter is ready. `native_configuration` contains `entrypoint: {path, sha256}`, `dependencies: [{path, sha256}, ...]`, and `operations: [...]`. Paths resolve relative to the workspace. All executable dependencies must be pinned. The default is `unconfigured`; unsupported operations fail explicitly.

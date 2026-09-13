@@ -80,6 +80,30 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'stale_state')
         self.assertTrue(caught.exception.details['later'])
 
+    def test_preloaded_package_cannot_redirect_the_bound_native_dispatcher(self):
+        import contextlib
+        import io
+        import tempfile
+        from pathlib import Path
+        from . import blender_operations as prior
+        from .store import digest
+        with tempfile.TemporaryDirectory() as directory:
+            workspace=Path(directory);entry=workspace/'adapter.py'
+            entry.write_text("def execute(operation, arguments):\n    return {'ok':True,'result':{'adapter':'bound synthetic adapter','owner':arguments['_owner']}}\n")
+            (workspace/'modeling-workspace.json').write_text(json.dumps(dict(native_adapter='blender_json_v1',
+                native_configuration=dict(operations=['inspect_live'],entrypoint=dict(path='adapter.py',sha256=digest(entry.read_bytes()))))))
+            def response(client,request):
+                stdout=io.StringIO()
+                with contextlib.redirect_stdout(stdout):exec(request['params']['code'],{})
+                client.sendall(json.dumps({'status':'success','result':{'result':stdout.getvalue()}}).encode())
+            bridge,errors=self.server(response);bridge.workspace=workspace;bridge.timeout=5.
+            with patch.object(prior,'execute',side_effect=AssertionError('Stale package selected')) as stale:
+                result=bridge.call('inspect_live',{},owner='fixture owner')
+                self.assertEqual(result,{'adapter':'bound synthetic adapter','owner':'fixture owner'})
+                stale.assert_not_called()
+                self.assertIs(prior.execute,stale)
+            self.assertFalse(errors)
+
     def test_disconnect_after_send_is_ambiguous_and_not_retried(self):
         count = []
         bridge, errors = self.server(lambda client, request: count.append(request))

@@ -6,6 +6,7 @@ The socket endpoint must be the user's local Blender addon, never a provider URL
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import math
 import os
@@ -156,13 +157,20 @@ class NativeBridge:
         validate_arguments(operation, arguments)
         token = '__MODELING_NATIVE_' + uuid.uuid4().hex + '__'
         payload = dict(arguments, _workspace=str(self.workspace), _owner=owner)
-        code = ('import sys,json,importlib\n'
-                f'_w={str(Path(__file__).resolve().parents[1])!r}\n'
-                'if _w not in sys.path: sys.path.insert(0,_w)\n'
+        package=Path(__file__).resolve().parent
+        namespace='_modeling_native_'+hashlib.sha256(str(package).encode()).hexdigest()[:20]
+        # sys.path insertion cannot replace a package already held by Blender.
+        # Isolate this installation without reloading another owner's modules.
+        code = ('import sys,json,importlib,types\n'
+                f'_p={str(package)!r}\n_n={namespace!r}\n'
+                'if _n not in sys.modules:\n'
+                ' _package=types.ModuleType(_n);_package.__path__=[_p];_package.__package__=_n\n'
+                ' sys.modules[_n]=_package\n'
+                'if list(sys.modules[_n].__path__)!=[_p]: raise RuntimeError("Native package namespace collision")\n'
                 'importlib.invalidate_caches()\n'
-                'for _dependency in ("modeling_system.native_bridge","modeling_system.geometry","modeling_system.blender_capture"):\n'
+                'for _dependency in (_n+".native_bridge",_n+".geometry",_n+".blender_capture"):\n'
                 ' if _dependency in sys.modules: importlib.reload(sys.modules[_dependency])\n'
-                '_m=importlib.import_module("modeling_system.blender_operations")\n'
+                '_m=importlib.import_module(_n+".blender_operations")\n'
                 '_m=importlib.reload(_m)\n'
                 f'_r=_m.execute({operation!r},json.loads({json.dumps(payload, allow_nan=False)!r}))\n'
                 f'print({token!r}+json.dumps(_r,allow_nan=False)+{token!r})\n')
