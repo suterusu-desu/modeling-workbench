@@ -1,5 +1,7 @@
 # Bounded repair analysis
 
+For a changed target or a predicted field that fails native shape review, first use [control-family diagnosis](control-coverage.md). This solver evaluates the supplied controls; complete layer influence does not prove that all target ancestors were selected or that the allowed family can produce good connected form.
+
 Start with the exact retained question and evidence, then call `analyze_repair(case_path="/absolute/path/case.json")`. A proposed delta is optional and uses the ordered scalar controls. The operation writes local analysis records only. Use an isolated store for tests; use the current episode facade to associate an actual modeling analysis when appropriate.
 
 Check `disposition`, diagnostic counts, and `numerical_status` together. `candidate` means the supplied local constraints passed with declared coverage; `native_ready` and appearance acceptance remain false. A `diagnostic_trial_only` prediction is a witness to failure, not a candidate to apply. Unknown bounds are omitted, not converted to zero movement. Read the returned `reads` descriptors for exact constraints, per-layer effects, nominations and numerical phases. Each call is bounded; follow its immutable next window rather than fetching the whole case blindly.

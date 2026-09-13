@@ -2,6 +2,16 @@
   "schema_version": 1,
   "procedures": [
     {
+      "id": "reverse-control-coverage-before-repeat-fit",
+      "stages": ["diagnosis", "intervention", "review"],
+      "conditions": {"observed_failure": "target changed or accurate native prediction still fails connected shape"},
+      "instruction": "Use inspect_control_coverage to distinguish complete forward influence from complete reverse target ancestry. Recover a full declared control universe, preserve protected and provisional exclusion reasons, and inspect omitted paths before repeating a fit. Structural ancestry does not prove a useful coupled response, feasible protected fit or good appearance.",
+      "source_queries": ["reverse target ancestry inherited control family native prediction crease fit coverage"],
+      "limits": ["Offline structural diagnostic; no native mutation", "A restricted matrix cannot establish exhaustive ancestry", "No automatic relaxation of protection or generation request"],
+      "operations": ["inspect_control_coverage", "analyze_repair", "record_outcome", "retrieve_experience"],
+      "citations": []
+    },
+    {
       "id": "solver-termination-is-not-geometric-infeasibility",
       "stages": ["diagnosis", "intervention", "method_integration"],
       "conditions": {"observed_failure": "optimizer stopped without success"},

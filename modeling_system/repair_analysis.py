@@ -459,7 +459,7 @@ def analyze(service, case_path, proposed_delta=None, max_seconds=20):
         constraints=evaluations, baseline_constraints=baseline_checks, layer_effects=effects, prediction=prediction_asset,
         acquisition_nominations=nominations,
         nomination_coverage=nomination_coverage,
-        coverage=dict(outputs=n, controls=k, requested_targets=len(case.get('targets', [])),
+        coverage=dict(outputs=n, controls=k, control_scope='Supplied controls only; reverse target ancestry and useful controllability are not established by forward influence coverage', requested_targets=len(case.get('targets', [])),
                       evaluated_constraints=len(evaluations), qualified_constraints=len(rows), layers=case.get('layers', [])),
         native_ready=False, user_appearance_acceptance=False,
         limits=['Offline recorded analysis; no live freshness, native comparison or appearance acceptance.',

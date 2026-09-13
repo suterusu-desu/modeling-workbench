@@ -164,6 +164,12 @@
       "route": "analyze_repair / read_record",
       "implementation": "core; offline only",
       "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+    },
+    {
+      "name": "Reverse target ancestry and explicit control restrictions",
+      "route": "inspect_control_coverage / read_record",
+      "implementation": "core; offline retained structural diagnosis",
+      "verification": "Synthetic omission, incomplete-universe, restriction, drift and fresh-process recovery tests. Does not establish native control quality."
     }
   ],
   "limits": [

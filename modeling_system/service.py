@@ -238,6 +238,11 @@ class ModelingService:
         from .learning import promote
         return promote(self,procedure_id,judgments,instruction,stages,conditions,limits,counterexamples or [],executable_paths or [],level)
 
+    def inspect_control_coverage(self, case_path: str, expected_state: dict) -> dict:
+        """Retain offline reverse target ancestry, omitted controls and explicit restrictions; no native effects or controllability claim."""
+        from .control_coverage import inspect
+        return inspect(self, case_path, expected_state)
+
     def analyze_repair(self, case_path: str, proposed_delta: list[float] | None = None, max_seconds: float = 20) -> dict:
         """Retain bounded offline coupled XYZ fit/preservation diagnostics and evidence-acquisition nominations; never apply or dispatch."""
         from .repair_analysis import analyze

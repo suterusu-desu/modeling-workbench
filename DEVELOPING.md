@@ -1,5 +1,7 @@
 # Development and contribution boundaries
 
+[System design and planned workflow composition](DESIGN.md) distinguishes delivered diagnostics from the proposed reusable recipe layer and its acceptance cases.
+
 Install in an isolated Python environment with `python -m pip install .`. Run `python -m unittest discover -s modeling_system -t .` and `python scripts/check_distribution.py` before publishing source changes. Native, provider and artistic acceptance are separate from this synthetic suite.
 
 Keep character workspaces outside the source checkout. Do not commit project bindings, assets, generated images, models, recordings, job/episode IDs, personal paths, private history, local adapter configuration or credentials. Synthetic examples must be authored independently of private geometry. Source distribution uses an explicit package inventory and never exports the selected workspace by default.
