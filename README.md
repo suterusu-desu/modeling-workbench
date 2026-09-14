@@ -44,6 +44,15 @@ Tripo, image generation and video generation are **workflow integrations**, not 
 
 Follow [the setup and first-character guide](modeling_system/plugin/skills/modeling-workbench/references/getting-started.md). It includes a no-generation first run and explains what must be supplied before native modeling can begin. Keep the character workspace outside this source checkout.
 
+## Acknowledgments and design references
+
+We studied these adjacent projects while developing the workflow and reusable tools:
+
+- [Blender Research MCP](https://github.com/Haiyang-Bian/blender-research-mcp), reviewed at [`d623c4d`](https://github.com/Haiyang-Bian/blender-research-mcp/tree/d623c4d116716f68b78fed77be93d42548247303): revision-bound scene evidence, explicit component lineage, bounded native operations, boundary diagnostics and recovery-aware workflows informed our design study.
+- [Blender Terracotta](https://github.com/ShamanAndrey/blender-terracotta), reviewed at [`8fda74e`](https://github.com/ShamanAndrey/blender-terracotta/tree/8fda74ec41ca43cfb6b34e86f9d11f43127391ac): graph-based workflow composition, generation cost previews and completed-result reuse informed our reusable recipe work. Applicability and evidence review remain explicit in our implementation.
+
+These are learning acknowledgments, not claims of endorsement or equivalent capabilities. They are design references rather than required runtime dependencies. Follow each upstream project's own licensing terms when using its code or assets; these acknowledgments do not replace any required notices for incorporated material.
+
 ## Project status and sharing
 
 This repository contains reusable source and synthetic examples, not the original character, private adapter, provider accounts or production evidence. Share only reviewed tools-only exports; workspace/evidence exports can contain personal paths and private assets.
