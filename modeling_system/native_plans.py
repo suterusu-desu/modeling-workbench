@@ -4,6 +4,12 @@ from pathlib import Path
 from .mesh_plan import compile_plan
 from .library_plan import preflight
 from .store import digest
+from .bounded_reads import read_descriptor
+
+
+def _expansions(key):
+    descriptor=read_descriptor('read_record',dict(record=key),['plan'],max_chars=8000)
+    return dict(reads={'plan':descriptor},detail=descriptor)
 
 
 def _read(service,path):
@@ -20,7 +26,7 @@ def mesh(service,case_path):
     return dict(plan=key,status='preflighted_offline',native_ready=False,object=case['object'],question=case['question'],
         before_revision=result['before_revision'],after_revision=result['after_revision'],steps=len(result['steps']),
         next_action='Sole native owner must compare the actual raw mesh and expected SaveBoundary, then invoke native_mesh_batch.execute_batch once in an isolated process.',
-        reads=dict(operation='read_record',arguments=dict(record=key,path=['plan'],max_chars=8000)))
+        **_expansions(key))
 
 
 def library(service,manifest_path,existing,namespace,limits=None):
@@ -28,7 +34,7 @@ def library(service,manifest_path,existing,namespace,limits=None):
     key=service.store.put('native_library_plan',dict(source=source,manifest=manifest,plan=plan,declared_destination_ids=existing))
     return dict(plan=key,status='preflighted_offline',native_ready=False,counts=plan['counts'],manifest_revision=plan['manifest_revision'],
         next_action='Sole native owner must verify source, adapters and actual destination; native_library.append repeats preflight under its SaveBoundary.',
-        reads=dict(operation='read_record',arguments=dict(record=key,path=['plan'],max_chars=8000)))
+        **_expansions(key))
 
 
 def inspect_transaction(receipt_path,expected_sha256):

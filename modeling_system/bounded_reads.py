@@ -1,4 +1,5 @@
 """Read-only, revision-bound JSON windows. No storage writes or native access."""
+import copy
 import json
 from .store import canonical, digest
 
@@ -39,6 +40,27 @@ def select(value, path):
 
 def read_descriptor(operation, arguments, path=None, **window):
     return {'operation': operation, 'arguments': {**arguments, 'path': path or [], **window}}
+
+
+def normalize_reads(reads, default_name='detail'):
+    """Copy named read descriptors, or wrap one legacy descriptor; never execute it.
+
+    This normalizes descriptor shape only. It preserves arguments and budgets,
+    and does not determine an operation's authority, effects or live freshness.
+    """
+    if not isinstance(default_name,str) or not 1<=len(default_name)<=64:
+        raise ValueError('A short nonempty fallback expansion name is required')
+    if not isinstance(reads,dict) or len(reads)>32 or json_chars(reads)>16384:
+        raise ValueError('Read descriptors must be a bounded object')
+    named={default_name:reads} if set(reads)=={'operation','arguments'} and isinstance(reads['operation'],str) else reads
+    for name,descriptor in named.items():
+        if not isinstance(name,str) or not 1<=len(name)<=64:
+            raise ValueError('Expansion names must be short nonempty strings')
+        if (not isinstance(descriptor,dict) or set(descriptor)!={'operation','arguments'}
+                or not isinstance(descriptor['operation'],str) or not 1<=len(descriptor['operation'])<=128
+                or not isinstance(descriptor['arguments'],dict)):
+            raise ValueError('Each expansion needs an operation string and arguments object')
+    return copy.deepcopy(named)
 
 
 def page(value, operation, arguments, *, path=None, offset=0, limit=20,
