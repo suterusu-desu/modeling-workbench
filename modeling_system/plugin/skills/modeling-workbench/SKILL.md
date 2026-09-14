@@ -31,6 +31,10 @@ For sustained work start with `decision_workspace()` and read [the episode proce
 
 Provider transport, account and credit authorization belong to the bound workspace. Verify actual configured route and live account state before a permitted dispatch; never infer spending authority from installation or a transferable package.
 
+For a bounded topology sequence, exact ancestry, save-aware rollback or library import, read [isolated native transactions](references/native-transactions.md). Public preparation retains plans; only the sole native owner invokes the background helpers with verified content adapters. Unsupported character content stays on its qualified existing route. A partial transaction is inspected and recovered from original checkpoints, never replayed automatically.
+
+When several provider jobs depend on reviewed outputs or diagnostic results, use [provider workflows](references/provider-workflows.md). Compose existing exact job handles, inspect current dependencies and preview remaining known quotes per denomination. A stale ancestor blocks descendants even across completed jobs. Busy or uncertain jobs are reconciled under their original handles. Unknown future prices remain unknown; a quote or workflow never supplies dispatch authority.
+
 For counterfactual screening, evidence reuse, local method promotion, exact ordered motion and portable transfer, read [responses and transfer](references/responses-and-transfer.md). These are implemented shared-core operations with explicit adapter/dependency limits. They do not grant new modeling scope, native ownership or generation credits.
 
 `operation_context` and `select_generation_route` are genuinely read-only, including through CLI/MCP; they do not create journal/context records. Use `capture_operation_context` when you intentionally retain a decision context and exact source bytes. That explicit action keeps automatic operation facts. Do not assume every local operation is read-only.

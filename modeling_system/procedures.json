@@ -58,32 +58,84 @@
     },
     {
       "id": "reverse-control-coverage-before-repeat-fit",
-      "stages": ["diagnosis", "intervention", "review"],
-      "conditions": {"observed_failure": "target changed or accurate native prediction still fails connected shape"},
+      "stages": [
+        "diagnosis",
+        "intervention",
+        "review"
+      ],
+      "conditions": {
+        "observed_failure": "target changed or accurate native prediction still fails connected shape"
+      },
       "instruction": "Use inspect_control_coverage to distinguish complete forward influence from complete reverse target ancestry. Recover a full declared control universe, preserve protected and provisional exclusion reasons, and inspect omitted paths before repeating a fit. Structural ancestry does not prove a useful coupled response, feasible protected fit or good appearance.",
-      "source_queries": ["reverse target ancestry inherited control family native prediction crease fit coverage"],
-      "limits": ["Offline structural diagnostic; no native mutation", "A restricted matrix cannot establish exhaustive ancestry", "No automatic relaxation of protection or generation request"],
-      "operations": ["inspect_control_coverage", "analyze_repair", "record_outcome", "retrieve_experience"],
+      "source_queries": [
+        "reverse target ancestry inherited control family native prediction crease fit coverage"
+      ],
+      "limits": [
+        "Offline structural diagnostic; no native mutation",
+        "A restricted matrix cannot establish exhaustive ancestry",
+        "No automatic relaxation of protection or generation request"
+      ],
+      "operations": [
+        "inspect_control_coverage",
+        "analyze_repair",
+        "record_outcome",
+        "retrieve_experience"
+      ],
       "citations": []
     },
     {
       "id": "solver-termination-is-not-geometric-infeasibility",
-      "stages": ["diagnosis", "intervention", "method_integration"],
-      "conditions": {"observed_failure": "optimizer stopped without success"},
+      "stages": [
+        "diagnosis",
+        "intervention",
+        "method_integration"
+      ],
+      "conditions": {
+        "observed_failure": "optimizer stopped without success"
+      },
       "instruction": "Preserve the exact stopped candidate and distinguish termination status, independently measured constraint feasibility and stationarity. A line-search or convergence stop alone does not establish impossible geometry, missing guide shape or a need for generation. When the problem supports it, test numerical rescaling of the unchanged objective and constraints in a separate bounded trial, compare actual geometry change, and retain all statuses.",
-      "source_queries": ["solver termination feasibility stationarity unchanged constraints objective scaling"],
-      "limits": ["A bounded diagnostic rule, not automatic optimizer recovery", "Do not change constraints or clamp geometry to relabel a numerical stop", "Stationarity tests require a justified model and appropriate residuals; they do not prove global optimality or shape quality", "Native writeback, triangle support, motion and appearance remain separate evidence"],
-      "operations": ["analyze_repair", "record_outcome", "reconcile_episode", "retrieve_experience"],
+      "source_queries": [
+        "solver termination feasibility stationarity unchanged constraints objective scaling"
+      ],
+      "limits": [
+        "A bounded diagnostic rule, not automatic optimizer recovery",
+        "Do not change constraints or clamp geometry to relabel a numerical stop",
+        "Stationarity tests require a justified model and appropriate residuals; they do not prove global optimality or shape quality",
+        "Native writeback, triangle support, motion and appearance remain separate evidence"
+      ],
+      "operations": [
+        "analyze_repair",
+        "record_outcome",
+        "reconcile_episode",
+        "retrieve_experience"
+      ],
       "citations": []
     },
     {
       "id": "evidence-to-method-integration",
-      "stages": ["method_integration", "review", "recovery", "diagnosis"],
+      "stages": [
+        "method_integration",
+        "review",
+        "recovery",
+        "diagnosis"
+      ],
       "conditions": {},
       "instruction": "Retain a narrowly demonstrated method gain at any modeling phase without waiting for whole-character success. Preserve exact executable inputs, protected context, artistic variables, qualified support/exclusions and failed alternatives. Close an episode with an implemented procedure/tool/rule, bounded experimental recipe, or explicit not-generalizable result. Retrieve by mechanism and verify actual use; distinguish source, installed, runtime and operator adoption.",
-      "source_queries": ["supported diagnostic method integration mechanism applicability counterexamples actual use"],
-      "limits": ["Character and method judgments stay separate", "Local retention does not prove live adoption or cross-character quality", "Saving and recovery never wait for integration prose"],
-      "operations": ["record_outcome", "reconcile_episode", "promote_procedure", "retrieve_experience", "runtime_status"],
+      "source_queries": [
+        "supported diagnostic method integration mechanism applicability counterexamples actual use"
+      ],
+      "limits": [
+        "Character and method judgments stay separate",
+        "Local retention does not prove live adoption or cross-character quality",
+        "Saving and recovery never wait for integration prose"
+      ],
+      "operations": [
+        "record_outcome",
+        "reconcile_episode",
+        "promote_procedure",
+        "retrieve_experience",
+        "runtime_status"
+      ],
       "citations": []
     },
     {
@@ -286,6 +338,99 @@
         {
           "role": "method",
           "heading": "Retained method"
+        }
+      ]
+    },
+    {
+      "id": "bounded-native-transaction-and-recovery",
+      "stages": [
+        "planning",
+        "execution",
+        "recovery"
+      ],
+      "conditions": {
+        "observed_failure": "repeated raw mesh operations stale aliases partial batch or rollback after later save"
+      },
+      "instruction": "Prepare the entire raw-mesh sequence, then use the sole native owner with an exact SaveBoundary and pinned fingerprint in isolated Blender. Preserve step lineage and partial receipts. inspect_native_transaction reads original stages without replay. Later edits or saves refuse rollback; source, installed helper and owner adoption remain distinct.",
+      "source_queries": [
+        "typed raw mesh batch topology lineage alias exact save rollback partial effects"
+      ],
+      "limits": [
+        "Only supported raw mesh content; existing qualified character adapters remain available",
+        "No automatic replay or rollback of partial/uncertain effects",
+        "Finite native fixture checks are not appearance acceptance"
+      ],
+      "operations": [
+        "prepare_mesh_batch",
+        "inspect_native_transaction",
+        "record_topology_lineage"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Isolated native transactions"
+        }
+      ]
+    },
+    {
+      "id": "native-library-dependency-closure",
+      "stages": [
+        "planning",
+        "execution"
+      ],
+      "conditions": {
+        "observed_failure": "import library shared mesh material driver parent or destination name collision"
+      },
+      "instruction": "Measure source closure in a separate unchanged source process, use explicit namespaces and resource ceilings, then compare actual native shared/parent/driver links and original host content under pinned adapters. Fingerprint embedded material content through its owner. Preserve transient source provenance separately from durable weak references; do not purge or strip unsupported content to make a test pass.",
+      "source_queries": [
+        "library append dependency closure shared data driver embedded shader namespace"
+      ],
+      "limits": [
+        "Bundled content adapter has explicit supported types",
+        "Unexpected payload/dependencies preserve a partial receipt",
+        "No active owner takeover"
+      ],
+      "operations": [
+        "prepare_library_import",
+        "inspect_native_transaction"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Library closure and explicit names"
+        }
+      ]
+    },
+    {
+      "id": "provider-chain-and-cost-applicability",
+      "stages": [
+        "planning",
+        "generation",
+        "recovery"
+      ],
+      "conditions": {
+        "observed_failure": "dependent provider jobs unknown future price stale review or uncertain submission"
+      },
+      "instruction": "Compose exact existing jobs/reviews/recipe results inside one episode. Propagate stale applicability through every descendant, including completed intermediate jobs. Keep known quotes separate by denomination, expire stale bases and expose unknown totals. Reconcile busy/unknown jobs under the same handle; quotes and readiness do not replace current claim policy or grant spending authority.",
+      "source_queries": [
+        "provider graph workflow chain quote cost currency unknown review source dependency"
+      ],
+      "limits": [
+        "No provider executor, API replacement or price fetching",
+        "No unknown price represented as zero",
+        "Observed model usage is not automatically a monetary charge"
+      ],
+      "operations": [
+        "create_provider_workflow",
+        "bind_provider_nodes",
+        "inspect_provider_workflow",
+        "quote_provider_node",
+        "preview_provider_cost"
+      ],
+      "citations": [
+        {
+          "role": "method",
+          "heading": "Provider workflows and aggregate cost preview"
         }
       ]
     }

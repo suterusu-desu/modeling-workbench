@@ -23,6 +23,11 @@ for p in files:
         errors.append((rel,'private workspace material'));continue
     try:text=p.read_text(encoding='utf-8')
     except UnicodeError: errors.append((rel,'binary input'));continue
+    if tracked.returncode==0 and tracked.stdout:
+        raw=subprocess.run(['git','hash-object','--no-filters',str(p)],cwd=root,capture_output=True)
+        filtered=subprocess.run(['git','hash-object','--path='+rel.as_posix(),str(p)],cwd=root,capture_output=True)
+        if raw.returncode or filtered.returncode or raw.stdout!=filtered.stdout:
+            errors.append((rel,'working bytes differ from Git filters; normalize before building or pinning a release'))
     if re.search(r'[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s]+|/(?:home|Users)/[^/\s]+',text):
         errors.append((rel,'personal absolute location'))
     if any(term in text.casefold() or term in rel.as_posix().casefold() for term in private_terms):

@@ -218,6 +218,30 @@
       "route": "inspect_execution_receipt / worker_contract.WorkerContract / worker_contract.verify_manifest",
       "implementation": "core",
       "verification": "Pinned operation-specific mappings separate effect, bytes, process, required outputs and independent verification. Standalone finalizer requires preflight, checks and protected source hashes before exclusive completion publication; no native replay or appearance approval."
+    },
+    {
+      "name": "Prepared raw-mesh batches and exact native ancestry",
+      "route": "prepare_mesh_batch / native_mesh_batch.execute_batch / record_topology_lineage",
+      "implementation": "Core preparation plus owner-run isolated native helper",
+      "verification": "Full typed preflight, exact vertex lineage/FACE ownership and native roundtrip; unsupported mesh content refused. Native fixture and installed-byte adoption remain explicit evidence, not a character quality claim."
+    },
+    {
+      "name": "Native transaction inspection and later-save-aware rollback",
+      "route": "inspect_native_transaction / native_mesh_batch.SaveBoundary / native_mesh_batch.rollback_batch",
+      "implementation": "Read-only public recovery inspection and owner-run native guard",
+      "verification": "Exact native precision, original file bytes, owner/session and save events; original partial effects and rollback attempts remain durable. No automatic replay or rollback after later work."
+    },
+    {
+      "name": "Measured library dependency closure and explicit namespaces",
+      "route": "prepare_library_import / native_library.describe / native_library.append",
+      "implementation": "Core plan plus owner-run append and pinned content adapters",
+      "verification": "Budgets, shared-ID namespaces, actual parent/driver/shared data links, imported content and original-host preservation. Bundled adapter covers raw meshes/objects, collections and embedded Principled/Output materials; richer/embedded types need explicit qualification."
+    },
+    {
+      "name": "Provider workflow composition and exact cost previews",
+      "route": "create_provider_workflow / bind_provider_nodes / inspect_provider_workflow / quote_provider_node / preview_provider_cost",
+      "implementation": "Core composition over existing jobs, reviews, diagnostic recipes and episode ledger",
+      "verification": "Synthetic source/review/diagnostic invalidation, instance isolation, atomic binding, uncertain-job recovery and exact denomination sums; no provider calls, funding or dispatch authority. Native/provider job results remain separately verified."
     }
   ],
   "limits": [

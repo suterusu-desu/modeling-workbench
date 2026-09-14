@@ -23,7 +23,8 @@ class UnconfiguredNative:
 READ_OPERATIONS={'capabilities','runtime_status','inspect_situation','inspect_workflow','read_record',
                  'read_component_catalog','locate_component','select_component',
                  'retrieve_experience','decision_workspace','semantic_impact','inspect_operations','check_reuse',
-                 'package_readiness','evidence_manifest','operation_context','select_generation_route','inspect_recipe','recipe_template'}
+                 'package_readiness','evidence_manifest','operation_context','select_generation_route','inspect_recipe','recipe_template','inspect_native_transaction',
+                 'inspect_provider_workflow','preview_provider_cost'}
 
 
 class ModelingService:
@@ -302,6 +303,46 @@ class ModelingService:
         """Retain exact operation-produced topology relations bound to an original receipt; never infer proximity or write native geometry."""
         from .topology_lineage import record
         return record(self, case_path)
+
+    def prepare_mesh_batch(self, case_path: str) -> dict:
+        """Retain a fully preflighted typed raw-mesh sequence; preparation does not contact Blender or establish native readiness."""
+        from .native_plans import mesh
+        return mesh(self, case_path)
+
+    def prepare_library_import(self, manifest_path: str, existing: list[list[str]], namespace: str, limits: dict | None = None) -> dict:
+        """Retain an explicit library closure/namespace/budget plan; actual native source and destination verification remain owner-controlled."""
+        from .native_plans import library
+        return library(self, manifest_path, existing, namespace, limits)
+
+    def inspect_native_transaction(self, receipt_path: str, expected_sha256: str) -> dict:
+        """Read exact transaction stages and verify saved artifact bytes without native calls, replay, rollback or journal writes."""
+        from .native_plans import inspect_transaction
+        return inspect_transaction(receipt_path, expected_sha256)
+
+    def create_provider_workflow(self, episode: str, graph: dict, idempotency_key: str) -> dict:
+        """Compose a bounded graph of existing jobs, reviews and diagnostic results in one episode; never dispatch or fetch a price."""
+        from .provider_workflow import create
+        return create(self, episode, graph, idempotency_key)
+
+    def bind_provider_nodes(self, workflow: str, expected_revision: str, bindings: dict, reason: str = '') -> dict:
+        """Atomically bind exact existing jobs/reviews/recipe results with retained replacement history and dependency invalidation."""
+        from .provider_workflow import bind
+        return bind(self, workflow, expected_revision, bindings, reason)
+
+    def inspect_provider_workflow(self, workflow: str) -> dict:
+        """Read current job/review/dependency states and next actions without altering jobs or contacting providers."""
+        from .provider_workflow import inspect
+        return inspect(self, workflow)
+
+    def preview_provider_cost(self, workflow: str) -> dict:
+        """Read remaining known quoted subtotals by denomination; unknown/stale future prices stay explicit and no spend is authorized."""
+        from .provider_workflow import preview
+        return preview(self, workflow)
+
+    def quote_provider_node(self, workflow: str, expected_revision: str, node: str, amount: str | int | float, unit: str, observed_at: str, expires_at: str, source: str, evidence: list[dict]) -> dict:
+        """Retain observed quote evidence pinned to current job/source/dependency basis; no price lookup, reservation or dispatch."""
+        from .provider_workflow import quote
+        return quote(self, workflow, expected_revision, node, amount, unit, observed_at, expires_at, source, evidence)
 
     def inspect_execution_receipt(self, case_path: str) -> dict:
         """Inspect pinned operation or worker evidence without replaying any effect."""
