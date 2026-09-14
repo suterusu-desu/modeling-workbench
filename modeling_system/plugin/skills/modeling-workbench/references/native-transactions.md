@@ -2,6 +2,8 @@
 
 Use these helpers for a closed raw-mesh experiment or a measured library append in an owner-controlled disposable/background Blender process. Existing qualified workspace adapters remain available for rigs, guides and character operations outside this helper's declared scope. A new generic install does not switch the active native owner. Match installed module bytes to the selected worker and use its isolated-profile runner.
 
+For qualified character adapters with dependent parts, diagnose preservation through the recorded attachment relationship as well as raw displacement: fixed anchors can have moving support frames. Use the [baseline and expected-frame checks](construction-diagnostics.md#distinguish-expected-attachment-motion-from-residual-error) before interpreting a dependent-coordinate difference. This does not expand the raw writer's supported content or relax exact native fingerprints, save boundaries or later-edit rollback refusals. Artistic permission and a mechanically explained response remain separate.
+
 ## Prepare, execute, inspect, retain
 
 1. `prepare_mesh_batch(case_path)` retains a version-1 case containing `question`, `object`, `mesh`, `steps` and optional `aliases`. It returns a bounded plan summary and a `read_record` expansion. It neither inspects Blender nor grants native readiness.

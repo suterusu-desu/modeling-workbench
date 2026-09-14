@@ -22,6 +22,23 @@ An unwelded preview insert has a display perimeter. Identify it separately from 
 
 For exact cuts, use the existing `geometry.plane_sections(arrays, axis, value, selection)` or the recorded-geometry section query. The existing cutter retains exact vertex-on-plane hits and deduplicates endpoints within each triangle. A plane along an edge produces that segment; an isolated tangent point produces no segment. Coplanar triangles are counted and excluded rather than silently turned into curves. Shared segments can have multiple triangle owners. This function uses an absolute 1e-12 coordinate tolerance; extremely small features or near-plane degeneracies require a declared scale/tolerance study, not automatic gap interpretation. It returns full segments, so retain them privately and use existing bounded record reads for agent summaries. Tests cover exact vertex crossings, on-plane edges, tangency and coplanarity. These planar cuts do not prove global three-dimensional connectivity.
 
+## Select the tessellation for the measured pose
+
+Native quad diagonals can change between poses while vertex identities and polygon loops remain stable. For an exact native triangle comparison, obtain both recordings at the measured pose, validate their triangulation, then derive selected rows from those records:
+
+```python
+from modeling_system import geometry
+geometry.compare(recorded_before, recorded_after)  # default triangle correspondence
+pose_triangles = recorded_before['tri'][selected_triangle_ids]
+result = compare_bends(recorded_before['co'], recorded_after['co'], pose_triangles)
+```
+
+Selection indices must belong to that pose's pinned triangle array. The default `geometry.compare` refuses unequal triangle layouts; do not evade this by copying old topology into a native record. Its explicit `recorded_polygon_loops` mode can justify a vertex comparison while returning `triangle_layout_equal=False`; that does not validate triangle-index transfer. If within-pose tessellation differs, resolve the correspondence or explicitly choose a common chart for the question.
+
+A deliberate fixed-chart comparison passes its pinned chart to `compare_bends` and records that choice, both native topology revisions and their agreement/disagreement with the chart. It remains a fixed-chart result on posed coordinates. `compare_bends` receives only one chart and cannot verify its native provenance for the caller. Native plane sections use each pose's actual triangle record; a nonplanar quad's alternative diagonals can change both bend angles and section geometry. Preserve the original fixed-chart result when adding an exact-native continuation.
+
+The synthetic changed-diagonal fixture in `test_construction_diagnostics` checks independently known quad angles and section points, native correspondence refusal and the separate fixed-chart result. No pose or anatomical identity is inferred from this fixture.
+
 ## Verify the actual support calculation first
 
 Read a pinned saved native graph and its input values, including selection, every additive branch, clamping/saturation, blending width, transforms, modifier order and evaluated pose. A remembered formula or one support object can omit an active contribution. Before interpreting candidate displacement, reproduce corresponding saved native outputs with the complete calculation.
@@ -35,6 +52,26 @@ baseline_check = sample_residuals(saved_native_xyz, predicted_native_xyz,
 The tolerance is the maximum absolute XYZ component in the declared common frame. Inspect the maximum, p95, failed count and exact worst sample indices. Empty, nonfinite and mismatched arrays refuse; inputs are never changed. A failed reproduction invalidates the simplified model's reachability interpretation. Preserve it as a counterexample, trace missing graph branches, then retain the corrected reproduction separately. Do not change native clearance or support rules merely to make a candidate fit.
 
 Once reproduction passes, compare a proposed target to its output under that same verified support map using `sample_residuals(target_xyz, mapped_target_xyz, tolerance)`. A difference shows displacement under the sampled map. It does not independently prove that no raw control solution exists. A passing baseline only validates these supplied samples; complete graph attribution, selected/interpolated sample coverage, all intermediate poses and control reachability remain separate. Report native samples and interpolated construction samples separately.
+
+## Distinguish expected attachment motion from residual error
+
+A fixed anchor need not have a fixed support frame. Trace the recorded binding, supporting cells, frame convention and local offset for the dependent part. Verify baseline reproduction first; compare the candidate against an independently predicted finite-frame response, not merely against its old world coordinates. For a qualified affine frame whose columns are the local basis in the common measurement frame:
+
+```python
+expected_before = anchors_before + np.einsum('nij,nj->ni', frames_before, local_offsets)
+baseline = sample_residuals(expected_before, observed_before, tolerance)
+if not baseline['sampled_match']:
+    raise ValueError('Binding/frame prediction does not reproduce the recorded baseline')
+expected_after = anchors_after + np.einsum('nij,nj->ni', frames_after, local_offsets)
+motion = sample_residuals(observed_before, observed_after, tolerance)
+unexplained = sample_residuals(expected_after, observed_after, tolerance)
+```
+
+Here `np` is NumPy, arrays have corresponding sample order, and tolerances/units are declared. Use the actual qualified adapter's map when its blending, scale or nonlinear behavior differs from this example. Derive frames from independent supporting geometry and bindings; fitting them to the dependent observations would make the residual circular. Keep the frame/anchor/offset inputs pinned with the output; `sample_residuals` fingerprints positions, not their causal provenance.
+
+Inspect anchor movement under its own declared constraint, supporting-cell/frame changes, expected dependent displacement and unexplained residuals separately. A failed baseline invalidates the predictor. A good baseline with a later residual nominates a binding/support/deformation discrepancy; it is not permission to ignore the difference or increase tolerance to pass. A matched moving-frame response explains the sampled motion, but does not approve its appearance or untested poses. Exact cell/frame freezing is an explicit temporary experimental restriction when justified, not a permanent requirement for every dependent part. Raw transaction fingerprints and rollback checks remain exact; this diagnostic does not weaken their later-edit protection.
+
+The independent fixed-anchor fixture uses a known rotation and hand-specified observations. It detects raw displacement, accepts the independently predicted response, rejects an added unexplained displacement, and rejects a mismatched baseline binding. No native mutation or artistic acceptance is tested.
 
 ## Retain the limited result
 

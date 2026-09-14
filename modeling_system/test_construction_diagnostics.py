@@ -1,10 +1,72 @@
 import unittest
 import numpy as np
 from .construction_diagnostics import compare_bends, sample_residuals
-from .geometry import plane_sections
+from .geometry import plane_sections, compare
 
 
 class ConstructionDiagnosticsTests(unittest.TestCase):
+    def test_pose_diagonal_change_requires_native_or_declared_fixed_chart_basis(self):
+        # Independent nonplanar quad: the two diagonals yield analytically
+        # different normal angles despite identical vertex identities.
+        flat = np.array([[0.,0,0],[2,0,0],[2,1,0],[0,1,0]])
+        bent = flat.copy(); bent[2,2] = 1
+        first_diagonal = np.array([[0,1,2],[0,2,3]])
+        second_diagonal = np.array([[0,1,3],[1,2,3]])
+        pose_a = dict(co=flat,tri=first_diagonal)
+        pose_b = dict(co=bent,tri=second_diagonal)
+        with self.assertRaisesRegex(ValueError,'Topology differs'):
+            compare(pose_a,pose_b)
+        native_before = dict(co=flat,tri=second_diagonal)
+        self.assertTrue(compare(native_before,pose_b)['triangle_layout_equal'])
+        native = compare_bends(flat,bent,pose_b['tri'])
+        fixed_chart = compare_bends(flat,bent,pose_a['tri'])
+        self.assertEqual(native['worst_added'][0]['edge'],[1,3])
+        self.assertEqual(fixed_chart['worst_added'][0]['edge'],[0,2])
+        self.assertAlmostEqual(native['after']['maximum'],np.degrees(np.arccos(2/3)))
+        self.assertAlmostEqual(fixed_chart['after']['maximum'],np.degrees(np.arccos(2/np.sqrt(10))))
+        self.assertNotEqual(native['input_revision'],fixed_chart['input_revision'])
+        # Native and fixed-chart sections also differ at the diagonal midpoint.
+        native_cut = plane_sections(pose_b,0,1)
+        fixed_cut = plane_sections(dict(co=bent,tri=first_diagonal),0,1)
+        native_points = {tuple(p) for segment in native_cut['segments'] for p in segment}
+        fixed_points = {tuple(p) for segment in fixed_cut['segments'] for p in segment}
+        self.assertIn((1.,.5,0.),native_points)
+        self.assertIn((1.,.5,.5),fixed_points)
+        self.assertNotEqual(native_points,fixed_points)
+
+    def test_polygon_loop_correspondence_does_not_certify_triangle_transfer(self):
+        co = np.array([[0.,0,0],[2,0,0],[2,1,1],[0,1,0]])
+        loops = dict(loops=np.array([0,1,2,3]),polygon_starts=np.array([0]),polygon_lengths=np.array([4]))
+        a = dict(co=co,tri=np.array([[0,1,2],[0,2,3]]),**loops)
+        b = dict(co=co,tri=np.array([[0,1,3],[1,2,3]]),**loops)
+        result = compare(a,b,correspondence='recorded_polygon_loops')
+        self.assertEqual(result['changed_vertices'],0)
+        self.assertFalse(result['triangle_layout_equal'])
+        with self.assertRaisesRegex(ValueError,'Topology differs'): compare(a,b)
+
+    def test_fixed_anchor_rotating_frame_explains_motion_but_not_added_residual(self):
+        anchors = np.tile([2.,3.,4.],(3,1))
+        offsets = np.array([[1.,0,0],[0,2,0],[0,0,1]])
+        baseline = np.array([[3.,3,4],[2,5,4],[2,3,5]])
+        observed = np.array([[2.,4,4],[0,3,4],[2,3,5]])
+        rotation = np.array([[0.,-1,0],[1,0,0],[0,0,1]])
+        # Expected positions derive from independent anchors/basis/offsets,
+        # not a frame fitted to the dependent observed coordinates.
+        frames = np.tile(rotation,(3,1,1))
+        predicted = anchors + np.einsum('nij,nj->ni',frames,offsets)
+        self.assertTrue(sample_residuals(anchors+offsets,baseline,1e-8)['sampled_match'])
+        self.assertEqual(sample_residuals(baseline,observed,1e-8)['over_tolerance'],2)
+        self.assertTrue(sample_residuals(predicted,observed,1e-8)['sampled_match'])
+        unexplained = observed.copy(); unexplained[1,2] += .001
+        report = sample_residuals(predicted,unexplained,1e-8,limit=1)
+        self.assertFalse(report['sampled_match'])
+        self.assertEqual(report['over_tolerance'],1)
+        self.assertEqual(report['worst'][0]['sample'],1)
+        self.assertAlmostEqual(report['maximum'],.001)
+        self.assertFalse(sample_residuals(anchors+offsets[[1,0,2]],baseline,1e-8)['sampled_match'])
+        np.testing.assert_array_equal(anchors,np.tile([2.,3.,4.],(3,1)))
+        np.testing.assert_array_equal(observed,np.array([[2.,4,4],[0,3,4],[2,3,5]]))
+
     def test_improved_objective_does_not_hide_local_fold(self):
         flat = np.array([[0.,0,0],[1,0,0],[0,1,0],[1,1,0]])
         bent = flat.copy(); bent[3,2] = 1
