@@ -1,6 +1,6 @@
 # Diagnose a constructed surface before fitting
 
-Use these checks when an aggregate objective hides local ridges, a predicted support cap disagrees with native geometry, or section plots appear disconnected. They inspect saved data without calling Blender. The Python helpers below are a source-development follow-up; they are not added MCP operations, an installed runtime upgrade or an active-operator adoption receipt.
+Use these checks when an aggregate objective hides local ridges, a predicted support cap disagrees with native geometry, or section plots appear disconnected. They inspect saved data without calling Blender. The Python helpers below are included in 0.2.12; they add no MCP operations. Verify the selected package and interpreter before using them. Their availability does not establish active-operator adoption or upgrade a running native adapter.
 
 ## Local shape and presentation
 
