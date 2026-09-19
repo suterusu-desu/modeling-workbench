@@ -71,7 +71,7 @@ def summary(service, raw, item):
                         'expand':record_read(raw['question']['record'])}
     baseline=raw['baseline']
     result['baseline']={k:baseline[k] for k in ('label','state','source_state_id','guide')}
-    result['baseline']['coverage']={k:v for k,v in baseline['coverage'].items() if k in ('inventoried','queryable','excluded')}
+    result['baseline']['coverage']={k:v for k,v in baseline['coverage'].items() if k in ('inventoried','queryable','excluded','declaration')}
     result['baseline']['expand']=record_read(baseline['state'])
     sections['workflows']=metadata(len(workflows),len(workflows),digest(canonical(raw['workflows'])),
         'All associated workflows',

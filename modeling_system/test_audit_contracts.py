@@ -46,6 +46,8 @@ class AuditContracts(unittest.TestCase):
             method={'status':'supported','reason':'Legacy scope can be read','integration':{'disposition':'not_generalizable','reason':'Fixture evidence only'}},
             evidence=[{'kind':'record','id':key,'role':'imported scene'}],applicability='synthetic imported scope',close=True)
         self.assertEqual(closed['status'],'closed')
+        self.assertEqual(self.s.inspect_situation()['coverage']['declaration']['schema'],'scope_count')
+        self.assertEqual(self.s.decision_workspace(e['episode'])['baseline']['coverage']['declaration']['schema'],'scope_count')
 
     def test_landmark_error_precedes_image_access_and_preserves_job(self):
         job=self.completed();before=self.s.ledger.read(job['handle'])

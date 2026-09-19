@@ -157,6 +157,7 @@ class Workbench:
         return {'status':'completed','outcome':key,'question':self._revise(question,'outcomes',key)}
 
     def inspect_situation(self,question=None):
+        from .scene_coverage import normalize
         question=question or self.store.current()
         if not question:return {'status':'needs evidence','summary':'No current modeling question is selected','next':['import_scene','open_question']}
         q=self.store.get(question,'question');s=self.store.get(q['state'],'state')
@@ -168,7 +169,8 @@ class Workbench:
                 'state_detail':str(self.store.root/'records'/(q['state']+'.json')),
                 'capabilities':str(Path(__file__).with_name('capabilities.json')),
                 'coverage':{'mesh_objects':sum(o['type']=='MESH' for o in s['objects']),
-                            'excluded':[x for x in s['coverage'] if not x.get('included')]},
+                            'excluded':[x for x in normalize(s['coverage'])['objects'] if not x['included']],
+                            'declaration':normalize(s['coverage'])},
                 'observations':[{'record':key,'role':o['role'],'projection':o['projection_status']} for key,o in zip(q['observations'],observations)],
                 'outcomes':q['outcomes'],'next':['query_geometry','attach_observation','compare_geometry','record_outcome'],
                 'detail_record':str(self.store.root/'records'/(question+'.json'))}
