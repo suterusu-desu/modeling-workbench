@@ -135,6 +135,7 @@ def summarize_workflow(service,handle):
     result.update(purpose=intent.get('requested_change',intent.get('hypothesis',intent.get('title'))),
                   recovery='Reconcile original handle before further effects' if item['status'] in PENDING else None)
     if item['kind']=='reference_job':
+        result['source_validity']=service.references.lineage_status(handle)
         result.update(intent_class=intent.get('intent_class'),provider=intent.get('provider'),requested=intent.get('settings'),
                       source=intent.get('generation_input'),review=intent.get('reviewed_source'),
                       provider_id=data.get('provider_id'),outputs=data.get('outputs',[]),
@@ -164,6 +165,11 @@ def summarize_workflow(service,handle):
         except (ValueError,KeyError,RuntimeError,OSError) as error:
             result.update(status='needs_reconciliation',reason=str(error))
     elif item['kind']=='experiment':
+        result['constraint_status']=data.get('constraint_status','evaluated displacement support not established')
+        result['intervention']=data.get('intervention')
+        comparison=data.get('intervention_comparison')
+        if comparison:
+            result['realized_constraints']={k:comparison[k] for k in ('record','agrees','realized_numerically_supported')}
         result.update(hypothesis=intent.get('hypothesis'),state=intent.get('state'),
                       checkpoint=data.get('checkpoint'),native_trial=data.get('native_trial'),
                       judgment='Local native retention is separate from appearance and method judgment')
@@ -177,6 +183,8 @@ def summarize_workflow(service,handle):
 
 
 def coverage(state,full=False):
+    from .scene_coverage import normalize
+    declared=normalize(state.get('coverage',[]))
     objects=state.get('objects',[])
     groups={};roles={}
     for obj in objects:
@@ -187,7 +195,8 @@ def coverage(state,full=False):
     result=dict(inventoried=len(objects),queryable=sum(bool(o.get('asset')) for o in objects),
                 classes={k:dict(count=len(v),**({'objects':v} if full else {})) for k,v in groups.items()},
                 roles={k:len(v) for k,v in roles.items()},
-                excluded=[r for r in state.get('coverage',[]) if not r.get('included')],source_limits=state.get('source_limits'),
+                excluded=[r for r in declared['objects'] if not r['included']],declaration=declared,
+                source_limits=state.get('source_limits'),
                 expansion='read_record(state) contains each object, evaluation, hidden/view-layer status, scenes and exact arrays')
     if full:result['declared']=state.get('coverage')
     return result

@@ -3,15 +3,19 @@ from pathlib import Path
 import json
 import math
 import subprocess
+import os
+import tempfile
+import io
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 import imageio_ffmpeg
-from .store import canonical, digest, atomic_write
+from .store import canonical, digest, atomic_write, native_path
 
 
 class Motion:
-    def __init__(self, workbench):
+    def __init__(self, workbench, media_root=None):
         self.wb, self.store = workbench, workbench.store
+        self.media_root=native_path(media_root or os.environ.get('MODELING_MEDIA_ROOT') or Path(tempfile.gettempdir())/'modeling-media')
 
     def import_player(self, manifest_path):
         path=Path(manifest_path).resolve()
@@ -57,10 +61,17 @@ class Motion:
     def extract_video(self, video_path, crop=None, maximum_frames=240):
         if not 1<=maximum_frames<=1000:raise ValueError('Frame limit must be one to one thousand')
         asset=self.store.blob(video_path);source=self.store.resolve_blob(asset)
+        directory=self.media_root/asset['sha256'][:24]
+        directory.mkdir(parents=True,exist_ok=True)
+        # Media tools do not uniformly accept extended paths. Stage verified bytes
+        # in a configurable short cache; durable frame assets remain in the store.
+        cached=directory/('source'+source.suffix)
+        if not cached.exists() or digest(cached.read_bytes())!=asset['sha256']:
+            atomic_write(cached,source.read_bytes())
+        source=cached
         reader=imageio_ffmpeg.read_frames(str(source),pix_fmt='rgb24')
         metadata=next(reader);w,h=metadata['size'];fps=metadata['fps']
         if fps<=0:raise ValueError('Video does not expose a usable nominal frame rate')
-        directory=self.store.root/'video-frames'/asset['sha256'];directory.mkdir(parents=True,exist_ok=True)
         frames=[];previous=None;truncated=False
         try:
             for i,raw in enumerate(reader):
@@ -74,10 +85,13 @@ class Motion:
                 delta=float(np.mean(np.abs(gray-previous))) if previous is not None else 0.
                 previous=gray
                 target=directory/(digest(canonical(crop))+f'-{i:05d}.png')
-                if not target.exists():im.save(target)
+                if not target.exists():
+                    buf=io.BytesIO();im.save(buf,format='PNG');atomic_write(target,buf.getvalue())
                 frames.append(dict(index=i,time_seconds=i/fps,image=self.store.blob(target),mean_pixel_change=delta))
         finally:
             reader.close()
+            atomic_write(directory/(digest(canonical(crop))+'-progress.json'),canonical(dict(video=asset,frames=frames,
+                recovery='Reuse these decoded frames and original provider job; media decoding never dispatches generation')))
         # Changes nominate inspection frames, never automatically authorize a guide.
         informative=sorted({0,len(frames)-1,*[f['index'] for f in sorted(frames,key=lambda f:f['mean_pixel_change'],reverse=True)[:8]]})
         payload=dict(video=asset,metadata=metadata,crop=crop,frames=frames,informative_frames=informative,truncated=truncated,
@@ -167,7 +181,7 @@ class Motion:
         item=self.store.get(motion,'motion');m=item['manifest']
         if not 1<=fps<=120 or not 0<=normal_cycles<=10 or not 0<=slow_cycles<=10 or not .05<=slow_speed<=1 or normal_cycles+slow_cycles==0:
             raise ValueError('Replay settings outside bounded supported range')
-        root=Path(output_dir).resolve();root.mkdir(parents=True,exist_ok=True)
+        root=native_path(output_dir).resolve();root.mkdir(parents=True,exist_ok=True)
         settings=dict(motion=motion,fps=fps,normal_cycles=normal_cycles,slow_cycles=slow_cycles,slow_speed=slow_speed,panel_size=panel_size)
         receipt_path=root/'receipt.json'
         if receipt_path.exists():

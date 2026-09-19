@@ -150,7 +150,10 @@ class References:
         if not valid:
             raise ValueError('Tripo preflight is stale or its displayed cost/balance differs from the prepared request')
 
-    def require_usable_review(self, review_id):
+    def require_usable_review(self, review_id, _seen=None):
+        seen=set() if _seen is None else set(_seen)
+        if review_id in seen:raise ValueError('Reference lineage contains a cycle; inspect the original jobs')
+        seen.add(review_id)
         review = self.store.get(review_id, 'reference_review')
         job = self.ledger.read(review['job'])
         index = str(review['output_index'])
@@ -163,7 +166,18 @@ class References:
             raise ValueError('Reference review is superseded; inspect the current image review')
         if not all(str(review.get(k, '')).strip() for k in ('identity_agreement', 'view_agreement', 'pose_agreement')):
             raise ValueError('Explicit likeness, view and pose review is required before downstream generation')
+        if job['intent'].get('reviewed_source'):
+            self.require_usable_review(job['intent']['reviewed_source'], seen)
         return review
+
+    def lineage_status(self, job):
+        item=self.ledger.read(job)
+        try:
+            if item['intent'].get('reviewed_source'):
+                self.require_usable_review(item['intent']['reviewed_source'])
+            return dict(status='current', basis='current recorded source reviews; not live geometry or appearance acceptance')
+        except ValueError as error:
+            return dict(status='stale', reason=str(error), recovery='Preserve this job and outputs. Review the original source; no automatic generation or retry.')
 
     def request(self, observation, identity_paths, requested_change, kind, provider, settings, authorization, idempotency_key, reviewed_source=None):
         if kind not in ('image', 'video', 'mesh'):
@@ -176,6 +190,10 @@ class References:
             raise ValueError('Character references, requested change and explicit provider required')
         identities = [self.store.blob(p) for p in identity_paths]
         source = None
+        if kind == 'image' and reviewed_source:
+            review=self.require_usable_review(reviewed_source)
+            if review['observation']!=observation:raise ValueError('Reviewed source must use this exact observation')
+            source=self.ledger.read(review['job'])['data']['outputs'][review['output_index']]
         if kind in ('video', 'mesh'):
             if not reviewed_source:
                 raise ValueError('Video and mesh generation require a reviewed image derived from this view')
@@ -207,10 +225,22 @@ class References:
         intent = dict(observation=observation, state=ob['state'], preview=ob['image'], identities=identities,
                       requested_change=requested_change, kind=kind, provider=provider, settings=settings,
                       authorization=authorization, reviewed_source=reviewed_source, generation_input=generation_input)
+        intent['reference_roles']=dict(view_pose_crop=ob['image'],character_identity=identities,
+            motion_phase=settings.get('motion_phase'),qualified_depth=None,
+            provisional_native_anatomy=ob['state'],disputed_assumptions=settings.get('disputed_assumptions',[]),
+            independence='Derived targets do not independently validate anatomy copied from their source')
         if comparison:
             intent['comparison_authorization'] = comparison
         if reconstruction:
             intent.update(intent_class='local_guide_reconstruction',reconstruction_authorization=reconstruction)
+        # Older prepared jobs predate explicit roles. Preserve their immutable
+        # intent during an exact retry instead of manufacturing another job.
+        handle=digest(canonical(['reference_job',idempotency_key]))
+        try:previous=self.ledger.read(handle)
+        except FileNotFoundError:previous=None
+        roles=intent['reference_roles']
+        if previous and 'reference_roles' not in previous['intent'] and previous['intent']=={k:v for k,v in intent.items() if k!='reference_roles'}:
+            intent=previous['intent']
         job = self.ledger.create('reference_job', intent, idempotency_key)
         inputs = [input_path]
         if kind == 'image':
@@ -222,7 +252,7 @@ class References:
         if kind == 'video':
             prompt += ' Fixed camera and framing. Silent video, no speech, music or audio.'
         return dict(job=job['handle'], revision=job['revision'], status=job['status'], reused=job['reused'], transport={'provider':provider, 'kind':kind, 'input_paths':inputs, 'prompt':prompt,
-                                       'settings':settings, 'submission':'not submitted by preparation',
+                                       'settings':settings, 'reference_roles':roles, 'submission':'not submitted by preparation',
                                        'next':'claim_job before dispatch; reconcile the same job after an uncertain response'},
                     limits='Generated view, likeness and motion require review; source depth is not inferred from pixels.')
 
@@ -276,6 +306,17 @@ class References:
                                   allowed=allowed)
 
     def review(self, job, output_index, disposition, region, guard_band, observed, identity_agreement, view_agreement, pose_agreement, conflicts, landmarks=None):
+        measured=None
+        if landmarks is not None:
+            if not isinstance(landmarks,dict) or not {'source','output'} <= landmarks.keys():
+                raise ValueError('landmarks requires source and output: paired nonempty Nx2 pixel arrays. Correct the review input; reuse the completed job and image.')
+            try:before,after=np.asarray(landmarks['source'],float),np.asarray(landmarks['output'],float)
+            except (TypeError,ValueError) as error:raise ValueError('landmarks.source/output must be finite numeric Nx2 arrays') from error
+            if before.shape!=after.shape or before.ndim!=2 or before.shape[1]!=2 or not len(before) or not np.isfinite([before,after]).all():
+                raise ValueError('landmarks.source/output must be paired nonempty finite Nx2 pixel arrays')
+            delta=np.linalg.norm(after-before,axis=1)
+            measured=dict(samples=len(delta),maximum_pixel_drift=float(delta.max()),rms_pixel_drift=float(np.sqrt(np.mean(delta**2))),
+                          definition='Registration only; no automatic identity judgment')
         item = self.ledger.read(job)
         if item['status'] != 'completed' or item['intent']['kind'] != 'image':
             raise ValueError('A completed image job is required')
@@ -292,15 +333,6 @@ class References:
         path = self.store.resolve_blob(asset)
         with Image.open(path) as im:
             resolution = list(im.size)
-        measured = None
-        if landmarks:
-            before, after = np.asarray(landmarks['source'], float), np.asarray(landmarks['output'], float)
-            if before.shape != after.shape or before.ndim!=2 or before.shape[1]!=2 or not np.isfinite([before,after]).all():
-                raise ValueError('Paired finite pixel landmarks required')
-            delta = np.linalg.norm(after-before,axis=1)
-            measured = {'samples':len(delta),'maximum_pixel_drift':float(delta.max(initial=0)),
-                        'rms_pixel_drift':float(np.sqrt(np.mean(delta**2))) if len(delta) else 0,
-                        'definition':'Caller-selected corresponding landmarks in source/output pixels; no automatic identity judgment'}
         payload = dict(job=job, output_index=output_index, observation=item['intent']['observation'], source_sha256=asset['sha256'],
                        disposition=disposition, region=region, guard_band_pixels=guard_band, resolution=resolution,
                        visual_observations=observed, identity_agreement=identity_agreement, view_agreement=view_agreement,

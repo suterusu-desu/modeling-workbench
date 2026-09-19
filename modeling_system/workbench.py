@@ -16,6 +16,8 @@ class Workbench:
         started=time.perf_counter()
         record_path=Path(record_path).resolve()
         record=json.loads(record_path.read_text(encoding='utf-8'))
+        from .scene_coverage import normalize
+        normalize(record.get('coverage',[]))
         if digest(canonical(record['state'])) != record['state_id']:
             raise ValueError('Source scene state fingerprint does not match its content')
         objects=[]

@@ -34,7 +34,7 @@ class ModelingService:
         self.wb=Workbench(store or self.workspace/self.binding.get('store','.modeling/state'))
         self.store=self.wb.store;self.ledger=Ledger(self.store)
         self.policy_path=authority_path(self.workspace,self.binding,'provider policy','MESH-GENERATION.json')
-        self.references=References(self.wb,self.ledger,self.policy_path);self.motion=Motion(self.wb)
+        self.references=References(self.wb,self.ledger,self.policy_path);self.motion=Motion(self.wb,self.binding.get('media_root'))
         self.native=native or (NativeBridge(self.workspace) if self.binding.get('native_adapter')=='blender_json_v1' else UnconfiguredNative())
 
     def execute(self, operation, arguments):
@@ -142,6 +142,8 @@ class ModelingService:
         from .episodes import summarize_workflow,coverage
         result['active_workflows']=[summarize_workflow(self,x['handle']) for x in self.ledger.list(limit=6)]
         if result.get('state'): result['coverage']=coverage(self.store.get(result['state'],'state'))
+        from .recovery import inspect as inspect_recovery
+        result['recovery']=inspect_recovery(self)
         result['next']=[n for n in ['decision_workspace','record_observation','query_geometry','operation_context'] if n in self.operations()]
         return result
 
@@ -162,10 +164,14 @@ class ModelingService:
         from .episodes import workspace
         return workspace(self,episode,detail,since,section,path,offset,limit,max_chars,expected_view)
 
-    def snapshot_workspace(self, episode: str) -> dict:
+    def snapshot_workspace(self, episode: str, recovery: dict | None = None, expected_recovery: str | None = None) -> dict:
         """Pin the current composed workspace for later section-diff resumption; never claims live state."""
         result=self.decision_workspace(episode)
-        return {'snapshot':self.store.put('workspace_snapshot',result),'episode':episode}
+        selected=None
+        if recovery is not None:
+            from .recovery import select
+            selected=select(self,recovery,expected_recovery)
+        return {'snapshot':self.store.put('workspace_snapshot',result),'episode':episode,'recovery':selected}
 
     def run_episode_operation(self, episode: str, operation: str, arguments: dict) -> dict:
         """Run an existing operation with automatic episode linkage; exact inputs/result survive failure of later judgment/indexing."""
@@ -615,7 +621,9 @@ class ModelingService:
 
     def inspect_workflow(self, handle: str) -> dict:
         """Read the latest durable reference job or trial, including recovery state and prior revisions."""
-        return self.ledger.read(handle)
+        item=self.ledger.read(handle)
+        if item['kind']=='reference_job':item['source_validity']=self.references.lineage_status(handle)
+        return item
 
     def review_reference(self, job: str, output_index: int, disposition: str, region: str, guard_band: float, observed: str,
                          identity_agreement: str, view_agreement: str, pose_agreement: str, conflicts: list[str], landmarks: dict | None = None) -> dict:
@@ -666,7 +674,7 @@ class ModelingService:
                 'target_role':q['role'],'reviewed':True,'review_record':record_ref(q['review']),'provenance':provenance}
         return self._native_call('integrate_guide',{'expected_state':expected_state,'qualification':native,'expected_registry':q['expected_registry']},owner=owner)
 
-    def propose_change(self, experiment: str, expected_revision: str, proposal: dict, evidence: list[str], response_model: dict | None = None) -> dict:
+    def propose_change(self, experiment: str, expected_revision: str, proposal: dict, evidence: list[str], response_model: dict | None = None, intervention: dict | None = None) -> dict:
         """Record a native shape-key or advanced script proposal with guide constraints and explicit response-model limits."""
         from .native_bridge import validate_arguments
         item=self.ledger.read(experiment)
@@ -691,11 +699,26 @@ class ModelingService:
                 required=('kind','source_state','topology','modifier_order','pose','support_dependencies','coverage','validation')
                 if any(k not in response_model for k in required):raise ValueError('Response model needs state, topology, modifier, pose, support and influenced-boundary validation')
                 response_model=dict(response_model,validation_status='legacy declared assumptions, not a validated response_model record')
-        return self.ledger.update(experiment,expected_revision,'proposed',dict(proposal=proposal,evidence=evidence,evidence_assets=evidence_assets,response_model=response_model),allowed={'prepared','proposed'})
+        constraint_report=None
+        if intervention is not None:
+            from .interventions import assess
+            constraint_report=assess(self,intervention,item['intent']['state'],proposal)
+        return self.ledger.update(experiment,expected_revision,'proposed',dict(proposal=proposal,evidence=evidence,evidence_assets=evidence_assets,response_model=response_model,
+            intervention=constraint_report['record'] if constraint_report else None,
+            constraint_status=constraint_report['disposition'] if constraint_report else 'legacy evidence; evaluated displacement support not established'),allowed={'prepared','proposed'})
 
     def apply_trial(self, experiment: str, expected_revision: str, expected_state: str, owner: str) -> dict:
         """Checkpoint and apply the recorded proposal through the sole Blender owner; uncertain outcomes are never retried."""
         item=self.ledger.read(experiment)
+        if item['data'].get('intervention'):
+            constraint=self.store.get(item['data']['intervention'],'intervention')
+            if constraint['disposition']=='unsupported_prediction':
+                raise ValueError('Predicted movement lacks qualified support or violates declared bounds; inspect intervention or prepare an explicit recoverable construction_repair')
+            for layer in constraint['layers']:
+                for support in layer['support'].values():
+                    if support['kind']=='direct':
+                        q=self.store.get(support['qualification'],'guide_qualification')
+                        self.references.require_usable_review(q['review'])
         baseline=self.store.get(item['intent']['state'],'state')
         live=self._native_call('inspect_live',{})
         if live['expected_state']!=expected_state or live.get('geometry_state_id')!=baseline['source_state_id']:
@@ -711,11 +734,19 @@ class ModelingService:
             raise
         return self.ledger.update(experiment,claimed['revision'],'applied',{'native_trial':result},allowed={'applying'})
 
-    def resolve_trial(self, experiment: str, expected_revision: str, native_receipt_path: str, observed_status: str, evidence: str) -> dict:
+    def resolve_trial(self, experiment: str, expected_revision: str, native_receipt_path: str, observed_status: str, evidence: str, realized_state: str | None = None) -> dict:
         """Reconcile an interrupted native trial using its persisted receipt before any further mutation."""
         if observed_status not in ('applied','rejected','failed') or not evidence.strip():raise ValueError('Observed disposition and evidence required')
         receipt=self.store.blob(native_receipt_path)
-        return self.ledger.update(experiment,expected_revision,observed_status,dict(reconciliation=dict(receipt=receipt,evidence=evidence)),allowed={'applying','needs_reconciliation'})
+        data=dict(reconciliation=dict(receipt=receipt,evidence=evidence))
+        allowed={'applying','needs_reconciliation'}
+        if realized_state is not None:
+            from .interventions import compare
+            item=self.ledger.read(experiment)
+            if not item['data'].get('intervention'):raise ValueError('No pre-application evaluated intervention to compare; retrospective screenshots cannot establish constraint use')
+            data['intervention_comparison']=compare(self,item['data']['intervention'],realized_state)
+            if observed_status=='applied':allowed.add('applied')
+        return self.ledger.update(experiment,expected_revision,observed_status,data,allowed=allowed)
 
     def reject_trial(self, experiment: str, expected_revision: str, expected_state: str, owner: str, receipt_path: str, reason: str) -> dict:
         """Restore the recorded trial baseline only if no later live edit would be overwritten; retain rejected evidence."""
@@ -730,6 +761,9 @@ class ModelingService:
                          comparison_record: str, reopen_receipt_path: str, path: str | None = None) -> dict:
         """Save a reviewed local candidate with comparison and independent reopen evidence; user appearance acceptance stays separate."""
         comparison=self.store.get(comparison_record)
+        trial=self.ledger.read(experiment)
+        if trial['data'].get('intervention') and not trial['data'].get('intervention_comparison'):
+            raise ValueError('Compare the realized evaluated layers using resolve_trial(realized_state=...) before candidate retention')
         reopened=self.store.blob(reopen_receipt_path);verification=json.loads(self.store.resolve_blob(reopened).read_text(encoding='utf-8'))
         live=self._native_call('inspect_live',{})
         if live['expected_state']!=expected_state:raise Conflict('Live state changed before candidate retention')

@@ -14,8 +14,16 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def native_path(path):
+    """Absolute extended Windows path for filesystem/media I/O, ordinary path elsewhere."""
+    value=os.path.abspath(path)
+    if os.name == 'nt' and not value.startswith('\\\\?\\'):
+        value='\\\\?\\UNC\\'+value[2:] if value.startswith('\\\\') else '\\\\?\\'+value
+    return Path(value)
+
+
 def atomic_write(path, data):
-    path = Path(path)
+    path = native_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Do not append to the destination name: a valid Windows path can then
     # exceed MAX_PATH, and a valid long basename can exceed NAME_MAX on POSIX.
@@ -32,11 +40,12 @@ def atomic_write(path, data):
 
 class Store:
     def __init__(self, path):
-        self.root = Path(path).resolve()
+        self.root = native_path(path).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
     def blob(self, path):
-        path = Path(path)
+        source=str(Path(path).resolve())
+        path = native_path(path)
         data = path.read_bytes()
         sha = digest(data)
         dest = self.root / 'assets' / sha[:2] / (sha + path.suffix.lower())
@@ -45,7 +54,7 @@ class Store:
                 raise ValueError('Stored evidence was modified: ' + str(dest))
         else:
             atomic_write(dest, data)
-        return {'sha256': sha, 'path': str(dest.relative_to(self.root)), 'source': str(path.resolve()), 'bytes': len(data)}
+        return {'sha256': sha, 'path': str(dest.relative_to(self.root)), 'source': source, 'bytes': len(data)}
 
     def resolve_blob(self, blob):
         path = (self.root / blob['path'].replace('\\','/')).resolve()

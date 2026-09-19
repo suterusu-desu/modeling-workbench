@@ -495,12 +495,20 @@ def inspect(service, case_path):
                    completion_manifest=manifest, record=record, deferred_fields=deferred, independent_verification=verification_rows,
                    contradictions=contradictions, gaps=gaps, summary=summary, next_actions=actions, limits=limits,
                    disposition=disposition, success_established=success, safe_to_replay=False, native_ready=False, appearance_accepted=False)
+    delivery=None
+    if case.get('delivery') is not None:
+        from .delivery import inspect as inspect_delivery
+        delivery=inspect_delivery(service,case['delivery'])
+        payload['delivery']=delivery
+        summary['delivery']=dict(status=delivery['status'],current_revision=delivery['current_revision'],
+            missing_between_anchor_objects=delivery['missing_between_anchor_objects'])
     key = service.store.put('execution_receipt', payload)
     reads = {k: dict(operation='read_record', arguments=dict(record=key, path=[k], limit=10, max_chars=8000))
              for k in ('documents', 'effect', 'identity', 'artifacts', 'process', 'required_outputs', 'source_preservation',
                        'completion_manifest', 'independent_verification', 'case', 'limits')}
     if record is not None and record['status'] == 'present_in_this_store':
         reads['operation_record'] = dict(operation='read_record', arguments=dict(record=record['key'], path=[], limit=10, max_chars=8000))
+    if delivery is not None:reads['delivery']=dict(operation='read_record',arguments=dict(record=key,path=['delivery'],max_chars=8000))
     return dict(analysis=key, status='diagnostic_only', disposition=disposition, success_established=success, summary=summary,
                 links=dict(result=case['result']['asset'], receipt=case['receipt']['asset'] if receipt is not None else None,
                            independent_verification=[v['asset'] for v in verification]),
