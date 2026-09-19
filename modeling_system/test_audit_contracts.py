@@ -199,6 +199,40 @@ class AuditContracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'cannot declare displacement support'):
             assess(self.s,case,base,{'allowed_objects':['Face']})
 
+    def diagnostic_case(self):
+        case,base,target=self.context_case()
+        row=case['layers'][-1];row.update(mode='recomputed_diagnostic',reason='Recomputed section of changed surface',derivation_evidence=case['construction_evidence'])
+        arrays=dict(co=np.array([[0.,0,0],[1,0,0],[1,1,0],[0,1,0]]),tri=np.array([[0,1,2],[0,2,3]],dtype=np.int32))
+        p=self.root/'regenerated.npz';np.savez_compressed(p,**arrays)
+        state=self.s.store.get(target,'state');state['objects'][-1]['asset']=self.s.store.blob(p)
+        target=self.s.store.put('state',state);case['predicted_state']=target
+        return case,base,target
+
+    def test_recomputed_diagnostic_changes_topology_without_material_correspondence(self):
+        case,base,target=self.diagnostic_case();report=assess(self.s,case,base,{'allowed_objects':['Face']})
+        diagnostic=report['layers'][-1]
+        self.assertEqual(diagnostic['vertices_before'],3);self.assertEqual(diagnostic['vertices_predicted'],4)
+        self.assertIsNone(diagnostic['changed_count']);self.assertFalse(diagnostic['support'])
+        result=compare(self.s,report['record'],target)
+        self.assertTrue(result['agrees']);self.assertTrue(result['realized_diagnostics_agree'])
+
+    def test_realized_diagnostic_requires_exact_arrays_independent_of_material_tolerance(self):
+        case,base,target=self.diagnostic_case();report=assess(self.s,case,base,{'allowed_objects':['Face']})
+        arrays=self.s.wb.arrays(target,'Diagnostic');arrays['co'][0,0]+=1e-9
+        p=self.root/'diagnostic-drift.npz';np.savez_compressed(p,**arrays)
+        state=self.s.store.get(target,'state');state['objects'][-1]['asset']=self.s.store.blob(p)
+        result=compare(self.s,report['record'],self.s.store.put('state',state))
+        self.assertTrue(result['realized_numerically_supported']);self.assertFalse(result['realized_diagnostics_agree'])
+        self.assertFalse(result['agrees']);self.assertIsNone(result['layers'][-1]['max_residual'])
+
+    def test_character_or_guide_row_cannot_claim_diagnostic_mode(self):
+        original,base,target=self.diagnostic_case()
+        for index in (0,1):
+            case=deepcopy(original)
+            case['layers'][index].update(mode='recomputed_diagnostic',reason='Attempt to bypass correspondence',derivation_evidence=case['construction_evidence'])
+            with self.subTest(index=index),self.assertRaisesRegex(ValueError,'recorder-declared evaluated derived'):
+                assess(self.s,case,base,{'allowed_objects':['Face']})
+
     def test_recovery_hashes_over_labels_and_runtime_distinction(self):
         file=self.root/'base.bin';file.write_bytes(b'original')
         pinned=dict(file=str(file),sha256=digest(file.read_bytes()))

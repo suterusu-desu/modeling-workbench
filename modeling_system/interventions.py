@@ -17,11 +17,13 @@ def is_evaluated(entry):
     return (value=='evaluated' or value.startswith('evaluated ')) and not re.search(r'\b(?:not|non|un)[ -]*evaluated\b',value)
 
 
+def array_fingerprint(arrays):
+    return digest(canonical({k:dict(dtype=v.dtype.str,shape=list(v.shape),sha256=digest(v.tobytes())) for k,v in arrays.items()}))
+
+
 def unchanged_context(a,b,before,after,name):
     """Verify all captured arrays and their interpretation, not just coordinates."""
-    def fingerprint(arrays):
-        return digest(canonical({k:dict(dtype=v.dtype.str,shape=list(v.shape),sha256=digest(v.tobytes())) for k,v in arrays.items()}))
-    left,right=fingerprint(a),fingerprint(b)
+    left,right=array_fingerprint(a),array_fingerprint(b)
     if left!=right or any(before.get(k)!=after.get(k) for k in ('evaluation','geometry_role')):
         raise ValueError('unchanged_context changed geometry or interpretation: '+name+'; capture/qualify its actual intervention instead of omitting it')
     return dict(geometry_fingerprint=left,evaluation=before.get('evaluation'),geometry_role=before.get('geometry_role'),
@@ -76,8 +78,8 @@ def assess(service, case, baseline, proposal):
     if not rows or len({r.get('object') for r in rows})!=len(rows):raise ValueError('Distinct affected/dependent layers required')
     names={r['object'] for r in rows}
     modes={r['object']:r.get('mode','evaluated') for r in rows}
-    if any(mode not in ('evaluated','unchanged_context') for mode in modes.values()):
-        raise ValueError('Layer mode must be evaluated or unchanged_context')
+    if any(mode not in ('evaluated','unchanged_context','recomputed_diagnostic') for mode in modes.values()):
+        raise ValueError('Layer mode must be evaluated, unchanged_context or recomputed_diagnostic')
     # Require coverage of every captured evaluated surface, including unchanged
     # dependents. An omitted layer is a coverage hole, not evidence of no motion.
     captured={o['name'] for o in state['objects'] if o.get('asset')}
@@ -89,6 +91,20 @@ def assess(service, case, baseline, proposal):
         if not row.get('semantic_component'):raise ValueError('Each layer needs its semantic_component')
         a,b=service.wb.arrays(baseline,name),service.wb.arrays(case['predicted_state'],name)
         entries=[next(o for o in s['objects'] if o['name']==name) for s in (state,predicted)]
+        if modes[name]=='recomputed_diagnostic':
+            if not all(o.get('geometry_role')=='derived diagnostic/display' and is_evaluated(o) for o in entries):
+                raise ValueError('recomputed_diagnostic requires recorder-declared evaluated derived diagnostic/display geometry: '+name)
+            evidence=row.get('derivation_evidence',[])
+            if not row.get('reason') or row.get('support') or not isinstance(evidence,list) or not evidence:
+                raise ValueError('recomputed_diagnostic needs reason and derivation_evidence record IDs, without support groups: '+name)
+            for key in evidence:service.store.get(key)
+            geometry.validate(a);geometry.validate(b)
+            results.append(dict(object=name,mode='recomputed_diagnostic',semantic_component=row['semantic_component'],reason=row['reason'],
+                derivation_evidence=evidence,baseline_fingerprint=array_fingerprint(a),predicted_fingerprint=array_fingerprint(b),
+                vertices_before=len(a['co']),vertices_predicted=len(b['co']),material_correspondence='not assumed; recomputed diagnostic output',
+                changed_vertices=[],changed_count=None,support={},unsupported=[],violations=[],direct_fraction=None,
+                status='derived output only; not displacement support; exact realized output verification pending'))
+            continue
         if modes[name]=='unchanged_context':
             if not isinstance(row.get('reason'),str) or not row['reason'].strip() or row.get('support'):
                 raise ValueError('unchanged_context needs a reason and cannot declare displacement support: '+name)
@@ -146,7 +162,7 @@ def assess(service, case, baseline, proposal):
                 driver=group.get('driver_object');neighbors=group.get('driver_indices',[])
                 if driver not in names or driver==name or len(neighbors)!=3 or len(set(neighbors))!=3:
                     raise ValueError('Attachment needs another captured driver_object and three distinct driver_indices')
-                if modes[driver]!='evaluated':raise ValueError('Attachment driver must be an evaluated layer, not unchanged_context: '+driver)
+                if modes[driver]!='evaluated':raise ValueError('Attachment driver must be an evaluated material layer, not context or diagnostics: '+driver)
                 da=service.wb.arrays(baseline,driver)['co'];db=service.wb.arrays(case['predicted_state'],driver)['co']
                 if any(type(i) is not int or not 0<=i<len(da) for i in neighbors):raise ValueError('Attachment driver index outside captured surface')
                 offsets=np.asarray(group.get('rest_offsets'),float);weights=np.asarray(group.get('weights'),float)
@@ -203,6 +219,15 @@ def compare(service, intervention, realized_state):
     rows=[]
     for layer in item['layers']:
         name=layer['object'];a=service.wb.arrays(case['state'],name);p=service.wb.arrays(case['predicted_state'],name);b=service.wb.arrays(realized_state,name)
+        if layer.get('mode')=='recomputed_diagnostic':
+            prediction=service.store.get(case['predicted_state'],'state')
+            before=next(o for o in prediction['objects'] if o['name']==name);after=next(o for o in actual['objects'] if o['name']==name)
+            exact=(array_fingerprint(p)==array_fingerprint(b) and all(before.get(k)==after.get(k) for k in ('evaluation','geometry_role')))
+            rows.append(dict(object=name,mode='recomputed_diagnostic',diagnostic_match=exact,
+                predicted_fingerprint=array_fingerprint(p),realized_fingerprint=array_fingerprint(b),
+                max_residual=None,exceeds_tolerance=[],newly_unsupported=[],changed_count=None,
+                basis='Exact predicted/realized diagnostic arrays and interpretation; no baseline material correspondence or guide support'))
+            continue
         if layer.get('mode')=='unchanged_context':
             baseline=service.store.get(case['state'],'state')
             before=next(o for o in baseline['objects'] if o['name']==name);after=next(o for o in actual['objects'] if o['name']==name)
@@ -216,8 +241,10 @@ def compare(service, intervention, realized_state):
         rows.append(dict(object=name,max_residual=float(error.max(initial=0)),exceeds_tolerance=np.flatnonzero(error>tolerance).tolist(),
                          newly_unsupported=unsupported,changed_count=len(moved)))
     actual_support=assess(service,dict(case,predicted_state=realized_state),case['state'],{'allowed_objects':item['allowed_objects']})
+    diagnostics_agree=all(r.get('diagnostic_match',True) for r in rows)
     result=dict(intervention=intervention,realized_state=realized_state,layers=rows,tolerance=tolerance,
                 realized_support=actual_support['record'],realized_numerically_supported=actual_support['numerically_supported'],
-                agrees=all(not r['exceeds_tolerance'] and not r['newly_unsupported'] for r in rows) and actual_support['numerically_supported'],
+                realized_diagnostics_agree=diagnostics_agree,
+                agrees=all(not r['exceeds_tolerance'] and not r['newly_unsupported'] for r in rows) and actual_support['numerically_supported'] and diagnostics_agree,
                 appearance_accepted=False,basis='Complete recorded evaluated layers at one matched pose; finite coverage only')
     return dict(record=service.store.put('intervention_comparison',result),**result)

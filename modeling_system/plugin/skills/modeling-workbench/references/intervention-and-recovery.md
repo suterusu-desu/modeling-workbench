@@ -46,6 +46,17 @@ positive recorder declaration beginning with "evaluated"; "not evaluated" is not
 an evaluated result. Changing a context object requires capturing and qualifying
 the actual intervention, not labeling it unchanged or narrowing the native state.
 
+When the recorder declares a surface `derived diagnostic/display` and its evaluated
+geometry is regenerated (for example, a plane section changes vertex count), use
+`mode: recomputed_diagnostic`, an explicit `reason`, and `derivation_evidence`
+record IDs for the actual refresh mechanism (existing construction evidence can
+be reused). No support groups are allowed. Baseline material correspondence is
+not assumed; all predicted-versus-realized arrays and evaluation/role declarations
+must match exactly, separately from the character displacement tolerance.
+`realized_diagnostics_agree` reports that check. A diagnostic cannot be an attachment
+driver or fitting support. Character and guide surfaces cannot enter this mode by
+changing the case row; both immutable recorder states must declare diagnostic role.
+
 The output keeps two populations separate: actually changed vertices and all
 surveyed support points. Direct, interpolated and attachment support never
 become the same category. No fixed direct-support percentage is a pass criterion.
