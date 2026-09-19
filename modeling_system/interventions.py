@@ -4,8 +4,28 @@ The native adapter stays unchanged. This evidence accompanies its existing
 proposal; numerical support is not proof of solver causality or appearance.
 """
 import numpy as np
+import re
 from . import geometry
 from .store import canonical, digest
+
+
+def is_evaluated(entry):
+    """Positive recorder declaration, never a substring match of 'not evaluated'."""
+    value=entry.get('evaluation')
+    if not isinstance(value,str):return False
+    value=' '.join(value.casefold().split())
+    return (value=='evaluated' or value.startswith('evaluated ')) and not re.search(r'\b(?:not|non|un)[ -]*evaluated\b',value)
+
+
+def unchanged_context(a,b,before,after,name):
+    """Verify all captured arrays and their interpretation, not just coordinates."""
+    def fingerprint(arrays):
+        return digest(canonical({k:dict(dtype=v.dtype.str,shape=list(v.shape),sha256=digest(v.tobytes())) for k,v in arrays.items()}))
+    left,right=fingerprint(a),fingerprint(b)
+    if left!=right or any(before.get(k)!=after.get(k) for k in ('evaluation','geometry_role')):
+        raise ValueError('unchanged_context changed geometry or interpretation: '+name+'; capture/qualify its actual intervention instead of omitting it')
+    return dict(geometry_fingerprint=left,evaluation=before.get('evaluation'),geometry_role=before.get('geometry_role'),
+                status='verified unchanged captured context; not evaluated intervention support')
 
 
 def attachment_frame(points):
@@ -55,21 +75,30 @@ def assess(service, case, baseline, proposal):
     rows=case.get('layers',[])
     if not rows or len({r.get('object') for r in rows})!=len(rows):raise ValueError('Distinct affected/dependent layers required')
     names={r['object'] for r in rows}
+    modes={r['object']:r.get('mode','evaluated') for r in rows}
+    if any(mode not in ('evaluated','unchanged_context') for mode in modes.values()):
+        raise ValueError('Layer mode must be evaluated or unchanged_context')
     # Require coverage of every captured evaluated surface, including unchanged
     # dependents. An omitted layer is a coverage hole, not evidence of no motion.
     captured={o['name'] for o in state['objects'] if o.get('asset')}
     if names!=captured or names!={o['name'] for o in predicted['objects'] if o.get('asset')}:
-        raise ValueError('Intervention layers must cover every recorded surface in baseline and prediction; record scoped inclusion/exclusion at capture')
+        raise ValueError('Intervention layers must cover every recorded surface in baseline and prediction; preserve the exact native baseline and explicitly declare unchanged_context rows')
     results=[]
     for row in rows:
         name=row['object']
         if not row.get('semantic_component'):raise ValueError('Each layer needs its semantic_component')
         a,b=service.wb.arrays(baseline,name),service.wb.arrays(case['predicted_state'],name)
+        entries=[next(o for o in s['objects'] if o['name']==name) for s in (state,predicted)]
+        if modes[name]=='unchanged_context':
+            if not isinstance(row.get('reason'),str) or not row['reason'].strip() or row.get('support'):
+                raise ValueError('unchanged_context needs a reason and cannot declare displacement support: '+name)
+            preserved=unchanged_context(a,b,*entries,name)
+            results.append(dict(object=name,mode='unchanged_context',semantic_component=row['semantic_component'],reason=row['reason'],
+                context=preserved,changed_vertices=[],support={},unsupported=[],violations=[],**support_populations([],[])))
+            continue
+        if not all(is_evaluated(entry) for entry in entries):
+            raise ValueError('Intervention requires positively declared evaluated geometry: '+name+'; unchanged guides/base/diagnostics may use mode=unchanged_context with a reason')
         geometry.compare(a,b,case.get('correspondence','triangles'))
-        for obj in (state,predicted):
-            entry=next(o for o in obj['objects'] if o['name']==name)
-            if 'evaluated' not in str(entry.get('evaluation','')).lower():
-                raise ValueError('Intervention requires explicitly evaluated geometry: '+name)
         displacement=b['co']-a['co'];changed=np.flatnonzero(np.any(displacement!=0,axis=1))
         if len(changed) and name not in proposal['allowed_objects']:
             raise ValueError('Predicted changed layer is outside proposal allowed_objects: '+name)
@@ -117,6 +146,7 @@ def assess(service, case, baseline, proposal):
                 driver=group.get('driver_object');neighbors=group.get('driver_indices',[])
                 if driver not in names or driver==name or len(neighbors)!=3 or len(set(neighbors))!=3:
                     raise ValueError('Attachment needs another captured driver_object and three distinct driver_indices')
+                if modes[driver]!='evaluated':raise ValueError('Attachment driver must be an evaluated layer, not unchanged_context: '+driver)
                 da=service.wb.arrays(baseline,driver)['co'];db=service.wb.arrays(case['predicted_state'],driver)['co']
                 if any(type(i) is not int or not 0<=i<len(da) for i in neighbors):raise ValueError('Attachment driver index outside captured surface')
                 offsets=np.asarray(group.get('rest_offsets'),float);weights=np.asarray(group.get('weights'),float)
@@ -135,7 +165,7 @@ def assess(service, case, baseline, proposal):
             if value['kind']=='interpolated' and not set(value['neighbors'])<=direct:
                 raise ValueError('Interpolation must trace to directly qualified neighbors in this layer')
         unsupported=[int(i) for i in changed if i not in support]
-        results.append(dict(object=name,semantic_component=row['semantic_component'],changed_vertices=changed.tolist(),
+        results.append(dict(object=name,mode='evaluated',semantic_component=row['semantic_component'],changed_vertices=changed.tolist(),
             support={str(k):v for k,v in support.items()},unsupported=unsupported,violations=sorted(set(violations)),
             **support_populations(changed,direct,[i for i,s in support.items() if s['kind']=='interpolated'],
                                  [i for i,s in support.items() if s['kind']=='attachment'])))
@@ -173,6 +203,12 @@ def compare(service, intervention, realized_state):
     rows=[]
     for layer in item['layers']:
         name=layer['object'];a=service.wb.arrays(case['state'],name);p=service.wb.arrays(case['predicted_state'],name);b=service.wb.arrays(realized_state,name)
+        if layer.get('mode')=='unchanged_context':
+            baseline=service.store.get(case['state'],'state')
+            before=next(o for o in baseline['objects'] if o['name']==name);after=next(o for o in actual['objects'] if o['name']==name)
+            rows.append(dict(object=name,mode='unchanged_context',context=unchanged_context(a,b,before,after,name),
+                             max_residual=0.,exceeds_tolerance=[],newly_unsupported=[],changed_count=0))
+            continue
         geometry.compare(a,b,case.get('correspondence','triangles'))
         error=np.linalg.norm(p['co']-b['co'],axis=1)
         moved=np.flatnonzero(np.any(b['co']!=a['co'],axis=1))

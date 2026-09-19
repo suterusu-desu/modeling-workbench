@@ -35,6 +35,17 @@ and `support` groups. Every group lists distinct vertex `indices`, a measured
   independent baseline before its candidate is checked. Changed drivers trace
   to qualified support; cycles and unsupported driver motion remain failures.
 
+Keep the exact native baseline even when its inventory includes registered guides,
+inactive base meshes or diagnostics. For each preserved context object, supply a
+layer row with `mode: unchanged_context`, `semantic_component`, and explicit
+`reason`, without support groups. All captured array fields, evaluation declaration
+and geometry role must remain exactly unchanged in both the prediction and realized
+capture. Omitted objects and changed context are refused. These rows do not become
+evaluated support or attachment drivers. Default `mode: evaluated` requires a
+positive recorder declaration beginning with "evaluated"; "not evaluated" is not
+an evaluated result. Changing a context object requires capturing and qualifying
+the actual intervention, not labeling it unchanged or narrowing the native state.
+
 The output keeps two populations separate: actually changed vertices and all
 surveyed support points. Direct, interpolated and attachment support never
 become the same category. No fixed direct-support percentage is a pass criterion.

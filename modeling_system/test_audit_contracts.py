@@ -141,6 +141,64 @@ class AuditContracts(unittest.TestCase):
         self.assertTrue(result['numerically_supported']);self.assertEqual(result['layers'][1]['direct_changed'],0)
         self.assertEqual(result['layers'][1]['support']['0']['kind'],'attachment')
 
+    def context_case(self):
+        case,base,target=self.intervention()
+        contexts=[('Guide','registered target','registered guide'),
+                  ('Preserved','base source geometry; outside active dependency graph, modifiers and pose not evaluated','source/reference'),
+                  ('Diagnostic','evaluated active dependency graph','derived diagnostic/display')]
+        states=[]
+        for key in (base,target):
+            state=self.s.store.get(key,'state')
+            for name,evaluation,role in contexts:
+                state['objects'].append(dict(name=name,type='MESH',evaluation=evaluation,geometry_role=role,
+                    asset=self.s.store.get(base,'state')['objects'][0]['asset']))
+            states.append(self.s.store.put('state',state))
+        new_base,new_target=states
+        self.assertEqual(self.s.store.get(new_base)['source_state_id'],self.s.store.get(base)['source_state_id'])
+        case.update(state=new_base,predicted_state=new_target)
+        group=case['layers'][0]['support'][0];q=self.s.store.get(group['qualification']);q['native_state']=new_base
+        group['qualification']=self.s.store.put('guide_qualification',q)
+        for name,_,role in contexts:
+            case['layers'].append(dict(object=name,mode='unchanged_context',semantic_component=role,reason='Captured context, preserved through this trial'))
+        return case,new_base,new_target
+
+    def test_full_native_inventory_preserves_unchanged_context_without_relabeling(self):
+        case,base,target=self.context_case()
+        report=assess(self.s,case,base,{'allowed_objects':['Face']})
+        self.assertTrue(report['numerically_supported'])
+        self.assertEqual(report['case']['state'],base)
+        self.assertEqual(report['layers'][1]['context']['evaluation'],'registered target')
+        self.assertIn('not evaluated',report['layers'][2]['context']['evaluation'])
+        actual=compare(self.s,report['record'],target)
+        self.assertTrue(actual['agrees']);self.assertEqual(len(actual['layers']),4)
+        case['layers'].pop()
+        with self.assertRaisesRegex(ValueError,'every recorded surface'):assess(self.s,case,base,{'allowed_objects':['Face']})
+
+    def test_context_geometry_attributes_and_interpretation_cannot_change(self):
+        case,base,target=self.context_case();report=assess(self.s,case,base,{'allowed_objects':['Face']})
+        for change in ('position','attribute','evaluation'):
+            state=self.s.store.get(target,'state');entry=state['objects'][1]
+            if change=='evaluation':entry['evaluation']='evaluated world'
+            else:
+                a=self.s.wb.arrays(target,'Guide')
+                if change=='position':a['co'][0,2]+=.01
+                else:a['POINT__meaning']=np.ones(len(a['co']))
+                p=self.root/(change+'.npz');np.savez_compressed(p,**a);entry['asset']=self.s.store.blob(p)
+            changed=self.s.store.put('state',state)
+            with self.subTest(change=change):
+                with self.assertRaisesRegex(ValueError,'unchanged_context changed'):
+                    assess(self.s,dict(case,predicted_state=changed),base,{'allowed_objects':['Face']})
+                with self.assertRaisesRegex(ValueError,'unchanged_context changed'):compare(self.s,report['record'],changed)
+
+    def test_not_evaluated_is_never_positive_and_context_cannot_supply_support(self):
+        case,base,target=self.context_case()
+        case['layers'][2].pop('mode')
+        with self.assertRaisesRegex(ValueError,'positively declared evaluated'):
+            assess(self.s,case,base,{'allowed_objects':['Face']})
+        case['layers'][2]['mode']='unchanged_context';case['layers'][2]['support']=[{'kind':'direct'}]
+        with self.assertRaisesRegex(ValueError,'cannot declare displacement support'):
+            assess(self.s,case,base,{'allowed_objects':['Face']})
+
     def test_recovery_hashes_over_labels_and_runtime_distinction(self):
         file=self.root/'base.bin';file.write_bytes(b'original')
         pinned=dict(file=str(file),sha256=digest(file.read_bytes()))
