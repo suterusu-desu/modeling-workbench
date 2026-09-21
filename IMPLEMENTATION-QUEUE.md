@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.22.3
+# Current operating integration: 0.2.22.4
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -38,6 +38,13 @@ Finding content, check results and native inputs remain exact. Newly stale revie
 leave the current view but remain retained; no judgment is introduced or rewritten.
 Short sibling temporary names and ancillary receipt names remove the observed
 Windows long-path failure without altering request identity.
+
+Strict Mirror modifier inventory covers native settings and exact object/library
+references without declaring topology preservation. A private adapter can refresh
+its qualified validator cache under the existing owner and dependency checks.
+Known partial task failures with no returned capability receipt can be reconciled
+as failed from retained effect receipts; remaining work is a separate task, so a
+successful open or other completed substep is not replayed.
 
 ## Prior delivered increments
 

@@ -34,3 +34,21 @@ For bounded topology batches, native lineage, later-save-aware rollback and meas
 Test private adapters in a clean Python namespace after a full Blender restart. A warm process may hide a canonical-package import in a nested recorder or helper. Audit the entire imported dependency closure, including secondary callbacks, and inject explicitly pinned functions through a qualified binding. Verify source paths, hashes and callback module identity before use. Do not fix an isolated adapter by aliasing a different implementation to the canonical package name. Preserve failed attempts and prove unchanged native content after recovery.
 
 Current limitation: independent locally repaired guide lineage/review is retained via explicit episode evidence and a qualified advanced native transaction. There is not yet a typed core derivative-admission lifecycle. Preserve the original raw rejection and qualify the new asset independently.
+
+## Mirror source inventory
+
+`mirror_inventory.mirror_structure(modifier, object_reference=...)` records the
+native Mirror axes, bisect/flip settings, clipping/merge thresholds, UV settings,
+vertex-group behavior and exact mirror-object identity. The resolver must identify
+the Blender Object and its linked library; `None` means the modifier uses its own
+object origin. The adapter must also retain the source and mirror object's actual
+transforms, parents, constraints and animation in its scene dependency inventory.
+Fields are checked against native Mirror RNA; missing or unsupported new settings
+fail explicitly. See the [Blender Mirror API](https://docs.blender.org/api/5.3/bpy.types.MirrorModifier.html).
+
+This is source description, not a topology qualification. Mirror can duplicate,
+bisect and merge geometry; do not add it to a connectivity-preserving suffix list
+or silently reenroll attachment indices. Preserve modifier order and separately
+qualify evaluated correspondence. A live adapter upgrade may refresh its pinned
+Python inventory cache under the owner check; that does not authorize reopening,
+rebuilding or changing the scene.

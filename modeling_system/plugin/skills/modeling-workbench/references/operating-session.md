@@ -261,6 +261,16 @@ remains identical. Newly stale reviews leave the current view while their origin
 records remain retained; no judgment can be added or rewritten. Geometry, guides
 and other dependency revisions must still match. A changed feedback hash alone is
 not evidence for this exception.
+
+When a handler itself raises after known partial effects and has no
+`capability-result.json`, use `failed_task_recovery.reconcile_failed_task` with
+the exact operation handle, actual receipt links, a failed workbench report and
+`observed.effect_status="resolved_failed"`. Name the completed and unapplied
+effects; `uncertain_effects` must be empty. The helper preserves the original raised
+outcome, records a failed task and repairs its execution indexes without invoking
+the handler. It never fabricates a completed return. After reconciliation, offer
+only the remaining work as a new qualified task. A known return instead uses the
+existing result/report recovery; unresolved native effects remain blocked.
 The earlier terminal503-specific helper remains available for recorded older flows.
 
 Run existing `record_outcome`, `reconcile_episode`, `promote_procedure` and
