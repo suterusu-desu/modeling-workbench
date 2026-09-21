@@ -85,6 +85,13 @@ frozen dependencies after edits. A new scope gets a new revision and directory.
 Include factory code and runtime revisions among the qualified task's read keys,
 alongside the real scene, guide, adapter and output dependencies.
 
+For an already completed candidate, `pipeline.adopt_completed_candidate(task,
+outcome)` attaches its exact original queue task and outcome before first use.
+Do not change its definition to match the new helper, recreate its effect or
+relabel its historical runtime. Follow-ups bind the original dependencies plus
+separately named new runtime/helper dependencies. The pipeline rejects changed
+or missing original outcomes. This entrypoint has no preceding preparation stage.
+
 ## Workload accounting
 
 `session.metrics()` and `inspect_session` report controller stage times, native

@@ -50,6 +50,23 @@ class PipelineTests(unittest.TestCase):
         self.session().run(max_steps=8)
         self.assertEqual(self.base.ran, ['first'])
 
+    def test_adopt_existing_candidate_preserves_exact_definition_and_does_not_replay(self):
+        self.base.items = [self.base.item('existing', 'appearance_edit', lane='repair')]
+        session = self.base.session(); session.run(max_steps=1)
+        original = deepcopy(session.record['results']['existing'])
+        task = deepcopy(original['task'])
+        self.assertNotIn('required', task)
+        self.pipeline.adopt_completed_candidate(task, original)
+        session.user_catalog = self.pipeline
+        session.run(max_steps=8)
+        self.review(session, 'existing')
+        session.run(max_steps=8)
+        self.assertEqual(self.base.ran, ['existing', 'verify'])
+        self.assertEqual(session.record['results']['existing'], original)
+        self.pipeline.adopt_completed_candidate(task, original)  # Idempotent after follow-ups.
+        changed = deepcopy(session.record['results']); changed['existing']['result']['extra'] = 'different'
+        with self.assertRaises(ValueError): self.pipeline(self.base.state, changed)
+
     def test_changed_guide_blocks_followup_and_invalidates_visual_review(self):
         session = self.session(); session.run(max_steps=8); self.review(session, 'first')
         self.base.state['values']['guide'] = 'later'

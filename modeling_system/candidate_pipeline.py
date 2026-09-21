@@ -53,10 +53,32 @@ class CandidatePipeline:
             raise ValueError('Executable stage factories required')
         self.binding = {'revision': revision, 'stages': list(self.factories), 'early_review': early_review}
 
+    def adopt_completed_candidate(self, task, outcome):
+        """Attach original settled evidence, without rewriting a task or replaying it."""
+        if ('prepare' in self.factories or task.get('workbench', {}).get('profile') != 'appearance_edit'
+                or outcome.get('status') != 'completed' or not outcome.get('result')
+                or outcome.get('definition') != fingerprint(task)):
+            raise ValueError('Exact completed candidate and a pipeline without preceding preparation required')
+        # Prior execution retains its original method/runtime and qualification.
+        # The existing session checks that this same result still owns the task.
+        record = {'binding': self.binding, 'stages': {'candidate': [deepcopy(task)]},
+            'adoption': {'task': task['id'], 'outcome': fingerprint(outcome),
+                         'provenance': 'Existing execution; not run by this pipeline'}}
+        if self.path.exists():
+            current = read_json(self.path)
+            if (current['binding'] != self.binding or current.get('adoption') != record['adoption']
+                    or current['stages']['candidate'] != record['stages']['candidate']):
+                raise ValueError('Existing pipeline differs from the original candidate adoption')
+        else:
+            write_json(self.path, record)
+
     def __call__(self, state, outcomes):
         record = read_json(self.path) if self.path.exists() else {'binding': self.binding, 'stages': {}}
         if record['binding'] != self.binding:
             raise ValueError('Pipeline changed; preserve this instance and start a new scoped pipeline')
+        adopted = record.get('adoption')
+        if adopted and fingerprint(outcomes.get(adopted['task'])) != adopted['outcome']:
+            raise ValueError('Adopted original candidate outcome changed or is missing')
         items, previous = [], None
         for stage, factory in self.factories.items():
             if stage not in record['stages']:
