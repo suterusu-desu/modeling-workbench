@@ -11,6 +11,8 @@ from .controller import PersistentController, SelectionNotDispatched, fingerprin
 LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
+# Advance when selection question meanings or their composition change.
+SELECTION_POLICY = 'qualified-lanes-v2'
 
 
 class WorkQueue:
@@ -94,7 +96,9 @@ class WorkQueue:
                         if name in items[dep]['writes']:
                             continue
                         if name in values and values[name] != revision:
-                            raise ValueError('Conflicting prerequisite input revisions')
+                            raise ValueError(f'Conflicting prerequisite input revisions for {name!r}: '
+                                f'{key!r} disagrees with {dep!r}. Generated outputs must be declared '
+                                'as prerequisite writes and bound from actual completed evidence.')
                         values[name] = revision
                 inherited[key] = values
             return inherited[key]
@@ -182,7 +186,7 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
 
     def __call__(self, snapshot, actions, plan):
         public = self.project(deepcopy(snapshot), deepcopy(actions), deepcopy(plan))
-        if (not isinstance(public.get('state'), dict)
+        if (not isinstance(public, dict) or not isinstance(public.get('state'), dict)
                 or set(public.get('descriptions', {})) != {a['id'] for a in actions}):
             raise SelectionNotDispatched('Complete reviewed public projection required; inference was not called')
         grouped = {lane: [a for a in actions if a['lane'] == lane] for lane in LANES}
@@ -196,11 +200,18 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
         binding = {'owner': snapshot['owner'], 'authority_revision': snapshot['authority_revision'],
             'dependencies': {'reads': reads, 'writes': sorted({k for a in actions for k in a['writes']})},
             'menu': fingerprint(actions), 'plan': fingerprint(plan)}
+        selection_key = fingerprint({'binding': binding, 'public': public, 'policy': SELECTION_POLICY})
+        last_path = self.directory / 'last-batch.json'
+        if last_path.exists():
+            prior = read_json(last_path)
+            if prior.get('selection_key') == selection_key and 'choice' in prior:
+                return deepcopy(prior['choice'])
         decisions, lane_keys, resolved = [], {}, {}
         # Choices for different lanes share state but never assume other answers.
         for lane, offered in grouped.items():
             options = [{'id': a['id'], 'description': public['descriptions'][a['id']]} for a in offered]
-            lane_key = fingerprint({'lane': lane, 'options': options,
+            lane_key = fingerprint({'lane': lane, 'options': options, 'policy': SELECTION_POLICY,
+                'actions': offered, 'owner': snapshot['owner'],
                 'reads': {k: v for a in offered for k, v in a['reads'].items()},
                 'state': public['state'], 'facts': public.get('lane_facts', {}).get(lane),
                 'authority': binding['authority_revision'], 'plan': binding['plan']})
@@ -217,10 +228,40 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
         decisions.append({'id': 'next_lane', 'type': 'choice',
             'instructions': 'Which available work lane best advances the goal now? Prioritize dominant observed defects and resolving uncertainty that changes an edit; avoid unnecessary review or bookkeeping. Lane answers are independent; choose defer if the available work cannot usefully proceed.',
             'options': [{'id': lane, 'description': {'lane': lane,
+                'facts': public.get('lane_facts', {}).get(lane, {}),
                 'available_operations': [public['descriptions'][a['id']] for a in offered]}}
                 for lane, offered in grouped.items()] + [{'id': DEFER, 'description': 'Need new capability, conflicting-evidence resolution or actual visual interpretation.'}]})
-        result = self.judge(public['state'], decisions, binding)
-        if result.get('binding') != binding:
+        from .judgments import prepare_judgments
+        try:
+            packet = prepare_judgments(public['state'], decisions, binding)
+        except ValueError as error:
+            raise SelectionNotDispatched(str(error)) from error
+        selection = {'state': snapshot, 'actions': actions, 'plan': plan}
+        batch = {'selection_key': selection_key, 'public': public, 'packet': packet,
+            'binding': binding, 'grouped': grouped, 'resolved': resolved,
+            'lane_keys': lane_keys, 'decisions': decisions}
+        # Retain the exact fan-out and cached branches before any provider call.
+        # Recovery never has to reconstruct questions from a later cache state.
+        try:
+            write_json(self.directory / 'batches' / (fingerprint(selection) + '.json'), batch)
+        except OSError as error:
+            raise SelectionNotDispatched('Could not retain selection preparation; inference was not called') from error
+        return self._complete(batch, self.judge(public['state'], decisions, binding))
+
+    def recover_completed(self, selection, packet, response, provider_receipt):
+        from .judgments import resolve_judgments
+        batch = read_json(self.directory / 'batches' / (fingerprint(selection) + '.json'))
+        if batch['packet'] != packet:
+            raise ValueError('Completed response belongs to different selection questions')
+        result = resolve_judgments(packet, response['answers'], batch['binding'])
+        result['provider_receipt'] = provider_receipt
+        return self._complete(batch, result)
+
+    def _complete(self, batch, result):
+        binding, grouped = batch['binding'], batch['grouped']
+        resolved, lane_keys = deepcopy(batch['resolved']), batch['lane_keys']
+        if (result.get('binding') != binding or
+                set(result.get('judgments', {})) != {d['id'] for d in batch['decisions']}):
             raise ValueError('Judgment release binding changed')
         answers = result['judgments']
         for lane in grouped:
@@ -230,16 +271,19 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                     raise ValueError('Lane choice outside menu')
                 resolved[lane] = answer
                 self.cache[lane_keys[lane]] = deepcopy(answer)
-        # Bound persistent cache size, retaining newest inserted advice.
-        self.cache = dict(list(self.cache.items())[-128:])
-        write_json(self.path, self.cache)
         lane = answers['next_lane']['choice']
+        if lane == DEFER or lane in resolved and resolved[lane]['choice'] == DEFER:
+            choice = {'status': 'needs_review', 'reason': 'Jev found no applicable next operation',
+                    'evidence': [str(self.directory / 'last-batch.json')]}
+        elif lane not in resolved:
+            raise ValueError('Priority selected an unavailable lane')
+        else:
+            choice = resolved[lane]['choice']
         write_json(self.directory / 'last-batch.json', {'binding': binding, 'judgments': answers,
             'applicable_lane_choices': resolved, 'provider_receipt': result.get('provider_receipt'),
-            'question_count': len(decisions)})
-        if lane == DEFER or lane in resolved and resolved[lane]['choice'] == DEFER:
-            return {'status': 'needs_review', 'reason': 'Jev found no applicable next operation',
-                    'evidence': [str(self.directory / 'last-batch.json')]}
-        if lane not in resolved:
-            raise ValueError('Priority selected an unavailable lane')
-        return resolved[lane]['choice']
+            'question_count': len(batch['decisions']), 'selection_key': batch['selection_key'], 'choice': choice})
+        # Complete decisions (including deferrals) now survive restarts without
+        # another priority call. Different context still invalidates this result.
+        self.cache = dict(list(self.cache.items())[-128:])
+        write_json(self.path, self.cache)
+        return choice

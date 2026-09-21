@@ -44,6 +44,13 @@ the catalog, including completed ones. Freeze their original read revisions; do
 not rebase completed definitions on every observation. Source changes invalidate
 dependent use. A new candidate number does not justify repeating a failed mechanism.
 
+Generated outputs are prerequisite writes, not hypothetical input files. Bind a
+dependent task to the actual completed output revision. For example, preparation
+reads a guide and writes a target artifact; fitting consumes that saved target.
+A directory write does not implicitly cover separately named file dependencies.
+The conflict diagnostic identifies the key and prerequisite to correct; preserve
+completed work rather than replaying it with rebased input revisions.
+
 Every item addresses a named uncertainty or improvement; catalogs are executable,
 not wish lists. Unsupported repairs remain blocked while other useful work proceeds.
 Image interpretation, ambiguous anatomy and new mechanisms return to the reasoning
@@ -57,8 +64,15 @@ identity and raw payloads. `judge_batch(state, decisions, binding)` uses the
 workspace's typed judgment bridge and returns freshly validated `binding` and
 normalized `judgments`. Questions choose the next lane and independently choose a
 conditional operation in each lane, with an explicit no-applicable-operation option.
-They do not see one another's answers. Applicable conditional answers are cached
-with exact evidence/menu/authority bindings and reused until these change.
+They do not see one another's answers. Lane-specific facts are supplied to the
+priority question as well as the lane's operation question. Include before/after improvement, preserved
+constraints and current target qualification in the reviewed context, rather than
+only a remaining defect count. Label historical exclusions separately from a
+newly qualified proposal; neither technical improvement nor qualification approves
+appearance. Applicable conditional answers are cached
+with exact evidence/menu/authority bindings and reused until these change. The complete
+last decision, including a deferral, is also reused across restarts when the menu,
+plan, authority and reviewed public context are identical. New evidence invalidates it.
 
 Batch ready independent questions. Do not speculate about missing future native
 results: consume actual receipts to refresh the catalog. Read-only preparation may

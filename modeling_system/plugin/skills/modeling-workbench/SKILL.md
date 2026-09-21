@@ -78,3 +78,10 @@ Offer qualified executable work with actual prerequisites; batch independent lan
 choices and continue without a reasoning-agent handoff per operation. Keep image
 interpretation and missing mechanisms explicit. Use the workspace's selected direct
 TypeSafe transport and existing ledger when configured.
+
+For an interrupted Jev choice, distinguish a pre-dispatch refusal, an unknown
+provider effect and a completed response whose metadata failed. The
+[operating-session recovery procedure](references/operating-session.md) preserves
+original receipts and resumes a validated answer without a second request or
+charge. Exact unchanged decisions reuse retained advice; refresh actual changed
+facts instead of polling the model with the same context.

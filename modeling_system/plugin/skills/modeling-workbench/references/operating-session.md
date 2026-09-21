@@ -191,8 +191,44 @@ Known deterministic projection refusals before inference clear their own pending
 selection. For an older retained refusal, `session.recover_selection` requires
 the exact selection fingerprint, observed `confirmed_not_dispatched` with its
 basis, and actual typed evidence. Unknown or submitted provider requests keep
-their original ledger identity and cannot use this route. The small
-Windows sharing-error retry applies only to a metadata rename.
+their original ledger identity and cannot use this route.
+
+For HTTP 200 with a valid retained answer but failed metadata, use the separate
+completed-response route. It validates the exact owner packet, wire request,
+model, full answer distributions and usage; it never sends another request.
+
+```python
+from modeling_system.provider_recovery import reconcile_completed_response
+from modeling_system.controller import fingerprint, read_json
+
+call = existing_call_directory
+reconcile_completed_response(call, existing_ledger_directory, session.observe)
+pending = read_json(session.directory / "controller" / "controller.json")["selection"]
+session.recover_completed_selection(
+    expected_selection=fingerprint(pending),
+    packet_path=call / "owner-packet.json",
+    request_path=call / "decision-1.request.json",
+    response_path=call / "decision-1.response.json",
+    reconciliation_path=call / "completed-response-reconciliation.json",
+)
+# Continue through the usual bounded session.run(...) and native guard.
+```
+
+Stop the controller before recovery. The ledger helper shares the dispatch lock,
+keeps original failure evidence and updates only the already existing attempt.
+Already-accounted usage is not added twice; missing accounting can be completed
+once from retained token usage. It supplies no extra requests or spending scope.
+`session.observe` must provide fresh owner, authority and dependency revisions.
+Changed evidence or public context keeps the old response from being released.
+The exact pre-call batch includes cached branches, so later cache changes cannot
+reinterpret the original questions. Earlier runtimes without that batch need
+explicit owner reconciliation from their original records.
+
+Provider, queue and controller writes use the same bounded Windows sharing-error
+retry on metadata rename only. A complete fsynced temporary receipt survives
+exhaustion; explicitly inspect and supply its path as `response_path` to the
+ledger helper. Do not guess among temporary files, repeat HTTP or replay Blender
+work. The transport records response and cost metadata together in one write.
 
 Run existing `record_outcome`, `reconcile_episode`, `promote_procedure` and
 `retrieve_experience` through the episode as before. Preserve failures and exact

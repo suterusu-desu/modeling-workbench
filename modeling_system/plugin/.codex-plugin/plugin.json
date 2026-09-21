@@ -1,6 +1,6 @@
 {
   "name": "modeling-workbench",
-  "version": "0.2.21.1",
+  "version": "0.2.22",
   "description": "Numerical scene reasoning, exact-view reference generation, guide-constrained Blender trials and motion evidence.",
   "author": {
     "name": "Local developer"

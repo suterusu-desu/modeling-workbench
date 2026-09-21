@@ -10,7 +10,7 @@ import inspect
 import json
 from pathlib import Path
 
-from .controller import fingerprint, read_json, write_json
+from .controller import applicable, fingerprint, read_json, write_json
 from .episodes import pin_link
 from .journal import EPISODE, ACTIVE_CALL, invoke
 from .leases import LEASE
@@ -486,3 +486,65 @@ class OperatingSession(WorkQueue):
         current.setdefault('selection_recoveries', []).append(result)
         write_json(path, current)
         return result
+
+    def recover_completed_selection(self, *, expected_selection, packet_path,
+                                    request_path, response_path, reconciliation_path):
+        """Release an exact validated provider return, with no inference or effects.
+
+        Reconcile its original ledger using provider_recovery first. Retained
+        pre-call questions, cached branches, current menu and reviewed public
+        facts must all agree. Resume via run(); the normal native guard remains.
+        """
+        from .typesafe_transport import validate_response_receipt
+        if len({Path(p).resolve().parent for p in
+                (packet_path, request_path, response_path, reconciliation_path)}) != 1:
+            raise ValueError('Selection recovery receipts must belong to the same original call')
+        directory = self.directory / 'controller'
+        lock = directory / 'controller.lock'
+        with lock.open('x', encoding='utf-8') as stream:
+            stream.write('completed selection reconciliation')
+        try:
+            path = directory / 'controller.json'
+            controller = read_json(path)
+            selection = controller.get('selection')
+            if (controller['owner'] != self.owner or selection is None or
+                    fingerprint(selection) != expected_selection or any(
+                    a['status'] in ('running', 'needs_reconciliation') for a in controller['attempts'])):
+                raise ValueError('Exact pending selection with no uncertain native effects required')
+            packet, request, response, recovery = [read_json(p) for p in
+                (packet_path, request_path, response_path, reconciliation_path)]
+            verified = validate_response_receipt(packet, request, response)
+            if (recovery.get('status') != 'reconciled_completed_response' or
+                    recovery.get('packet_digest') != fingerprint(packet) or
+                    recovery.get('response_digest') != fingerprint(response) or
+                    recovery.get('choices') != verified['choices'] or
+                    recovery.get('provider_calls_added') != 0 or recovery.get('native_dispatch') is not False):
+                raise ValueError('Matching completed-response ledger reconciliation required')
+            state = self.observe()
+            if (state['active_operations'] or state['owner'] != selection['state']['owner'] or
+                    state['authority_revision'] != selection['state']['authority_revision'] or
+                    state['stage'] != selection['state']['stage'] or
+                    state['actions'] != selection['actions'] or not applicable(selection['plan'], state)):
+                raise ValueError('Selection context changed; preserve the response without releasing it')
+            batch_path = self.selector.directory / 'batches' / (expected_selection + '.json')
+            batch = read_json(batch_path)
+            public = self.selector.project(deepcopy(state), deepcopy(state['actions']), deepcopy(selection['plan']))
+            if public != batch['public'] or packet != batch['packet']:
+                raise ValueError('Original questions or current public decision context changed')
+            pinned = [pin_link(self.service, {'kind': 'file', 'path': str(p), 'role': 'completed selection evidence'})
+                for p in (packet_path, request_path, response_path, reconciliation_path, batch_path)]
+            def restore():
+                choice = self.selector.recover_completed(selection, packet, response['response'], str(response_path))
+                return {'status': 'completed', 'selection': expected_selection, 'choice': choice,
+                    'evidence': pinned, 'provider_calls_added': 0, 'effects_replayed': False}
+            result = self.service._run_episode_callback(self.episode, 'recover_completed_modeling_selection',
+                {'selection': selection, 'evidence': pinned}, restore)
+            current = read_json(path)
+            if fingerprint(current.get('selection')) != expected_selection:
+                raise ValueError('Selection changed during recovery')
+            current['selection'] = None
+            current.setdefault('selection_recoveries', []).append(result)
+            write_json(path, current)
+            return result
+        finally:
+            lock.unlink()

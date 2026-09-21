@@ -66,6 +66,26 @@ class TypeSafeTransportTests(unittest.TestCase):
         del self.response['usage']['input_tokens']
         with self.assertRaises(ValueError): self.client.choose({}, self.questions, {})
 
+    def test_complete_response_is_written_once_with_accounting_already_known(self):
+        writes = []
+        def write(path, value):
+            if path.name.endswith('.response.json'):
+                writes.append(value)
+                self.assertAlmostEqual(self.client.cost, .0000042)
+        self.client.write = write
+        self.client.choose({}, self.questions, {})
+        self.assertEqual(len(writes), 1)
+        self.assertAlmostEqual(writes[0]['estimated_cost_usd'], .0000042)
+
+    def test_failed_response_write_retains_cost_without_another_http_call(self):
+        def write(path, value):
+            if path.name.endswith('.response.json'): raise PermissionError('reader still open')
+        self.client.write = write
+        with self.assertRaises(PermissionError): self.client.choose({}, self.questions, {})
+        self.assertAlmostEqual(self.client.cost, .0000042)
+        with self.assertRaises(RuntimeError): self.client.choose({}, self.questions, {})
+        self.assertEqual(len(self.requests), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

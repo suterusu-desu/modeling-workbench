@@ -27,19 +27,18 @@ def write_json(path, value):
         stream.write('\n')
         stream.flush()
         os.fsync(stream.fileno())
-    try:
-        # Windows readers can briefly hold a destination without delete sharing.
-        # Retry only this metadata rename, never the selected operation itself.
-        for attempt in range(6):
-            try:
-                os.replace(temporary, path)
-                break
-            except OSError as error:
-                if getattr(error, 'winerror', None) not in (5, 32, 33) or attempt == 5:
-                    raise
-                time.sleep(.02 * (attempt + 1))
-    finally:
-        temporary.unlink(missing_ok=True)
+    # Windows readers can briefly hold a destination without delete sharing.
+    # Retry only this metadata rename, never the selected operation itself.
+    # If all attempts fail, keep the complete fsynced temporary receipt for
+    # explicit reconciliation. A successful replacement consumes it normally.
+    for attempt in range(6):
+        try:
+            os.replace(temporary, path)
+            break
+        except OSError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33) or attempt == 5:
+                raise
+            time.sleep(.02 * (attempt + 1))
 
 
 def read_json(path):

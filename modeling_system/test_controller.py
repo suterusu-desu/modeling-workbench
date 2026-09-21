@@ -2,6 +2,7 @@ from copy import deepcopy
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from .controller import PersistentController, MailboxPlanner, read_json, write_json
@@ -199,6 +200,38 @@ class ControllerTests(unittest.TestCase):
         self.addCleanup(planner.close)
         write_json(self.root / 'response.json', {'request_id': 'request1', 'plan': self.plan})
         self.assertEqual(planner({'request_id': 'request1'}), self.plan)
+
+    def test_bounded_windows_replace_retry_preserves_complete_receipt_on_exhaustion(self):
+        error = PermissionError('sharing denied'); error.winerror = 32
+        path = self.root / 'response.json'
+        write_json(path, {'old': True})
+        with patch('modeling_system.controller.os.replace', side_effect=error) as replace, \
+                patch('modeling_system.controller.time.sleep') as sleep:
+            with self.assertRaises(PermissionError): write_json(path, {'complete_response': True})
+            self.assertEqual(replace.call_count, 6)
+            self.assertEqual(sleep.call_count, 5)
+        self.assertEqual(read_json(path), {'old': True})
+        self.assertEqual(read_json(next(self.root.glob('response.json.tmp-*'))), {'complete_response': True})
+
+    def test_temporary_windows_sharing_failure_retries_metadata_only(self):
+        import os
+        real = os.replace
+        error = PermissionError('sharing denied'); error.winerror = 5
+        attempts = []
+        def replace(source, destination):
+            attempts.append(1)
+            if len(attempts) < 3: raise error
+            return real(source, destination)
+        with patch('modeling_system.controller.os.replace', side_effect=replace), \
+                patch('modeling_system.controller.time.sleep'):
+            write_json(self.root / 'response.json', {'complete': True})
+        self.assertEqual(len(attempts), 3)
+        self.assertEqual(list(self.root.glob('*.tmp-*')), [])
+
+    def test_nonsharing_error_is_not_retried(self):
+        with patch('modeling_system.controller.os.replace', side_effect=OSError('disk full')) as replace:
+            with self.assertRaises(OSError): write_json(self.root / 'response.json', {'complete': True})
+        self.assertEqual(replace.call_count, 1)
 
 
 if __name__ == '__main__':

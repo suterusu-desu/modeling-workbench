@@ -58,6 +58,53 @@ class OperatingTests(unittest.TestCase):
                 'state': deepcopy(snapshot['observations']['public']),
                 'descriptions': {action['id']: action['description'] for action in actions}})
 
+    def completed_provider_failure(self):
+        from .judgments import prepare_judgments
+        from .test_provider_recovery import completed_call
+        self.items = [self.item('first'), self.item('second')]
+        captured = {}
+        def interrupted(state, decisions, binding):
+            self.batches.append(state)
+            packet = prepare_judgments(state, decisions, binding)
+            captured['ledger'], captured['call'] = completed_call(self.root, packet)
+            raise PermissionError('Completed response metadata interrupted')
+        session = self.session(judge=interrupted)
+        self.assertEqual(session.run(max_steps=1)['status'], 'needs_reconciliation')
+        from .provider_recovery import reconcile_completed_response
+        reconcile_completed_response(captured['call'], captured['ledger'], lambda: session.observe())
+        call = captured['call']
+        selection = read_json(self.root / 'queue/controller/controller.json')['selection']
+        args = {'expected_selection': fingerprint(selection), 'packet_path': call / 'owner-packet.json',
+            'request_path': call / 'decision-1.request.json', 'response_path': call / 'decision-1.response.json',
+            'reconciliation_path': call / 'completed-response-reconciliation.json'}
+        return session, args, captured
+
+    def test_completed_provider_recovery_resumes_once_without_new_inference(self):
+        session, args, captured = self.completed_provider_failure()
+        before = read_json(captured['ledger'] / 'budget.json')
+        result = session.recover_completed_selection(**args)
+        self.assertEqual(result['provider_calls_added'], 0)
+        self.assertEqual(self.ran, [])  # Recovery never performs native work.
+        self.assertEqual(session.run(max_steps=1)['status'], 'stopped')
+        self.assertEqual(self.ran, ['first'])
+        self.assertEqual(len(self.batches), 1)
+        self.assertEqual(read_json(captured['ledger'] / 'budget.json'), before)
+        self.assertEqual(read_json(self.root / 'queue/controller/controller.json')['selection_recoveries'][0]['selection'], args['expected_selection'])
+
+    def test_completed_provider_recovery_refuses_stale_context(self):
+        session, args, _ = self.completed_provider_failure()
+        self.state['values']['source'] = 'later edit'
+        with self.assertRaises(ValueError): session.recover_completed_selection(**args)
+        self.assertIsNotNone(read_json(self.root / 'queue/controller/controller.json')['selection'])
+        self.assertEqual(self.ran, [])
+
+    def test_completed_provider_recovery_requires_exact_pending_identity_and_idle_controller(self):
+        session, args, _ = self.completed_provider_failure()
+        with self.assertRaises(ValueError): session.recover_completed_selection(**{**args, 'expected_selection': 'wrong'})
+        write_json(self.root / 'queue/controller/controller.lock', {'active': True})
+        with self.assertRaises(FileExistsError): session.recover_completed_selection(**args)
+        self.assertEqual(self.ran, [])
+
     def test_real_episode_receipts_and_fresh_results_enter_next_decision(self):
         first = self.item('diagnose')
         self.items = [first, self.item('left', requires={'diagnose': ['completed']}),
@@ -290,7 +337,7 @@ class MetadataWriteTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     write_json(Path(directory)/'status.json', {})
                 self.assertEqual(replace.call_count, 1)
-            self.assertEqual(list(Path(directory).iterdir()), [])
+            self.assertEqual(read_json(next(Path(directory).glob('status.json.tmp-*'))), {})
 
 
 if __name__ == '__main__':

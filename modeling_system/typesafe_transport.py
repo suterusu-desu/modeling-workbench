@@ -27,6 +27,27 @@ def usage_cost(response):
     return usage['input_tokens'] * INPUT_USD_PER_MILLION / 1_000_000
 
 
+def validate_response_receipt(packet, request_receipt, receipt):
+    """Verify saved wire evidence without credentials, network or ledger writes."""
+    from .judgments import validate_answers
+    expected = {'model': MODEL, 'state': packet['state'], 'questions': packet['questions']}
+    if (request_receipt.get('transport') != ROUTE or receipt.get('transport') != ROUTE
+            or request_receipt.get('request') != expected
+            or request_receipt.get('local_binding') != packet['local_binding']
+            or request_receipt.get('wire_request_digest') != digest(expected)
+            or receipt.get('wire_request_digest') != digest(expected)
+            or receipt.get('http') != 200):
+        raise ValueError('Completed response does not match the exact original request')
+    response = receipt.get('response', {})
+    if response.get('model') != MODEL:
+        raise ValueError('Unreviewed TypeSafe model revision')
+    cost = usage_cost(response)
+    if 'estimated_cost_usd' in receipt and receipt['estimated_cost_usd'] != cost:
+        raise ValueError('Response cost disagrees with recorded token usage')
+    return {'choices': validate_answers(packet['questions'], response.get('answers')),
+            'estimated_cost_usd': cost, 'wire_request_digest': digest(expected)}
+
+
 class TypeSafeTransport:
     """One instance per reserved ledger request; never writes or logs credentials."""
     def __init__(self, output, write, *, api_key, connection_factory=None):
@@ -73,8 +94,11 @@ class TypeSafeTransport:
             self.write(prefix.with_suffix('.response.json'), receipt)
             raise ValueError('Unexpected credential echo in response')
         receipt['response'] = response
-        self.write(prefix.with_suffix('.response.json'), receipt)
-        self.cost = usage_cost(response)
+        try:
+            self.cost = usage_cost(response)
+        except ValueError:
+            self.write(prefix.with_suffix('.response.json'), receipt)
+            raise
         receipt.update(estimated_cost_usd=self.cost, cost_basis=self.cost_basis,
                        input_usd_per_million=INPUT_USD_PER_MILLION,
                        pricing_source='https://docs.typesafe.ai/models')

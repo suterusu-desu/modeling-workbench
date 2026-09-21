@@ -121,15 +121,44 @@ class LaneSelectorTests(unittest.TestCase):
         self.assertEqual(selector(self.snapshot, self.actions, self.plan), 'inspect')
         self.assertEqual(len(self.calls[0]), 3)
         selector(self.snapshot, self.actions, self.plan)
-        self.assertEqual([d['id'] for d in self.calls[1]], ['next_lane'])
+        self.assertEqual(len(self.calls), 1)
+        self.selector()(self.snapshot, self.actions, self.plan)
+        self.assertEqual(len(self.calls), 1)  # Exact priority survives restart too.
         self.actions[0]['reads']['source'] = 'v2'
         selector(self.snapshot, self.actions, self.plan)
-        self.assertEqual([d['id'] for d in self.calls[2]], ['diagnosis', 'next_lane'])
+        self.assertEqual([d['id'] for d in self.calls[1]], ['diagnosis', 'next_lane'])
 
     def test_defer_is_a_valid_return_without_native_effect(self):
         self.defer = True
         result = self.selector()(self.snapshot, self.actions, self.plan)
         self.assertEqual(result['status'], 'needs_review')
+        self.selector()(self.snapshot, self.actions, self.plan)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_changed_public_facts_invalidate_exact_deferral(self):
+        self.defer = True
+        selector = self.selector()
+        selector(self.snapshot, self.actions, self.plan)
+        project = selector.project
+        def changed(*args):
+            value = project(*args); value['state']['supported_progress'] = 'Defect count improved from 7 to 2'
+            return value
+        selector.project = changed
+        self.defer = False
+        self.assertEqual(selector(self.snapshot, self.actions, self.plan), 'inspect')
+        self.assertEqual(len(self.calls), 2)
+
+    def test_priority_receives_lane_facts_without_reading_other_answers(self):
+        selector = self.selector()
+        project = selector.project
+        def with_facts(*args):
+            value = project(*args)
+            value['lane_facts'] = {'diagnosis': {'current_support': 'new qualified evidence'}}
+            return value
+        selector.project = with_facts
+        selector(self.snapshot, self.actions, self.plan)
+        priority = next(d for d in self.calls[0] if d['id'] == 'next_lane')
+        self.assertEqual(priority['options'][0]['description']['facts']['current_support'], 'new qualified evidence')
 
     def test_privately_incomplete_projection_never_dispatches(self):
         selector = self.selector()
