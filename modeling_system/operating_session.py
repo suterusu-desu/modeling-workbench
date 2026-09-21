@@ -488,7 +488,8 @@ class OperatingSession(WorkQueue):
         return result
 
     def recover_completed_selection(self, *, expected_selection, packet_path,
-                                    request_path, response_path, reconciliation_path):
+                                    request_path, response_path, reconciliation_path,
+                                    terminal_retry_path=None):
         """Release an exact validated provider return, with no inference or effects.
 
         Reconcile its original ledger using provider_recovery first. Retained
@@ -529,14 +530,35 @@ class OperatingSession(WorkQueue):
             batch_path = self.selector.directory / 'batches' / (expected_selection + '.json')
             batch = read_json(batch_path)
             public = self.selector.project(deepcopy(state), deepcopy(state['actions']), deepcopy(selection['plan']))
-            if public != batch['public'] or packet != batch['packet']:
+            original_packet = batch['packet']
+            retry_evidence, retry_lineage = [], None
+            if terminal_retry_path is not None:
+                from .provider_recovery import terminal_retry_packet
+                authorization = read_json(terminal_retry_path)
+                origin = Path(authorization['original_call'])
+                failed_packet, failed_request, failed_response, failed_dispatch = [read_json(origin / name)
+                    for name in ('owner-packet.json', 'decision-1.request.json', 'decision-1.response.json', 'dispatch-count.json')]
+                derived = terminal_retry_packet(failed_packet, failed_request, failed_response, failed_dispatch)
+                if (authorization.get('status') != 'terminal_retry_prepared' or failed_packet != original_packet
+                        or authorization.get('original_packet_digest') != fingerprint(original_packet)
+                        or authorization.get('retry_packet_digest') != fingerprint(packet)
+                        or authorization.get('retry_limit') != 1 or derived != packet):
+                    raise ValueError('Completed retry must descend from this exact failed terminal request')
+                retry_lineage = {'original_packet': fingerprint(original_packet),
+                    'retry_packet': fingerprint(packet), 'original_http': 503, 'ordinal': 1}
+                retry_evidence = [terminal_retry_path, origin/'owner-packet.json', origin/'decision-1.request.json',
+                    origin/'decision-1.response.json', origin/'dispatch-count.json']
+            elif packet != original_packet:
+                raise ValueError('Completed response belongs to a different pending selection')
+            if public != batch['public']:
                 raise ValueError('Original questions or current public decision context changed')
             pinned = [pin_link(self.service, {'kind': 'file', 'path': str(p), 'role': 'completed selection evidence'})
-                for p in (packet_path, request_path, response_path, reconciliation_path, batch_path)]
+                for p in (packet_path, request_path, response_path, reconciliation_path, batch_path, *retry_evidence)]
             def restore():
-                choice = self.selector.recover_completed(selection, packet, response['response'], str(response_path))
+                choice = self.selector.recover_completed(selection, original_packet, response['response'], str(response_path))
                 return {'status': 'completed', 'selection': expected_selection, 'choice': choice,
-                    'evidence': pinned, 'provider_calls_added': 0, 'effects_replayed': False}
+                    'evidence': pinned, 'provider_calls_added': 0, 'effects_replayed': False,
+                    'terminal_retry_lineage': retry_lineage}
             result = self.service._run_episode_callback(self.episode, 'recover_completed_modeling_selection',
                 {'selection': selection, 'evidence': pinned}, restore)
             current = read_json(path)

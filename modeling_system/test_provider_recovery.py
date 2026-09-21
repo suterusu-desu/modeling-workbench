@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from .controller import fingerprint, read_json, write_json
 from .judgments import prepare_judgments
-from .provider_recovery import reconcile_completed_response
+from .provider_recovery import reconcile_completed_response, prepare_terminal_retry, terminal_retry_packet
 from .typesafe_transport import MODEL, ROUTE, usage_cost
 
 
@@ -120,6 +120,71 @@ class ProviderRecoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.recover()
         write_json(self.ledger / 'dispatch.lock', {'active': True})
         with self.assertRaises(FileExistsError): self.recover()
+
+
+class TerminalRetryTests(unittest.TestCase):
+    def setUp(self):
+        ProviderRecoveryTests.setUp(self)
+        path = self.call/'decision-1.response.json'
+        response = read_json(path); response.pop('response'); response['http'] = 503
+        write_json(path, response)
+        ledger = read_json(self.ledger/'budget.json')
+        ledger['attempts'][0]['estimated_cost_usd'] = 0.
+        ledger['known_cost_usd'] = 0.
+        write_json(self.ledger/'budget.json', ledger)
+
+    # This fixture is a terminal error, so only terminal-specific cases apply.
+    def recover(self, **kwargs):
+        return prepare_terminal_retry(self.call, self.ledger, lambda: deepcopy(self.state),
+                                      reason='Owner requested one retry of recorded transient HTTP503')
+
+    def test_terminal_debit_is_once_and_retry_has_distinct_local_identity(self):
+        before = read_json(self.ledger/'budget.json')
+        first = self.recover(); second = self.recover()
+        after = read_json(self.ledger/'budget.json')
+        self.assertEqual(after['known_cost_usd'], .001344)
+        self.assertEqual(first, second)
+        self.assertEqual(len(after['attempts']), len(before['attempts']))
+        self.assertEqual(after['provider_slots_reserved_or_attempted'], 1)
+        self.assertEqual(after['attempts'][0]['status'], 'terminal_http_error')
+        self.assertNotEqual(first['retry_packet_digest'], first['original_packet_digest'])
+        self.assertEqual(first['retry_packet']['state'], self.packet['state'])
+        self.assertEqual(first['retry_packet']['questions'], self.packet['questions'])
+        self.assertEqual(read_json(self.call/'decision-1.response.json')['http'], 503)
+
+    def test_terminal_retry_chain_is_forbidden(self):
+        retry = self.recover()['retry_packet']
+        request = read_json(self.call/'decision-1.request.json'); request['local_binding'] = retry['local_binding']
+        with self.assertRaises(ValueError):
+            terminal_retry_packet(retry, request, read_json(self.call/'decision-1.response.json'),
+                                  read_json(self.call/'dispatch-count.json'))
+
+    def test_terminal_cost_or_request_limit_never_changes_ledger(self):
+        path = self.ledger/'budget.json'; original = read_json(path)
+        for update in ({'known_cost_usd': .004}, {'carry_in_requests': 4}):
+            value = deepcopy(original); value.update(update); write_json(path, value)
+            before = path.read_bytes()
+            with self.assertRaises(ValueError): self.recover()
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_terminal_requires_exact_503_not_timeout_or_completed_answer(self):
+        path = self.call/'decision-1.response.json'; base = read_json(path)
+        ledger = (self.ledger/'budget.json').read_bytes()
+        for change in ({'http': None}, {'http': 200}, {'http': 401}, {'response': {}}, {'wire_request_digest': 'other'}):
+            value = deepcopy(base); value.update(change); write_json(path, value)
+            with self.assertRaises(ValueError): self.recover()
+            self.assertEqual((self.ledger/'budget.json').read_bytes(), ledger)
+
+    def test_terminal_preserves_unrelated_uncertainty(self):
+        path = self.ledger/'budget.json'; value = read_json(path)
+        other = deepcopy(value['attempts'][0]); other.update(output=str(self.root/'other'),packet_digest='other')
+        value['attempts'].append(other); write_json(path, value)
+        with self.assertRaises(ValueError): self.recover()
+        self.assertEqual(read_json(path), value)
+
+    def test_terminal_stale_authority_is_not_retried(self):
+        self.state['authority_revision'] = 'changed'
+        with self.assertRaises(ValueError): self.recover()
 
 
 if __name__ == '__main__': unittest.main()

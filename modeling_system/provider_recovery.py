@@ -9,7 +9,114 @@ from pathlib import Path
 import math
 
 from .controller import fingerprint, read_json, write_json
-from .typesafe_transport import validate_response_receipt
+from .typesafe_transport import MODEL, ROUTE, validate_response_receipt
+
+SETTLED_PROVIDER = {'response_validated', 'verified_no_dispatch', 'terminal_http_error'}
+
+
+def terminal_retry_packet(packet, request, response, dispatch):
+    """One explicit retry lineage for a recorded HTTP503; no timeout inference."""
+    from .judgments import validate_questions
+    validate_questions(packet['questions'])
+    wire = {'model': MODEL, 'state': packet['state'], 'questions': packet['questions']}
+    if ('provider_retry' in packet['local_binding'] or response.get('http') != 503
+            or 'response' in response or response.get('transport') != ROUTE
+            or request.get('transport') != ROUTE or request.get('request') != wire
+            or request.get('local_binding') != packet['local_binding']
+            or request.get('wire_request_digest') != fingerprint(wire)
+            or response.get('wire_request_digest') != fingerprint(wire)
+            or dispatch.get('calls_attempted') != 1 or dispatch.get('transport') != ROUTE):
+        raise ValueError('Exact first-attempt terminal HTTP503 with no answer required; no retry chains')
+    result = deepcopy(packet)
+    result['local_binding']['provider_retry'] = {'ordinal': 1,
+        'original_packet_digest': fingerprint(packet), 'failed_response_digest': fingerprint(response)}
+    return result
+
+
+def prepare_terminal_retry(call_directory, ledger_directory, current_reader, *, reason):
+    """Debit the original reservation once and permit one distinct bounded retry.
+
+    This is a conservative accounting allowance, not reported provider billing.
+    Original call count and failed receipts stay intact. The existing dispatcher
+    must reserve/record the new packet normally; this function sends nothing.
+    """
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError('Explicit owner reason for one terminal-error retry required')
+    call, directory = Path(call_directory).resolve(), Path(ledger_directory).resolve()
+    lock = directory / 'dispatch.lock'
+    with lock.open('x', encoding='utf-8') as stream:
+        stream.write('terminal HTTP response reconciliation')
+    try:
+        path = directory / 'budget.json'
+        ledger = read_json(path)
+        matching = [a for a in ledger['attempts'] if Path(a['output']).resolve() == call]
+        if len(matching) != 1 or matching[0]['status'] not in ('failed_or_uncertain', 'terminal_http_error'):
+            raise ValueError('Exact failed terminal response attempt required')
+        entry = matching[0]
+        packet = read_json(call / 'owner-packet.json')
+        if fingerprint(packet) != entry['packet_digest'] or read_json(entry['source_packet']) != packet:
+            raise ValueError('Original owner packet changed')
+        request, response, dispatch = [read_json(call / name) for name in
+            ('decision-1.request.json', 'decision-1.response.json', 'dispatch-count.json')]
+        retry = terminal_retry_packet(packet, request, response, dispatch)
+        check_current(packet, current_reader())
+        policy = ledger.get('policy')
+        max_requests, max_cost = (4, .005) if policy is None else (policy.get('max_requests'), policy.get('max_cost_usd'))
+        if (policy is not None and (policy.get('mode') != 'normal_use' or not policy.get('authority'))
+                or type(max_requests) is not int or not 1 <= max_requests <= 128
+                or type(max_cost) not in (int, float) or not math.isfinite(max_cost) or not 0 < max_cost <= .005):
+            raise ValueError('Existing authorized budget limits required')
+        reserve = entry.get('reserved_usd')
+        total, debited = ledger['known_cost_usd'], entry.get('conservative_cost_debit_usd', 0.)
+        if (any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in (reserve, total, debited))
+                or reserve <= 0 or debited not in (0., reserve) or entry.get('estimated_cost_usd', 0.) != 0):
+            raise ValueError('Original reservation and unbilled terminal-response accounting required')
+        existing = [a for a in ledger['attempts'] if a['packet_digest'] == fingerprint(retry)]
+        if len(existing) > 1:
+            raise ValueError('Retry identity has multiple attempts')
+        unresolved = [a for a in ledger['attempts'] if a is not entry and a not in existing
+                      and a['status'] not in SETTLED_PROVIDER]
+        if unresolved:
+            raise ValueError('Unrelated unresolved provider attempts must remain blocked')
+        carried = ledger.get('carry_in_requests', 0)
+        if type(carried) is not int or carried < 0:
+            raise ValueError('Valid original carried request count required')
+        used = carried + sum(a['status'] != 'verified_no_dispatch' for a in ledger['attempts'])
+        conservative_total = total + (reserve - debited)
+        if not existing and (used + 1 > max_requests or conservative_total + reserve > max_cost):
+            raise ValueError('Original conservative debit plus one new reservation exceeds existing budget')
+        before = call / ('terminal-before-' + fingerprint(ledger) + '.json')
+        if not before.exists(): write_json(before, ledger)
+        receipt_path = call / 'terminal-retry.json'
+        original_evidence = entry.get('terminal_retry', {}).get('original_ledger_evidence', str(before))
+        result = {'status': 'terminal_retry_prepared', 'original_call': str(call),
+            'original_packet_digest': fingerprint(packet), 'failed_response_digest': fingerprint(response),
+            'retry_packet_digest': fingerprint(retry), 'retry_packet': retry, 'retry_limit': 1,
+            'policy_digest': fingerprint(policy), 'conservative_cost_debit_usd': reserve,
+            'cost_basis': 'original_reservation_upper_bound_not_reported_billing',
+            'original_ledger_evidence': original_evidence, 'reason': reason,
+            'provider_calls_added': 0, 'native_dispatch': False}
+        if receipt_path.exists():
+            original = read_json(receipt_path)
+            if any(original.get(k) != result[k] for k in
+                   ('original_packet_digest', 'failed_response_digest', 'retry_packet_digest', 'policy_digest')):
+                raise ValueError('Original retry lineage or budget policy changed')
+            result = original
+        else:
+            write_json(receipt_path, result)
+        entry.update(status='terminal_http_error', conservative_cost_debit_usd=reserve,
+            terminal_retry={k: result[k] for k in ('retry_packet_digest', 'original_ledger_evidence')})
+        ledger['known_cost_usd'] = conservative_total
+        ledger['cost_basis'] = 'historical_cost_and_token_estimates_plus_explicit_conservative_debits'
+        # Do not clear or repeat an already attempted retry. Its own effect stays
+        # unresolved unless a completed answer can be reconciled normally.
+        outstanding = [a for a in ledger['attempts'] if a['status'] not in SETTLED_PROVIDER]
+        ledger['reserved_usd'] = sum(a.get('reserved_usd', 0.) for a in outstanding if a['status'] == 'reserved')
+        ledger['status'] = 'needs_reconciliation' if outstanding else 'ready'
+        write_json(path, ledger)
+        return result
+    finally:
+        lock.unlink()
 
 
 def check_current(packet, current):
@@ -96,7 +203,7 @@ def reconcile_completed_response(call_directory, ledger_directory, current_reade
         entry['completed_response_recovery'] = {'original_evidence': original_evidence,
             'response_digest': fingerprint(response)}
         ledger['known_cost_usd'] = total + delta
-        unresolved = [a for a in ledger['attempts'] if a['status'] not in ('response_validated', 'verified_no_dispatch')]
+        unresolved = [a for a in ledger['attempts'] if a['status'] not in SETTLED_PROVIDER]
         ledger['reserved_usd'] = sum(a.get('reserved_usd', 0.) for a in unresolved
                                      if a['status'] == 'reserved')
         ledger['status'] = 'needs_reconciliation' if unresolved else 'ready'

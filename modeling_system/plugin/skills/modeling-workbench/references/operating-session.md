@@ -230,6 +230,23 @@ exhaustion; explicitly inspect and supply its path as `response_path` to the
 ledger helper. Do not guess among temporary files, repeat HTTP or replay Blender
 work. The transport records response and cost metadata together in one write.
 
+A recorded terminal HTTP503 with no answer uses a separate explicit retry path.
+`provider_recovery.prepare_terminal_retry(call, ledger, current_reader, reason=...)`
+verifies the original request and terminal receipt, preserves its failed identity,
+and conservatively debits the original reserved cost once. This debit is an upper
+bound, not reported billing. It admits one new packet with a local `provider_retry`
+lineage only if the existing request and cost limits cover both attempts. The wire
+questions are unchanged; the ordinary dispatcher still reserves and records the
+new attempt. The helper itself performs no HTTP or native work.
+
+After the new attempt returns a valid answer, reconcile its completed response
+normally. Supply the original call's `terminal-retry.json` as `terminal_retry_path`
+to `recover_completed_selection`; both failed and successful calls become pinned
+selection evidence. No request is relabeled not-dispatched, and no native handler
+is replayed. A timeout, missing receipt, other status, changed inputs, unrelated
+uncertain attempt or second terminal error cannot use this one-retry route. Stop
+under the existing attempt identity; do not manufacture fresh IDs to retry again.
+
 Run existing `record_outcome`, `reconcile_episode`, `promote_procedure` and
 `retrieve_experience` through the episode as before. Preserve failures and exact
 limits. A useful method is learned only with its supported judgment and actual

@@ -105,6 +105,46 @@ class OperatingTests(unittest.TestCase):
         with self.assertRaises(FileExistsError): session.recover_completed_selection(**args)
         self.assertEqual(self.ran, [])
 
+    def test_explicit_terminal_retry_keeps_both_calls_and_releases_only_new_answer(self):
+        from .judgments import prepare_judgments
+        from .provider_recovery import prepare_terminal_retry, reconcile_completed_response
+        from .test_provider_recovery import completed_call
+        self.items = [self.item('first'), self.item('second')]
+        captured = {}
+        def terminal(state, decisions, binding):
+            packet = prepare_judgments(state, decisions, binding)
+            ledger, call = completed_call(self.root, packet)
+            receipt = read_json(call/'decision-1.response.json'); receipt.pop('response'); receipt['http'] = 503
+            write_json(call/'decision-1.response.json', receipt)
+            budget = read_json(ledger/'budget.json'); budget['known_cost_usd'] = 0.
+            budget['attempts'][0]['estimated_cost_usd'] = 0.
+            write_json(ledger/'budget.json', budget)
+            captured.update(ledger=ledger, call=call)
+            raise RuntimeError('Terminal HTTP503')
+        session = self.session(judge=terminal)
+        self.assertEqual(session.run(max_steps=1)['status'], 'needs_reconciliation')
+        ledger, original = captured['ledger'], captured['call']
+        retry = prepare_terminal_retry(original, ledger, session.observe, reason='One explicit retry')
+        retry_root = self.root/'new-attempt'; retry_root.mkdir()
+        temporary_ledger, call = completed_call(retry_root, retry['retry_packet'])
+        budget = read_json(ledger/'budget.json'); additional = read_json(temporary_ledger/'budget.json')
+        budget['attempts'].extend(additional['attempts'])
+        budget['known_cost_usd'] += additional['known_cost_usd']
+        write_json(ledger/'budget.json', budget)
+        reconcile_completed_response(call, ledger, session.observe)
+        selection = read_json(self.root/'queue/controller/controller.json')['selection']
+        result = session.recover_completed_selection(expected_selection=fingerprint(selection),
+            packet_path=call/'owner-packet.json', request_path=call/'decision-1.request.json',
+            response_path=call/'decision-1.response.json',
+            reconciliation_path=call/'completed-response-reconciliation.json',
+            terminal_retry_path=original/'terminal-retry.json')
+        self.assertEqual(result['terminal_retry_lineage']['original_http'], 503)
+        self.assertEqual(result['terminal_retry_lineage']['ordinal'], 1)
+        self.assertEqual(self.ran, [])
+        self.assertEqual(read_json(original/'decision-1.response.json')['http'], 503)
+        session.run(max_steps=1)
+        self.assertEqual(self.ran, ['first'])
+
     def test_real_episode_receipts_and_fresh_results_enter_next_decision(self):
         first = self.item('diagnose')
         self.items = [first, self.item('left', requires={'diagnose': ['completed']}),

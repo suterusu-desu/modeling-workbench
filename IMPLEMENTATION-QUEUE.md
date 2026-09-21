@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.22
+# Current operating integration: 0.2.22.1
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -14,6 +14,7 @@ route. See [DESIGN.md](DESIGN.md) and the packaged operating-session contract.
 | Old queue work could be lost or replayed during adoption | Attach existing settled receipts with historical provenance; known-result recovery repairs indexes without dispatch | Historical-byte preservation and crash-recovery cases |
 | Known projection refusal looked like uncertain inference | Typed no-dispatch refusal and evidence-bound recovery of older pending selections | No provider call or history deletion; exact pending-selection identity required |
 | Windows reader contention interrupted completed provider metadata | Shared bounded atomic-write retry; one complete response write, with accounting known before persistence; exhausted rename preserves the complete temporary receipt | Injected transient/exhausted sharing failures and no HTTP repeat |
+| A recorded HTTP503 with no answer could not leave reconciliation | Explicit one-retry lineage, original-reservation conservative debit, unchanged budget admission and separate completed-retry evidence | No timeout inference, no no-dispatch relabel, no retry chains or native replay |
 | Completed provider answers needed ad hoc recovery | Exact wire/packet/model/usage validation, idempotent existing-ledger reconciliation and episode-linked selection recovery | Stale inputs, changed menus, wrong answers, interrupted accounting and restart resume cases |
 | Unchanged selection context could repeat priority inference | Durable exact full-decision reuse, including deferrals, plus scoped conditional reuse | Changed public facts or operation revisions invalidate reuse; no inference on identical restart |
 | Preparation input/output mistakes were hard to locate | Dependency conflicts identify the key and prerequisite; operator examples distinguish generated outputs from input reads | Existing dependency contracts preserved |
