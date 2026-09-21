@@ -12,7 +12,16 @@ LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
 # Advance when selection question meanings or their composition change.
-SELECTION_POLICY = 'qualified-lanes-v2'
+SELECTION_POLICY = 'qualified-lanes-v3'
+LANE_QUESTIONS = {
+    'diagnosis': 'Which offered observation best distinguishes the remaining plausible causes and changes the next edit?',
+    'repair': 'Which offered qualified method best addresses the observed failure mechanism while preserving retained gains?',
+    'verification': 'Which offered verification resolves a concrete structural or realization concern using the least new work?',
+    'review': 'Which offered evidence preparation makes the unresolved appearance question assessable with matched views?',
+    'recovery': 'Which offered recovery matches the recorded failure and known effects without repeating an uncertain operation?',
+    'experience': 'Which offered experience retrieval best supplies an applicable method or warns against repeating the observed failure?',
+    'preparation': 'Which offered preparation resolves the missing correspondence, support or input needed for a useful edit?',
+}
 
 
 class WorkQueue:
@@ -221,11 +230,13 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                 resolved[lane] = cached
             else:
                 decisions.append({'id': lane, 'type': 'choice', 'instructions': {
-                    'question': 'If work in this lane is next, which offered operation most usefully advances the current modeling goal?',
+                    'question': 'If this lane is next: ' + LANE_QUESTIONS[lane],
                     'lane': lane, 'facts': public.get('lane_facts', {}).get(lane, {}),
                     'limits': 'Use supplied evidence, applicability and failures. Avoid redundant work and repeated failed mechanisms. Defer when no offered operation applies; do not infer appearance acceptance or authorize unsupported geometry.'},
                     'options': options + [{'id': DEFER, 'description': 'No applicable operation: return missing evidence or capability to the reasoning owner.'}]})
-        decisions.append({'id': 'next_lane', 'type': 'choice',
+        fixed_lane = next(iter(grouped)) if len(grouped) == 1 else None
+        if fixed_lane is None:
+            decisions.append({'id': 'next_lane', 'type': 'choice',
             'instructions': 'Which available work lane best advances the goal now? Prioritize dominant observed defects and resolving uncertainty that changes an edit; avoid unnecessary review or bookkeeping. Lane answers are independent; choose defer if the available work cannot usefully proceed.',
             'options': [{'id': lane, 'description': {'lane': lane,
                 'facts': public.get('lane_facts', {}).get(lane, {}),
@@ -233,13 +244,13 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                 for lane, offered in grouped.items()] + [{'id': DEFER, 'description': 'Need new capability, conflicting-evidence resolution or actual visual interpretation.'}]})
         from .judgments import prepare_judgments
         try:
-            packet = prepare_judgments(public['state'], decisions, binding)
+            packet = prepare_judgments(public['state'], decisions, binding) if decisions else None
         except ValueError as error:
             raise SelectionNotDispatched(str(error)) from error
         selection = {'state': snapshot, 'actions': actions, 'plan': plan}
         batch = {'selection_key': selection_key, 'public': public, 'packet': packet,
             'binding': binding, 'grouped': grouped, 'resolved': resolved,
-            'lane_keys': lane_keys, 'decisions': decisions}
+            'lane_keys': lane_keys, 'decisions': decisions, 'fixed_lane': fixed_lane}
         # Retain the exact fan-out and cached branches before any provider call.
         # Recovery never has to reconstruct questions from a later cache state.
         try:
@@ -248,7 +259,9 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
             raise SelectionNotDispatched('Could not retain selection preparation; inference was not called') from error
         if prepare_only:
             return deepcopy(batch)
-        return self._complete(batch, self.judge(public['state'], decisions, binding))
+        result = self.judge(public['state'], decisions, binding) if decisions else {
+            'binding': binding, 'judgments': {}, 'provider_receipt': None}
+        return self._complete(batch, result)
 
     def recover_completed(self, selection, packet, response, provider_receipt):
         from .judgments import resolve_judgments
@@ -273,7 +286,7 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                     raise ValueError('Lane choice outside menu')
                 resolved[lane] = answer
                 self.cache[lane_keys[lane]] = deepcopy(answer)
-        lane = answers['next_lane']['choice']
+        lane = batch.get('fixed_lane') or answers['next_lane']['choice']
         if lane == DEFER or lane in resolved and resolved[lane]['choice'] == DEFER:
             choice = {'status': 'needs_review', 'reason': 'Jev found no applicable next operation',
                     'evidence': [str(self.directory / 'last-batch.json')]}

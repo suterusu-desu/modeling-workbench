@@ -36,6 +36,14 @@ flowchart TD
 | Effect and observation | Execute directly, protect user work, save actual results and report what happened. Native writes are serial. | Controller, native adapter, worker contract, transaction/job receipts, operation journal |
 | Learning | Distinguish local character gain, technical execution and method benefit. Preserve cause, failure, scope and actual reuse. | `record_outcome`, `reconcile_episode`, `promote_procedure`, `retrieve_experience` |
 
+Repeated candidate work uses `CandidatePipeline` to materialize qualified stages
+from actual predecessor results. It freezes dependency bindings and composes the
+existing work frontier; it does not introduce another executor or evidence store.
+Recorded-array guide fitting supplies section provenance, bounded interpolation,
+material allocation and explicit displacement coordinates below the capability
+layer. Session metrics join observed runtime, actual reviews and reported Astra
+interventions so workload improvements can be evaluated without invented speedups.
+
 Every row has links to the rows above and below. A short observation expands to
 an exact operation, input identity, original artifact, procedure and judgment.
 The queue is an execution index; native files, generation jobs, episode records

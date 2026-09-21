@@ -89,22 +89,12 @@ def plane_sections(arrays, axis, value, selection=None):
     if axis not in (0,1,2) or not np.isfinite(value):
         raise ValueError('A finite plane and XYZ axis index are required')
     ids = select_triangles(arrays, selection)
-    tris = arrays['co'][arrays['tri'][ids]]
-    ds = tris[:,:,axis]-value
-    candidate = (ds.min(axis=1) <= 0) & (ds.max(axis=1) >= 0) if len(tris) else np.array([], dtype=bool)
-    segments=[]; owners=[]; coplanar=0
-    for tri_id, tri, d in zip(ids[candidate],tris[candidate],ds[candidate]):
-        if np.all(np.abs(d) < 1e-12): coplanar += 1; continue
-        points=[]
-        for i,j in ((0,1),(1,2),(2,0)):
-            if abs(d[i]) < 1e-12: points.append(tri[i])
-            if d[i]*d[j] < 0: points.append(tri[i]+(tri[j]-tri[i])*(-d[i]/(d[j]-d[i])))
-        unique=[]
-        for point in points:
-            if not any(np.linalg.norm(point-q) < 1e-12 for q in unique): unique.append(point)
-        if len(unique)==2:
-            segments.append([q.tolist() for q in unique]);owners.append(int(tri_id))
-    return {'segments': segments, 'segment_count': len(segments), 'triangle_indices': owners, 'coplanar_triangles_excluded': coplanar,
+    from .guide_fitting import triangle_sections
+    cut = triangle_sections(arrays['co'], arrays['tri'][ids], value, axis=axis)
+    segments = cut['segments'].tolist()
+    return {'segments': segments, 'segment_count': len(segments),
+            'triangle_indices': ids[cut['triangles']].tolist(),
+            'coplanar_triangles_excluded': len(cut['coplanar_triangles']),
             'eligible_triangles': len(ids), 'definition': 'Fixed plane intersections with recorded native triangles'}
 
 

@@ -27,6 +27,12 @@ The [persistent controller](modeling_system/plugin/skills/modeling-workbench/ref
 
 The [TypeSafe integration](modeling_system/plugin/skills/modeling-workbench/references/judgments.md) provides typed Jev judgments through the direct API. Your private workspace supplies credentials, usage accounting and the qualified action catalog. See the [operating-session contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) to connect the controller, queue, adapter and evidence records.
 
+The [candidate pipeline](modeling_system/plugin/skills/modeling-workbench/references/candidate-pipeline.md)
+reuses measured guide sections and material paths, preserves explicit interpolation
+provenance, and continues selected candidates through verification and reviewed
+retention. Session accounting separates inference, native execution and reported
+Astra work so optimization follows observed bottlenecks.
+
 ## What can I use today?
 
 This is an experimental workbench for technical artists and developers building characters with an AI assistant. You can create a private character workspace, inspect recorded geometry, compare surfaces, qualify reference support, organize recoverable experiments, and reuse supported diagnostic recipes.

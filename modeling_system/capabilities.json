@@ -563,6 +563,25 @@
         "execution": "One episode and journal over the existing workbench",
         "judgment": "Current findings automatically enter the next Jev decision; scoped Astra feedback stays separate"
       }
+    },
+    {
+      "name": "Reusable section fitting and candidate continuation",
+      "route": "guide_fitting / CandidatePipeline / OperatingSession.metrics / OperatingSession.record_intervention",
+      "implementation": "core + qualified private handlers",
+      "verification": "Synthetic section, interpolation, coordinate-space and recoverable lifecycle tests. Actual native qualification and visual outcomes remain workspace evidence.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "diagnosis",
+          "repair",
+          "verification",
+          "review",
+          "recovery",
+          "experience"
+        ],
+        "execution": "Existing OperatingSession compiles frozen stage catalogs and continues fixed obligations from actual results.",
+        "judgment": "Jev selects meaningful preparation and candidate alternatives; Astra interprets images and supplies genuinely new mechanisms."
+      }
     }
   ],
   "limits": [

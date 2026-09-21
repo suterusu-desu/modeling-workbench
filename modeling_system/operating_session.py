@@ -8,7 +8,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import inspect
 import json
+import math
 from pathlib import Path
+import time
 
 from .controller import applicable, fingerprint, read_json, write_json
 from .episodes import pin_link
@@ -16,6 +18,7 @@ from .journal import EPISODE, ACTIVE_CALL, invoke
 from .leases import LEASE
 from .store import canonical, digest
 from .work_queue import WorkQueue, LaneSelector
+from .session_metrics import session_metrics
 
 
 # Input names denote evidence relationships, not invented anatomical bindings.
@@ -93,6 +96,7 @@ def inspect_session(service, directory):
             'recovery': 'Reconcile original operation handle; never replay uncertain effects'}
             for key, row in queue['results'].items()},
         'reviews': _reviews(service, directory),
+        'metrics': session_metrics(directory),
         'detail': {'episode': binding['episode'], 'operation': 'decision_workspace'}}
 
 
@@ -362,6 +366,7 @@ class OperatingSession(WorkQueue):
             # Existing procedure and policy lookup stays in the common service.
             decision_context = self.service.capture_operation_context(
                 contract.get('stage', item['lane']), {'mechanism': contract['method']})
+            started = time.perf_counter()
             result = self.private_handlers[item['handler']](item, context)
             if not isinstance(result, dict) or result.get('status') not in SETTLED | {'needs_reconciliation'}:
                 raise ValueError('Capability must return an explicit execution disposition')
@@ -369,6 +374,7 @@ class OperatingSession(WorkQueue):
             # failure cannot erase successful work or make it safe to repeat.
             handle = self.record['results'][item['id']]['operation_handle']
             result = deepcopy(result)
+            result['handler_elapsed_ms'] = round((time.perf_counter() - started) * 1000, 3)
             result['operation_context_record'] = decision_context['context_record']
             write_json(self.service.store.root / 'calls' / handle / 'capability-result.json', result)
             result['workbench'] = self._report(item, result, context)
@@ -405,6 +411,25 @@ class OperatingSession(WorkQueue):
                 'user_acceptance': 'not implied'})
         write_json(self.directory / 'reviews' / (result['operation_handle'] + '.json'), result)
         return result
+
+    def record_intervention(self, *, kind, reason, evidence, seconds=None):
+        """Retain actual Astra work; time is explicitly reported, never inferred."""
+        from .session_metrics import INTERVENTION_KINDS
+        if (kind not in INTERVENTION_KINDS or not reason or not evidence or
+                seconds is not None and (type(seconds) not in (float, int)
+                or not math.isfinite(seconds) or seconds < 0)):
+            raise ValueError('Known intervention kind, reason, evidence and optional actual duration required')
+        self._validate_episode(self.owner)
+        pinned = [pin_link(self.service, link) for link in evidence]
+        data = {'kind': kind, 'reason': reason, 'seconds': seconds, 'evidence': pinned}
+        result = self.service._run_episode_callback(self.episode, 'record_astra_intervention', data,
+            lambda: {**deepcopy(data), 'status': 'completed',
+                     'submitted_at': datetime.now(timezone.utc).isoformat()})
+        write_json(self.directory / 'interventions' / (result['operation_handle'] + '.json'), result)
+        return result
+
+    def metrics(self):
+        return session_metrics(self.directory)
 
     def recover(self, task):
         """Restore only an already returned, qualified result; never call a handler."""

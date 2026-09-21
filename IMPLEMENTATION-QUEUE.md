@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.22.4
+# Current operating integration: 0.2.23
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -7,6 +7,9 @@ route. See [DESIGN.md](DESIGN.md) and the packaged operating-session contract.
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Repeated fitting helpers and copied candidate wrappers consumed reasoning work | Recorded section/material fitting, explicit displacement coordinates and CandidatePipeline factories over the existing session | Synthetic geometry, bounded gap provenance, preserved boundaries and review-gated resume; actual native use is recorded privately |
+| One available lane still required a priority judgment | Purpose-specific diagnosis/method/evidence/recovery questions; one action/defer question for a single lane | Exact retained-answer recovery and fresh dependency validation preserved |
+| Provider latency alone obscured the workload bottleneck | Session stage/native timings, actual reviews and evidence-linked reported Astra interventions | Unknown manual effort and avoided turns remain unknown; no automatic speedup or appearance claim |
 | Queue/native results lived beside workbench evidence | Selected capabilities enter existing episode leases and durable operation facts; exact inputs, procedure context and output evidence remain linked | Synthetic composed lifecycle; installed actual use retained privately |
 | Fresh qualification findings could be omitted from the next Jev choice | Automatic scoped findings and review feedback, bound to current dependencies and public observation revisions | No-op/other-region gain and mid-selection invalidation cases |
 | Modeling obligations had to be carried ad hoc | Profile input relationships, required evidence checks, consumed results and exact candidate review dependencies | Missing support refuses before dispatch; technical completion cannot invent evidence |

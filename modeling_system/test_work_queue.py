@@ -135,6 +135,16 @@ class LaneSelectorTests(unittest.TestCase):
         self.selector()(self.snapshot, self.actions, self.plan)
         self.assertEqual(len(self.calls), 1)
 
+    def test_single_lane_keeps_operation_defer_without_redundant_priority(self):
+        self.actions[1]['lane'] = 'diagnosis'
+        selector = self.selector()
+        self.assertEqual(selector(self.snapshot, self.actions, self.plan), 'inspect')
+        self.assertEqual([d['id'] for d in self.calls[0]], ['diagnosis'])
+        self.assertIn('distinguishes', self.calls[0][0]['instructions']['question'])
+        self.defer = True
+        self.actions[0]['reads']['source'] = 'v2'
+        self.assertEqual(selector(self.snapshot, self.actions, self.plan)['status'], 'needs_review')
+
     def test_changed_public_facts_invalidate_exact_deferral(self):
         self.defer = True
         selector = self.selector()
