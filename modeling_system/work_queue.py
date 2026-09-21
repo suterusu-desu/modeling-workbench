@@ -1,0 +1,245 @@
+"""Dependency-aware work across modeling lanes, executed by one native owner.
+
+Adapters supply qualified operations and observed revisions. Jev selects work;
+this module handles durable completion, prerequisites and exact invalidation.
+Neither metadata nor an inference result supplies modeling authority.
+"""
+from copy import deepcopy
+from pathlib import Path
+from .controller import PersistentController, SelectionNotDispatched, fingerprint, read_json, write_json
+
+LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
+         'experience', 'preparation')
+DEFER = '__needs_review__'
+
+
+class WorkQueue:
+    def __init__(self, directory, *, owner, goal, observe_context, catalog, handlers, select):
+        self.directory = Path(directory)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.owner, self.goal = owner, deepcopy(goal)
+        self.observe_context, self.catalog = observe_context, catalog
+        self.handlers, self.select = handlers, select
+        self.path = self.directory / 'work-queue.json'
+        self.record = read_json(self.path) if self.path.exists() else {
+            'owner': owner, 'goal': fingerprint(goal), 'results': {}}
+        if self.record['owner'] != owner or self.record['goal'] != fingerprint(goal):
+            raise ValueError('Queue belongs to a different owner or goal')
+        self.items = {}
+
+    def _context(self):
+        state = deepcopy(self.observe_context())
+        if state.get('owner') != self.owner or not state.get('authority_revision'):
+            raise ValueError('Current owner and authority required')
+        if not isinstance(state.get('values'), dict) or not state['values']:
+            raise ValueError('Fresh observed revisions required')
+        if not isinstance(state.get('active_operations'), list):
+            raise ValueError('Actual execution lane state required')
+        scope = fingerprint({'goal': self.goal, 'authority': state['authority_revision']})
+        state['values']['work_queue_scope'] = scope
+        state['stage'] = 'shared modeling work queue'
+        return state
+
+    def observe(self):
+        state = self._context()
+        if any(r.get('status') in ('running', 'needs_reconciliation') for r in self.record['results'].values()):
+            raise ValueError('Uncertain queue effect; reconcile the original receipt')
+        supplied = self.catalog(deepcopy(state), deepcopy(self.record['results']))
+        if not isinstance(supplied, list) or len(supplied) > 128:
+            raise ValueError('Catalog must be a bounded list of useful work')
+        items = {}
+        for item in supplied:
+            item = deepcopy(item)
+            if (not isinstance(item.get('id'), str) or not item['id'] or item['id'] in items
+                    or item.get('lane') not in LANES or not item.get('revision')
+                    or item.get('handler') not in self.handlers
+                    or not item.get('description') or not item.get('completion_condition')):
+                raise ValueError('Unique qualified work with executable handler and completion condition required')
+            if (not isinstance(item.get('reads'), dict) or not item['reads']
+                    or not isinstance(item.get('writes'), list)
+                    or not set(item['writes']) <= set(item['reads'])):
+                raise ValueError('Work requires relevant reads and covered writes')
+            item.setdefault('requires', {})
+            if (not isinstance(item['requires'], dict) or any(
+                    not isinstance(statuses, list) or not statuses or
+                    not set(statuses) <= {'completed', 'failed', 'no_progress'}
+                    for statuses in item['requires'].values())):
+                raise ValueError('Prerequisites require explicit settled outcomes')
+            items[item['id']] = item
+        self.items = items
+        definitions = {key: fingerprint(item) for key, item in items.items()}
+        outcomes = self.record['results']
+        # Detect cycles and missing prerequisites rather than calling them done.
+        visited = set()
+        def visit(key, parents):
+            if key in parents:
+                raise ValueError('Cyclic work prerequisites')
+            if key in visited:
+                return
+            for dep in items[key]['requires']:
+                if dep not in items:
+                    raise ValueError('Missing prerequisite work item')
+                visit(dep, parents | {key})
+            visited.add(key)
+        for key in items:
+            visit(key, set())
+        inherited = {}
+        def dependency_reads(key):
+            if key not in inherited:
+                values = dict(items[key]['reads'])
+                for dep in items[key]['requires']:
+                    for name, revision in dependency_reads(dep).items():
+                        # A prerequisite's writes have post-effect revisions that
+                        # the dependent operation must bind from actual receipts.
+                        if name in items[dep]['writes']:
+                            continue
+                        if name in values and values[name] != revision:
+                            raise ValueError('Conflicting prerequisite input revisions')
+                        values[name] = revision
+                inherited[key] = values
+            return inherited[key]
+        actions, blocked = [], {}
+        all_settled = bool(items)
+        for key, item in items.items():
+            result = outcomes.get(key, {})
+            matching = result.get('definition') == definitions[key]
+            settled = matching and result.get('status') in ('completed', 'failed', 'no_progress')
+            if matching and result.get('status') in ('running', 'needs_reconciliation'):
+                raise ValueError('Uncertain queue effect; reconcile the original receipt')
+            if settled:
+                continue
+            all_settled = False
+            reads = deepcopy(dependency_reads(key))
+            reads['work_queue_scope'] = state['values']['work_queue_scope']
+            ready = not item.get('blocked') and all(state['values'].get(k) == v for k, v in reads.items())
+            for dep, allowed in item['requires'].items():
+                prior = outcomes.get(dep, {})
+                matches = prior.get('definition') == definitions[dep] and prior.get('status') in allowed
+                token = fingerprint(prior)
+                state['values']['work_result:' + dep] = token
+                reads['work_result:' + dep] = token
+                ready = ready and matches
+            if not ready:
+                blocked[key] = 'Blocked, stale dependency or unmet prerequisite'
+                continue
+            actions.append({'id': key, 'revision': definitions[key], 'lane': item['lane'],
+                'description': deepcopy(item['description']),
+                'completion_condition': item['completion_condition'],
+                'reads': reads, 'writes': item['writes'], 'required': bool(item.get('required', False))})
+        state.update(actions=actions, done=all_settled and all(
+            outcomes.get(key, {}).get('status') == 'completed' for key in items),
+            observations={'public': deepcopy(state.get('public_state', {})),
+                          'blocked': blocked,
+                          'settled': {k: v['status'] for k, v in outcomes.items()}},
+            planner_reads={'work_queue_scope': state['values']['work_queue_scope']})
+        return state
+
+    def execute(self, action, context):
+        item = deepcopy(self.items[action['id']])
+        if fingerprint(item) != action['revision']:
+            raise ValueError('Work definition changed before execution')
+        entry = {'definition': action['revision'], 'status': 'running',
+                 'lane': item['lane'], 'attempt_key': context['attempt_key']}
+        self.record['results'][item['id']] = entry
+        write_json(self.path, self.record)
+        try:
+            result = self.handlers[item['handler']](item, context)
+            if (not isinstance(result, dict) or result.get('status') not in
+                    ('completed', 'failed', 'no_progress', 'needs_reconciliation')):
+                raise ValueError('Handler must return an explicit outcome and evidence')
+            entry.update(status=result['status'], result=deepcopy(result))
+        except BaseException:
+            entry['status'] = 'needs_reconciliation'
+            write_json(self.path, self.record)
+            raise
+        write_json(self.path, self.record)
+        return result
+
+    def run(self, *, max_steps, on_status=None):
+        state = self._context()
+        plan = {'objective': self.goal['objective'], 'authority_revision': state['authority_revision'],
+                'stage': state['stage'], 'reads': {'work_queue_scope': state['values']['work_queue_scope']}}
+        with PersistentController(self.directory / 'controller', owner=self.owner,
+                observe=self.observe, execute=self.execute, select=self.select,
+                initial_plan=plan, on_status=on_status) as controller:
+            return controller.run(max_steps=max_steps)
+
+
+class LaneSelector:
+    """Batch next-lane and conditional lane choices; retain exact applicable advice.
+
+judge(public_state, decisions, binding) returns resolve_judgments output.
+The workspace callback owns transport, credential, ledger and fresh release.
+project(snapshot, actions, plan) must provide reviewed public state, lane-specific
+facts and descriptions keyed by action ID; private IDs/payloads never go on wire.
+"""
+    def __init__(self, directory, *, judge, project):
+        self.directory = Path(directory)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.judge, self.project = judge, project
+        self.path = self.directory / 'lane-advice.json'
+        self.cache = read_json(self.path) if self.path.exists() else {}
+
+    def __call__(self, snapshot, actions, plan):
+        public = self.project(deepcopy(snapshot), deepcopy(actions), deepcopy(plan))
+        if (not isinstance(public.get('state'), dict)
+                or set(public.get('descriptions', {})) != {a['id'] for a in actions}):
+            raise SelectionNotDispatched('Complete reviewed public projection required; inference was not called')
+        grouped = {lane: [a for a in actions if a['lane'] == lane] for lane in LANES}
+        grouped = {k: v for k, v in grouped.items() if v}
+        reads = {}
+        for action in actions:
+            for k, v in action['reads'].items():
+                if k in reads and reads[k] != v:
+                    raise SelectionNotDispatched('Conflicting evidence revisions; inference was not called')
+                reads[k] = v
+        binding = {'owner': snapshot['owner'], 'authority_revision': snapshot['authority_revision'],
+            'dependencies': {'reads': reads, 'writes': sorted({k for a in actions for k in a['writes']})},
+            'menu': fingerprint(actions), 'plan': fingerprint(plan)}
+        decisions, lane_keys, resolved = [], {}, {}
+        # Choices for different lanes share state but never assume other answers.
+        for lane, offered in grouped.items():
+            options = [{'id': a['id'], 'description': public['descriptions'][a['id']]} for a in offered]
+            lane_key = fingerprint({'lane': lane, 'options': options,
+                'reads': {k: v for a in offered for k, v in a['reads'].items()},
+                'state': public['state'], 'facts': public.get('lane_facts', {}).get(lane),
+                'authority': binding['authority_revision'], 'plan': binding['plan']})
+            lane_keys[lane] = lane_key
+            cached = self.cache.get(lane_key)
+            if cached and cached['choice'] in {a['id'] for a in offered} | {DEFER}:
+                resolved[lane] = cached
+            else:
+                decisions.append({'id': lane, 'type': 'choice', 'instructions': {
+                    'question': 'If work in this lane is next, which offered operation most usefully advances the current modeling goal?',
+                    'lane': lane, 'facts': public.get('lane_facts', {}).get(lane, {}),
+                    'limits': 'Use supplied evidence, applicability and failures. Avoid redundant work and repeated failed mechanisms. Defer when no offered operation applies; do not infer appearance acceptance or authorize unsupported geometry.'},
+                    'options': options + [{'id': DEFER, 'description': 'No applicable operation: return missing evidence or capability to the reasoning owner.'}]})
+        decisions.append({'id': 'next_lane', 'type': 'choice',
+            'instructions': 'Which available work lane best advances the goal now? Prioritize dominant observed defects and resolving uncertainty that changes an edit; avoid unnecessary review or bookkeeping. Lane answers are independent; choose defer if the available work cannot usefully proceed.',
+            'options': [{'id': lane, 'description': {'lane': lane,
+                'available_operations': [public['descriptions'][a['id']] for a in offered]}}
+                for lane, offered in grouped.items()] + [{'id': DEFER, 'description': 'Need new capability, conflicting-evidence resolution or actual visual interpretation.'}]})
+        result = self.judge(public['state'], decisions, binding)
+        if result.get('binding') != binding:
+            raise ValueError('Judgment release binding changed')
+        answers = result['judgments']
+        for lane in grouped:
+            if lane not in resolved:
+                answer = answers[lane]
+                if answer.get('choice') not in {a['id'] for a in grouped[lane]} | {DEFER}:
+                    raise ValueError('Lane choice outside menu')
+                resolved[lane] = answer
+                self.cache[lane_keys[lane]] = deepcopy(answer)
+        # Bound persistent cache size, retaining newest inserted advice.
+        self.cache = dict(list(self.cache.items())[-128:])
+        write_json(self.path, self.cache)
+        lane = answers['next_lane']['choice']
+        write_json(self.directory / 'last-batch.json', {'binding': binding, 'judgments': answers,
+            'applicable_lane_choices': resolved, 'provider_receipt': result.get('provider_receipt'),
+            'question_count': len(decisions)})
+        if lane == DEFER or lane in resolved and resolved[lane]['choice'] == DEFER:
+            return {'status': 'needs_review', 'reason': 'Jev found no applicable next operation',
+                    'evidence': [str(self.directory / 'last-batch.json')]}
+        if lane not in resolved:
+            raise ValueError('Priority selected an unavailable lane')
+        return resolved[lane]['choice']

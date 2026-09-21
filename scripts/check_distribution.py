@@ -3,7 +3,7 @@ from pathlib import Path
 import os,re,subprocess,sys
 
 root=Path(__file__).resolve().parents[1]
-tracked=subprocess.run(['git','ls-files','-z'],cwd=root,capture_output=True)
+tracked=subprocess.run(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root,capture_output=True)
 if tracked.returncode==0 and tracked.stdout:
     files=[root/p for p in tracked.stdout.decode().split('\0') if p]
 else:

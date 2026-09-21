@@ -2,13 +2,53 @@
   "schema_version": 1,
   "procedures": [
     {
+      "id": "episode-backed-astra-jev-operation",
+      "stages": [
+        "diagnosis",
+        "repair",
+        "verification",
+        "review",
+        "recovery",
+        "experience",
+        "preparation",
+        "native_trial"
+      ],
+      "conditions": {},
+      "instruction": "Use OperatingSession to compose existing episode evidence, qualified capabilities and Jev routing. Retain exact guide/depth/section and source/pose/side relationships during construction. Automatically feed fresh scoped findings into the next decision; a no-op in one region or a worse scalar metric does not judge the whole candidate. Astra records actual matched-image interpretation against the exact result; technical execution, save/reopen, user acceptance and method benefit remain separate. Preserve original receipts and reuse unchanged evidence. Recover known returned effects without replay. Keep budgets, generation job authority and one native owner unchanged.",
+      "operations": [
+        "operating_protocol",
+        "inspect_operating_session",
+        "decision_workspace",
+        "inspect_operations",
+        "reconcile_operation",
+        "capture_operation_context",
+        "reconcile_episode",
+        "promote_procedure"
+      ],
+      "citations": []
+    },
+    {
       "id": "construction-local-shape-and-native-reproduction",
-      "stages": ["diagnosis", "review"],
-      "conditions": {"observed_failure": "construction score improves but ridges persist, pose triangulation differs, dependent geometry moves with fixed anchors, support formula disagrees with saved native samples, or plane sections show gaps"},
+      "stages": [
+        "diagnosis",
+        "review"
+      ],
+      "conditions": {
+        "observed_failure": "construction score improves but ridges persist, pose triangulation differs, dependent geometry moves with fixed anchors, support formula disagrees with saved native samples, or plane sections show gaps"
+      },
       "instruction": "Read the packaged construction-diagnostics reference. Compare local bend tails and spatial concentration alongside the global objective. Validate each measured pose's recorded triangle layout before claiming an exact native comparison; explicitly label a deliberately fixed chart. For attached parts, reproduce the baseline from independent anchors, support frames and offsets, then distinguish expected motion from unexplained residuals. Fixed anchors do not imply fixed frames, and exact cell freezing is an experiment constraint, not a universal rule. Reproduce the complete saved support calculation, including saturated/additive branches, before interpreting target displacement. Preserve preview-border and coplanar exclusions. Multiple changed mechanisms do not isolate causal benefit. Verify selected package/procedure bytes; these diagnostics neither relax exact transaction checks nor establish native or appearance adoption.",
-      "source_queries": ["construction curvature ridge chart transition support formula native reproduction saturated margin plane section vertex gap causal confound", "per pose triangulation quad diagonal fixed chart attachment anchor support frame expected motion unexplained residual"],
-      "limits": ["Sampled offline diagnostics only", "No target admission, native repair, causal proof or appearance acceptance"],
-      "operations": ["record_outcome", "retrieve_experience"],
+      "source_queries": [
+        "construction curvature ridge chart transition support formula native reproduction saturated margin plane section vertex gap causal confound",
+        "per pose triangulation quad diagonal fixed chart attachment anchor support frame expected motion unexplained residual"
+      ],
+      "limits": [
+        "Sampled offline diagnostics only",
+        "No target admission, native repair, causal proof or appearance acceptance"
+      ],
+      "operations": [
+        "record_outcome",
+        "retrieve_experience"
+      ],
       "citations": []
     },
     {

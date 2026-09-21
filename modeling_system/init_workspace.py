@@ -24,6 +24,7 @@ def initialize(path, character):
         'DECISIONS.md':'# Decisions\n\nRecord user choices, scope, approvals, rejected directions and which earlier decisions they supersede.\n',
         'LESSONS.md':'# Local experience\n\nRetain exact inputs, interventions, comparisons and outcomes with applicability and counterexamples. Promote reusable methods only after demonstrated reuse and privacy review.\n',
         'METHOD.md':(source/'plugin/skills/modeling-workbench/references/method.md').read_text(),
+        'OPERATING.md':(source/'plugin/skills/modeling-workbench/references/operating-session.md').read_text(),
         'procedures.json':(source/'procedures.json').read_text(),
         'generation-policy.json':json.dumps({'version':1,'authorization':'No generation authorized by initialization','providers':{},
             'tripo':{'mode':'Smart Mesh','model':'P2.0','transport':{'selected':'unconfigured'},

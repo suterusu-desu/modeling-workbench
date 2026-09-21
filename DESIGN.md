@@ -1,56 +1,142 @@
-# Coherent workflow composition
+# Astra and Jev modeling system
 
-The durable unit is a decision episode: intent, exact state, observations and targets, candidate interventions, independent judgments and retained methods. The service is the shared execution boundary for Python, CLI and MCP. Private workspaces own character identity, evidence, native bindings and authorization. A scene semantic graph explains mechanisms; a reusable workflow recipe specifies how operations and review decisions depend on one another. They link through the episode but are different abstractions.
+The system improves a character through recoverable, evidence-bound decisions.
+Astra and Jev operate one workbench: Astra maintains the intended character and
+interprets appearance; Jev distributes contextual choices across executable work;
+the workbench supplies truthful state, qualified action, recovery and accumulated
+methods. The unit of continuity is the existing **decision episode**, not a model
+conversation, isolated command, or second parallel planning ledger.
 
-## Delivered diagnostic increment
+```mermaid
+flowchart TD
+    A[Astra: identity, intent, visual judgment, new mechanisms] --> E[Decision episode: requirements, evidence, hypotheses, methods]
+    E --> S[OperatingSession: fresh task frontier and scoped feedback]
+    S --> J[Jev: priority, method, scope, evidence, recovery choices]
+    J --> Q[WorkQueue and controller: applicable work and exact dependencies]
+    Q --> C[Existing workbench capabilities and private adapter]
+    C --> B[One native Blender execution lane]
+    C --> P[Recorded analysis, reference jobs, preparation and learning]
+    B --> R[Saved results, matched views, motion and execution receipts]
+    P --> R
+    R --> E
+    R --> S
+    R --> A
+```
 
-`inspect_control_coverage` adds the reverse question missing from forward response evidence: which known controls can structurally reach the current targets, which were omitted, and why was freedom excluded? Pinned sparse ancestry, exact state and ordered identities yield a bounded summary with complete stored detail. The report explicitly leaves useful controllability unproved. `analyze_repair` assesses only the supplied finite coupled problem; native realization, connected-form review and method integration remain separate steps.
+## Linked abstractions
 
-`inspect_target_domain` adds the earlier question: how was the candidate domain chosen, and did that choice hide skin or transitions? Its independently supplied geometric screen, selected fit, authored support mask, response rows, numeric label availability and reviewed region correspondence remain separate relations over exact point identities. Named edge checks retain their measurement semantics and declared required categories. The report inventories missing evidence and provenance without admitting targets, inferring anatomical meaning from a mask, substituting one metric for another or changing a solver. It composes through the same pinned-case recipe/service boundary. See [the target-domain contract](modeling_system/plugin/skills/modeling-workbench/references/target-domain.md).
+| Layer | Meaning and owner | Existing implementation |
+| --- | --- | --- |
+| Character intent | Accepted identity, current checkpoint, protected work and authorized resources. Astra maintains the bounded question; the user remains artistic authority. | Private current-state documents, workspace binding, episode requirements |
+| Decision episode | A recoverable question joins state, observations, guides, interventions, independent judgments and retained methods. | `episodes`, `decision_workspace`, immutable store and semantic graph |
+| Operating session | Compile eligible work and fresh findings; keep Astra feedback, Jev choices and actual operations linked to that episode. | `OperatingSession`, `operating_protocol`, `inspect_operating_session` |
+| Work frontier | Useful operations in diagnosis, repair, verification, review, recovery, experience and preparation. Dependencies describe what can proceed. | `WorkQueue`, recipes and provider workflow graphs |
+| Contextual selection | Jev chooses offered methods, scopes and next work from current facts, uncertainties and applicable retained experience. | `LaneSelector`, typed `judgments`, direct TypeSafe transport and workspace budget ledger |
+| Qualified capability | A reusable operation carries its method, exact input relationships, executable implementation, completion evidence and resource effects. | Existing service operations or trusted private handlers; no new parallel geometry API |
+| Effect and observation | Execute directly, protect user work, save actual results and report what happened. Native writes are serial. | Controller, native adapter, worker contract, transaction/job receipts, operation journal |
+| Learning | Distinguish local character gain, technical execution and method benefit. Preserve cause, failure, scope and actual reuse. | `record_outcome`, `reconcile_episode`, `promote_procedure`, `retrieve_experience` |
 
-## Surface correspondence: bounded diagnostic
+Every row has links to the rows above and below. A short observation expands to
+an exact operation, input identity, original artifact, procedure and judgment.
+The queue is an execution index; native files, generation jobs, episode records
+and current human authority keep their existing meanings. Attaching a session
+preserves historical queue receipts without relabeling their provenance.
 
-The observed trigger is a geometric candidate whose surface role remains uncertain: a selected hit can lie behind an excluded surface, and similar locations or differing normals do not resolve correspondence. Version 0.2.8 implements `inspect_surface_correspondence` over a pinned operator contract, through the existing offline service/recipe boundary. The [case and interpretation contract](modeling_system/plugin/skills/modeling-workbench/references/surface-correspondence.md) defines its bounded scope. Actual installed operator adoption is separate from source implementation.
+## Control and feedback
 
-Reuse recorded geometry, ray/pixel queries, exact plane sections and authored material paths. Keep the full declared query domain and the selected subset visible together; distinguish the first full-domain hit from the first selected hit. Preserve coincident owners and alternative branches. An excluded foreground component remains evidence about order even when it cannot be a target. A hit count or a nearest point does not establish visible ownership outside the declared objects, view and ray range.
+Astra sets the art direction, chooses a discriminating question and supplies a
+bounded frontier of qualified capabilities. It can refine requirements or submit
+scoped visual feedback while unrelated work proceeds. Jev takes recurring
+priority, method, scope, evidence and recovery decisions and dispatches directly
+to code. Astra does not perform a second native handoff, nor directly inspect,
+pose, capture, save or edit Blender. Fixed prerequisites inside an authorized
+selected operation are deterministic and need no gratuitous inference.
 
-Separate measured orientation, geometric connectivity, authored anatomical role, reviewed support/exclusions and pose applicability. A general vertex-sequence query reports authored order and lengths without proving edges. The ordered-correspondence diagnostic separately validates successive steps against explicitly identified native polygon edges or triangulation edges and name which relation was checked. A triangulation diagonal is not automatically a native material edge. A connected path alone does not establish the anatomical interpretation of its endpoints.
+A selected task enters the existing episode lease and operation journal before
+its effects. It captures applicable workbench procedure context, executes the
+existing capability, retains its raw return, and indexes typed evidence and
+findings. Each next Jev decision automatically receives those findings and fresh
+Astra feedback. A static startup summary can no longer omit a newly measured
+no-op or support limit. Stale facts remain historical; fresh authority, relevant
+inputs, output receipts and public observation revisions control applicability.
 
-Exact section evidence retains plane, source triangles, disconnected segments and omitted coplanar cases. Do not smooth, bridge gaps or silently pick a branch to make a correspondence appear supported. Link each proposed correspondence to its particular source/target states, view, pose, support scope and independent review. A normal discrepancy is a warning with a winding/frame convention, never an automatic anatomy classifier. Unmeasured placement and different-pose evidence remain explicit applicability limits.
+A candidate can execute successfully while its output qualification is incomplete
+or appearance is unresolved. Saving and recovery remain available. Scoped
+retention consumes explicit candidate/reopen evidence and a current actual-image
+judgment. User acceptance and general method benefit are never inferred. A worse
+numerical metric does not veto a visual gain; a no-op on one side does not erase a
+gain on the other. Failed mechanisms retain their cause and applicability so the
+next repair changes a justified mechanism rather than only a candidate label.
 
-The compact result should expose the unresolved question, alternatives, contradictory evidence and cheapest missing measurement, with bounded links to the original arrays and judgments. Report an empty query only within its declared domain; distinguish ambiguity, occlusion and exhausted/incomplete searches from proven absence. Keep any new diagnostic on the existing record, episode and recipe execution boundary. It may organize evidence for review but cannot admit a target, change an exclusion, move native geometry or grant appearance acceptance.
+## Preserve the successful modeling process
 
-Acceptance requires synthetic counterexamples plus independent use on the pinned operator case. Compare whether an agent can recover the competing surface hypotheses and their actual limits with fewer repeated reads. Select code changes only after identifying a relation the existing queries and records cannot already express reliably; do not build another geometry or review authority.
+The workbench loop remains current situation -> causal diagnosis -> qualified
+support -> recoverable guided correction -> early matched visual comparison ->
+relevant motion and independent reopen -> retained gain and method. These are
+purposeful dependencies, not a fresh exhaustive audit before every action.
 
-## Delivered offline recipe layer
+Accepted identity and source/pose/side-specific guide dispositions govern target
+use. Registered geometry, depth and corresponding sections constrain every
+appearance edit during construction, including attachments, smoothing and joins.
+Semantic correspondence, target-domain coverage, topology lineage and evaluated
+response evidence remain explicit. A screenshot, nearest point, scalar fit score
+or post-hoc distance cannot replace those relations.
 
-Version 0.2.4 adds a bounded typed dependency graph over the existing offline diagnostic operations. `recipe_template`, `create_recipe`, `inspect_recipe`, `revise_recipe_inputs`, `run_recipe_step`, `review_recipe_step` and `recover_recipe_step` share the existing service, episode leases and durable operation journal. The [operator contract](modeling_system/plugin/skills/modeling-workbench/references/recipes.md) defines that delivered subset. The renewed [finite completion queue](IMPLEMENTATION-QUEUE.md) supersedes earlier native/provider deferrals: closed native transactions and provider cost composition extend the same evidence and job authorities, with separate verification boundaries.
+Native operations preserve baseline and later user edits, save actual checkpoints
+and produce sparse matched whole/context and close views early. Broader motion,
+angles and independent reopen follow a useful candidate or a concrete structural
+question. Keep the useful editable model and relevant guide visible through the
+existing native display/status capability. Live output must report stopped,
+completed and failed jobs accurately.
 
-The smallest coherent recipe is a versioned declarative description with a question, typed external inputs, operation nodes, output references, applicability dependencies and review gates. Instantiate it in one private workspace/episode with scoped node IDs. Resolve node operations through the existing service and journal. Native operations retain the sole owner; provider operations retain source-bound claim/reconcile and actual authorization. Never embed private character data or credentials in a generic recipe.
+Reference generation continues through the existing reviewed-source job lifecycle:
+view/identity roles -> image review -> surface review -> registration and scoped
+qualification -> guide-constrained fitting. Source rejection invalidates dependent
+targets. Source-bound claim/reconciliation, observed provider settings and existing
+budgets remain mandatory; an uncertain dispatch is never submitted twice.
 
-Plan evaluation should return ready, waiting for evidence/review, reusable, stale, failed or uncertain nodes with reasons and exact expansion links. A completed artifact and a result applicable to current inputs are separate facts. A result key includes the operation/schema, exact arguments, pinned input content, relevant target/state/adapter dependencies and recipe version. A view-only change should not discard reusable geometry; a changed guide should invalidate dependent fit/review claims while retaining the original evidence. Missing compatibility remains unknown rather than reusable.
+The full capability inventory has explicit control-lane mappings, verified by
+synthetic tests. Numerical queries, camera/pixel relations, motion, reference
+loops, construction/attachment diagnostics, guide fitting, response prediction,
+recipes, component catalogs, graph paths, topology lineage, native mesh/library
+transactions, recovery, evidence export and method promotion remain available.
+The new control layer composes them; it does not supersede their contracts.
 
-Execution is incremental. The graph asks the existing execution boundary to perform one ready operation and records its receipt. It does not replay completed side effects after a crash, treat an unknown job as done, auto-rerun stale paid nodes, or bypass an artistic review gate. Recovery reconciles the same operation/job identity. Aggregate cost previews preserve distinct currencies, unknown future steps and authorization scopes; quotes do not grant spending authority.
+## Scale by reducing repeated interpretation
 
-The bundled diagnostic template follows pinned inputs -> reverse control coverage -> scope review -> response analysis -> diagnostic review. The scope review includes the downstream case in its input dependencies, so changing that case invalidates its prior review. Review records retain exact upstream evidence and input identities. Episode judgment and method integration remain explicit existing operations. A later bounded native batch may reduce transport overhead for a proven deterministic sequence, but episode journaling alone does not provide native atomicity. Topology lineage, component catalogs and library import require their own verified adapter contracts; do not add overlapping batch languages.
+Batch independent Jev choices against compact structured state, including useful
+conditional options, then consume only applicable answers. Cache exact evidence-
+and question-bound answers. Keep large arrays, native identity and private paths
+local; expand exact evidence only when a decision needs it. Bound public findings
+and expose missing context instead of silently truncating contradictory evidence.
 
-Inspection never materializes cases or dispatches an operation. Execution restores only the selected step's pinned file inputs and reserves its existing operation handle before dispatch. Result-index failure recovers the original durable result without repeating the analysis. Per-node keys include relevant inputs, upstream result identities and loaded source; a corrected review invalidates dependent uses. Package changes invalidate conservatively. Case rebinds are explicit; retained evidence does not assert live freshness. Native modeling continues on its verified environment while the new offline slice is adopted separately. See the [implementation queue](IMPLEMENTATION-QUEUE.md) for remaining contracts and evidence needed to select them.
+Independent immutable preparation can be pipelined by qualified workspace
+adapters; shared native effects remain serial. The current queue itself executes
+handlers serially. This release does not claim parallel Blender writes or a
+measured modeling speedup. Existing controller timing, provider receipts and actual
+use distinguish selection latency, preparation, native work and review cost.
 
-Acceptance before operator adoption (source tests are necessary but do not prove actual use):
+Astra should spend effort on likeness, contradictory evidence and genuinely new
+mechanisms. Routine useful decisions move to Jev; mandatory bookkeeping moves to
+code. A new method enters the same capability/report interface once qualified,
+then becomes immediately reusable rather than a candidate-specific orchestration
+script. Learning retains failed alternatives and the precise scope of success.
 
-- Two instances with identical display names cannot share operation/job identities or private bindings.
-- Missing outputs, cycles and unsupported operations fail before effects.
-- An input-content or relevant dependency change invalidates only affected uses; completed artifacts remain recoverable.
-- Crash after dispatch but before receipt leads to reconciliation, never duplicate dispatch.
-- Unsupported/rejected target evidence and pending appearance judgment block the appropriate downstream node.
-- A fresh process reconstructs the next justified step from retained inputs, recipe version and receipts without conversation history.
+## Recovery and verification
 
-Builder owns this layer; Planner supplies a repeated useful sequence and acceptance case; the native owner verifies native adoption. Implement it when it reduces measured repeated work without concealing review or uncertainty. The immediate control-coverage improvement does not wait for the entire graph facility.
+Known returned results repair the queue/controller index without replay. Unknown
+native/provider effects require the original receipt and explicit reconciliation.
+Raw results survive failure of later report validation or indexing. A bounded
+Windows sharing retry repeats only a metadata rename, never an operation.
 
-## Recorded connectivity, identity and execution evidence
+Tests cover the composed episode/queue lifecycle, automatic fresh findings, guide
+invalidation, scoped visual feedback, incomplete output checks, preserved historical
+receipts and crash recovery. Installation bytes, actual selected runtime, private
+native qualification and operator adoption are verified separately. Synthetic
+success is not evidence of final character quality or universal character support.
 
-Version 0.2.9 extends the same decision loop at three missing relations. A component catalog answers which recorded connected part contains an exact element; a bounded graph query asks whether the selected relation supplies a route, retaining equal alternatives and exhaustion. Neither supplies anatomical roles. Topology lineage links an operation's declared before/after element identities, so later selectors can follow exact splits and merges or stop at ambiguity. A verified native producer remains a separate requirement.
-
-Execution-receipt inspection connects a caller's compact answer to the durable operation evidence and asks separately what effect was reported, which bytes exist, whether the process exited, whether required outputs were completed, and what later independent verification established. It never repeats the original effect. The standalone worker finalizer makes the declared completion manifest the last verified write; it can run inside an owner-authored isolated worker without replacing the native adapter. Its assertions are trusted-worker evidence, not proof of appearance or untrusted producer honesty.
-
-These operations reuse exact content records, bounded expansion, public service/CLI/MCP dispatch and existing operation recovery. The operator can begin with a small question, inspect only the relevant relations and trace each answer back to exact private inputs. New evidence enriches the episode and retained method without making a second source of geometry, authority or judgment. See the linked contracts in the packaged skill and the explicit implementation/adoption/defer dispositions in IMPLEMENTATION-QUEUE.md.
+Use the [operator contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md)
+for the exact API and migration. Earlier rationale and detailed contracts remain
+in [design evolution](modeling_system/plugin/skills/modeling-workbench/references/design-evolution.md)
+and the linked feature references. The [implementation record](IMPLEMENTATION-QUEUE.md)
+keeps implementation and observed adoption distinct.

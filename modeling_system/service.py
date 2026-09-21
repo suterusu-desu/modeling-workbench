@@ -24,7 +24,8 @@ READ_OPERATIONS={'capabilities','runtime_status','inspect_situation','inspect_wo
                  'read_component_catalog','locate_component','select_component',
                  'retrieve_experience','decision_workspace','semantic_impact','inspect_operations','check_reuse',
                  'package_readiness','evidence_manifest','operation_context','select_generation_route','inspect_recipe','recipe_template','inspect_native_transaction',
-                 'inspect_provider_workflow','preview_provider_cost'}
+                 'inspect_provider_workflow','preview_provider_cost',
+                 'operating_protocol','inspect_operating_session'}
 
 
 class ModelingService:
@@ -95,6 +96,16 @@ class ModelingService:
     def runtime_status(self) -> dict:
         """Report observed loaded source/schema and on-disk mismatch; never infer operator adoption or native freshness."""
         return runtime_report(self)
+
+    def operating_protocol(self) -> dict:
+        """Read Astra/Jev responsibilities, task contracts and complete capability routing; no native/provider access."""
+        from .operating_session import protocol
+        return protocol()
+
+    def inspect_operating_session(self, directory: str) -> dict:
+        """Read episode-linked task receipts and review feedback without executing or treating saved state as live."""
+        from .operating_session import inspect_session
+        return inspect_session(self, directory)
 
     def operation_context(self, stage: str, context: dict | None = None, job: str | None = None) -> dict:
         """Read current policy, applicable procedures and exact passages without any store, provider or native writes."""
@@ -195,6 +206,16 @@ class ModelingService:
         except (TypeError,ValueError,NativeBridgeError) as error:
             raise PreconditionRefusal(str(error),'run_episode_operation.argument_binding',
                 dict(mutation_dispatched=False,lease_acquired=False,operation=operation)) from error
+        return self._run_episode_callback(episode, operation, arguments,
+            lambda: self.execute(operation, arguments), prepared=prepared, journal=False)
+
+    def _run_episode_callback(self, episode, operation, arguments, callback, prepared=None, journal=True):
+        """Private adapter execution shares exactly the service lease/journal boundary.
+
+        Callbacks are trusted installed capabilities, never provider-generated code.
+        Public operation argument binding remains in _run_episode_operation.
+        """
+        canonical(arguments)
         lease=acquire(self,episode,operation)
         token=EPISODE.set(episode);lease_token=LEASE.set(lease)
         result={'status':'failed','reason':'Invocation did not return; effect requires reconciliation'}
@@ -205,7 +226,7 @@ class ModelingService:
                 except Exception:
                     result.update(effect_status='refused before mutation dispatch',reason='Dispatch reservation could not be retained')
                     raise
-            result=self.execute(operation,arguments)
+            result=invoke(self, operation, arguments, callback) if journal else callback()
             return result
         finally:
             try:

@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "status": "Portable core; native operations require a separately bound and verified workspace adapter",
   "principle": "The workflow is reusable; character evidence and native bindings are separate private inputs.",
   "capabilities": [
@@ -7,241 +7,562 @@
       "name": "Question and situation entry point",
       "route": "open_question / inspect_situation",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Complete recorded numerical geometry and hidden dependencies",
       "route": "synchronize_scene / query_live_geometry / import_scene / native_prepare_state / read_record",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Historical geometry queries independent of live Blender",
       "route": "query_geometry / compare_geometry / project_points",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "verification"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Exact camera-linked observation bundle",
       "route": "capture_view_bundle / ingest_capture / record_observation",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "review",
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Current viewport screenshots and arbitrary views",
       "route": "native_capture_view / native_set_display",
       "implementation": "native",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "review"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Native modeling, shape keys, rig and material edits",
       "route": "begin_experiment / propose_change / apply_trial / native_apply_proposal",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "repair"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Registered guide fitting and matching display",
       "route": "qualify_guide / integrate_guide / native_integrate_guide / native_set_display",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "repair"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Depth, actual sections and corresponding material paths",
       "route": "query_geometry / native_inspect_feature / capture_view_bundle / native_set_display",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "preparation",
+          "repair"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Semantic binding validity and explicit repair",
       "route": "native_inspect_feature / native_apply_proposal",
       "implementation": "native",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Whole motion, close-ups, combinations and replay",
       "route": "native_capture_motion / ingest_motion_capture / assess_motion_continuity / compare_motion / import_motion / export_replay / analyze_video",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "verification",
+          "review"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Checkpoint preservation and independent native reopen",
       "route": "native_save_checkpoint / native_prepare_reopen / retain_candidate / reject_trial",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "verification",
+          "recovery"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Source avatar construction study",
       "route": "native_inspect_feature / query_geometry / recorded advanced proposals",
       "implementation": "native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Image generation with character references",
       "route": "request_reference / claim_job / reconcile_job / review_reference + installed image-generation transport",
       "implementation": "external transport + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "3D guide generation and import",
       "route": "prepare_guide / reject_guide / qualify_guide / integrate_guide + existing Tripo/Meshy transports",
       "implementation": "external transport + native + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Source-first video generation and frame analysis",
       "route": "request_reference(kind=video) / analyze_video / compare_motion + existing video transport",
       "implementation": "external transport + core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "review"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Native file and export access",
       "route": "native_export_native / native_apply_proposal",
       "implementation": "native",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "verification"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Continuous decisions, lessons and outcomes",
       "route": "record_outcome / retrieve_experience / read_record",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "experience"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Decision-point applicable procedures and selection policy",
       "route": "operation_context / select_generation_route",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "experience",
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Recoverable decision workspace and independent judgments",
       "route": "open_episode / revise_episode / decision_workspace / run_episode_operation / reconcile_episode",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "review",
+          "experience"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Direct Python and transport operation journal",
       "route": "public ModelingService methods / inspect_operations / reconcile_operation",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "recovery"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Bidirectional semantic graph and dependency distinctions",
       "route": "record_dependencies / register_semantic_graph / validate_semantics / semantic_impact",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Dependency-bound numerical intervention response",
       "route": "register_response / predict_response / compare_prediction / adapt_ancestry_response / check_reuse",
       "implementation": "core with explicit sparse/pointwise and historical ancestry adapters",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair",
+          "verification"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Evidence-linked method integration and promotion",
       "route": "record_outcome / reconcile_episode / promote_procedure / retrieve_experience",
       "implementation": "core",
-      "verification": "test_method_integration exercises local diagnostic promotion, fresh-process mechanism retrieval and actual use with unresolved character status. Close-out requires integration and separate adoption dispositions; native, provider and appearance outcomes need workspace evidence."
+      "verification": "test_method_integration exercises local diagnostic promotion, fresh-process mechanism retrieval and actual use with unresolved character status. Close-out requires integration and separate adoption dispositions; native, provider and appearance outcomes need workspace evidence.",
+      "control": {
+        "lanes": [
+          "experience"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Exact ordered source motion schedule",
       "route": "schedule_ordered_motion",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "review"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Portable explicit binding and evidence package",
       "route": "evidence_manifest / export_package / package_readiness / verify_installation",
       "implementation": "core and packaging",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "verification"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Read-only decision lookup with explicit context retention",
       "route": "operation_context / select_generation_route / capture_operation_context",
       "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "experience"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Bounded coupled XYZ repair diagnosis and acquisition nominations",
       "route": "analyze_repair / read_record",
       "implementation": "core; offline only",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence."
+      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Reverse target ancestry and explicit control restrictions",
       "route": "inspect_control_coverage / read_record",
       "implementation": "core; offline retained structural diagnosis",
-      "verification": "Synthetic omission, incomplete-universe, restriction, drift and fresh-process recovery tests. Does not establish native control quality."
+      "verification": "Synthetic omission, incomplete-universe, restriction, drift and fresh-process recovery tests. Does not establish native control quality.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Recoverable reusable offline diagnostic recipes",
       "route": "recipe_template / create_recipe / inspect_recipe / revise_recipe_inputs / run_recipe_step / review_recipe_step / recover_recipe_step",
       "implementation": "core",
-      "verification": "Synthetic tests cover pinned inputs, invalidation, review dependencies, scoped instances and recovery without replay. Actual operator adoption is separately evidenced; no native/provider execution."
+      "verification": "Synthetic tests cover pinned inputs, invalidation, review dependencies, scoped instances and recovery without replay. Actual operator adoption is separately evidenced; no native/provider execution.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Independent target-domain and named transition coverage",
       "route": "inspect_target_domain",
       "implementation": "core",
-      "verification": "Synthetic regressions distinguish candidate selection, mask membership, unknown numeric labels, reviewed region correspondence and independent edge-check families. Native target admission and appearance remain unproved."
+      "verification": "Synthetic regressions distinguish candidate selection, mask membership, unknown numeric labels, reviewed region correspondence and independent edge-check families. Native target admission and appearance remain unproved.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Missing completion receipt recovery without effect replay",
       "route": "reconcile_operation",
       "implementation": "core",
-      "verification": "Short atomic temporary names avoid valid-destination path inflation. Synthetic long-path and unknown-effect tests plus isolated copies of real failed completion records verify public metadata repair. Original operation outcomes remain unchanged."
+      "verification": "Short atomic temporary names avoid valid-destination path inflation. Synthetic long-path and unknown-effect tests plus isolated copies of real failed completion records verify public metadata repair. Original operation outcomes remain unchanged.",
+      "control": {
+        "lanes": [
+          "recovery"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Ordered surface alternatives and selected-section connectivity",
       "route": "inspect_surface_correspondence",
       "implementation": "core",
-      "verification": "Synthetic counterexamples preserve unsupported stations, foreground alternatives, exact source-edge gaps, ambiguous branches and unknown coverage. Planar disconnection does not prove full-surface disconnection; no anatomical admission or continuous correspondence claim."
+      "verification": "Synthetic counterexamples preserve unsupported stations, foreground alternatives, exact source-edge gaps, ambiguous branches and unknown coverage. Planar disconnection does not prove full-surface disconnection; no anatomical admission or continuous correspondence claim.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Exact declared topology lineage",
       "route": "record_topology_lineage / compose_topology_lineage / remap_topology_selection",
       "implementation": "core",
-      "verification": "Synthetic split, merge, deletion, introduced ancestry and composition regressions. Requires an independently verified native producer for actual topology changes; receipt binding alone does not prove native lineage."
+      "verification": "Synthetic split, merge, deletion, introduced ancestry and composition regressions. Requires an independently verified native producer for actual topology changes; receipt binding alone does not prove native lineage.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "verification"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Bounded paths in selected recorded graphs",
       "route": "inspect_graph_path",
       "implementation": "core",
-      "verification": "Pinned graph and independent node/edge selections, shortest-path ambiguity and explicit budget exhaustion. A possible graph route does not prove anatomical or continuous surface correspondence."
+      "verification": "Pinned graph and independent node/edge selections, shortest-path ambiguity and explicit budget exhaustion. A possible graph route does not prove anatomical or continuous surface correspondence.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Lazy recorded component catalogs",
       "route": "build_component_catalog / read_component_catalog / locate_component / select_component",
       "implementation": "core",
-      "verification": "Exact stored topology identity, declared connectivity, compact metrics and bounded member selection; read/locate/select do not write. Connected components are not automatically semantic regions."
+      "verification": "Exact stored topology identity, declared connectivity, compact metrics and bounded member selection; read/locate/select do not write. Connected components are not automatically semantic regions.",
+      "control": {
+        "lanes": [
+          "diagnosis"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Execution receipt and worker completion contracts",
       "route": "inspect_execution_receipt / worker_contract.WorkerContract / worker_contract.verify_manifest",
       "implementation": "core",
-      "verification": "Pinned operation-specific mappings separate effect, bytes, process, required outputs and independent verification. Standalone finalizer requires preflight, checks and protected source hashes before exclusive completion publication; no native replay or appearance approval."
+      "verification": "Pinned operation-specific mappings separate effect, bytes, process, required outputs and independent verification. Standalone finalizer requires preflight, checks and protected source hashes before exclusive completion publication; no native replay or appearance approval.",
+      "control": {
+        "lanes": [
+          "verification",
+          "recovery"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Prepared raw-mesh batches and exact native ancestry",
       "route": "prepare_mesh_batch / native_mesh_batch.execute_batch / record_topology_lineage",
       "implementation": "Core preparation plus owner-run isolated native helper",
-      "verification": "Full typed preflight, exact vertex lineage/FACE ownership and native roundtrip; unsupported mesh content refused. Native fixture and installed-byte adoption remain explicit evidence, not a character quality claim."
+      "verification": "Full typed preflight, exact vertex lineage/FACE ownership and native roundtrip; unsupported mesh content refused. Native fixture and installed-byte adoption remain explicit evidence, not a character quality claim.",
+      "control": {
+        "lanes": [
+          "repair"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Native transaction inspection and later-save-aware rollback",
       "route": "inspect_native_transaction / native_mesh_batch.SaveBoundary / native_mesh_batch.rollback_batch",
       "implementation": "Read-only public recovery inspection and owner-run native guard",
-      "verification": "Exact native precision, original file bytes, owner/session and save events; original partial effects and rollback attempts remain durable. No automatic replay or rollback after later work."
+      "verification": "Exact native precision, original file bytes, owner/session and save events; original partial effects and rollback attempts remain durable. No automatic replay or rollback after later work.",
+      "control": {
+        "lanes": [
+          "recovery"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Measured library dependency closure and explicit namespaces",
       "route": "prepare_library_import / native_library.describe / native_library.append",
       "implementation": "Core plan plus owner-run append and pinned content adapters",
-      "verification": "Budgets, shared-ID namespaces, actual parent/driver/shared data links, imported content and original-host preservation. Bundled adapter covers raw meshes/objects, collections and embedded Principled/Output materials; richer/embedded types need explicit qualification."
+      "verification": "Budgets, shared-ID namespaces, actual parent/driver/shared data links, imported content and original-host preservation. Bundled adapter covers raw meshes/objects, collections and embedded Principled/Output materials; richer/embedded types need explicit qualification.",
+      "control": {
+        "lanes": [
+          "preparation"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
     },
     {
       "name": "Provider workflow composition and exact cost previews",
       "route": "create_provider_workflow / bind_provider_nodes / inspect_provider_workflow / quote_provider_node / preview_provider_cost",
       "implementation": "Core composition over existing jobs, reviews, diagnostic recipes and episode ledger",
-      "verification": "Synthetic source/review/diagnostic invalidation, instance isolation, atomic binding, uncertain-job recovery and exact denomination sums; no provider calls, funding or dispatch authority. Native/provider job results remain separately verified."
+      "verification": "Synthetic source/review/diagnostic invalidation, instance isolation, atomic binding, uncertain-job recovery and exact denomination sums; no provider calls, funding or dispatch authority. Native/provider job results remain separately verified.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "recovery"
+        ],
+        "execution": "Existing service or qualified workspace capability in the episode journal",
+        "judgment": "Jev routes contextual choices; Astra supplies actual visual interpretation when needed"
+      }
+    },
+    {
+      "name": "Astra and Jev episode-backed operation",
+      "route": "OperatingSession / operating_protocol / inspect_operating_session / WorkQueue / LaneSelector",
+      "implementation": "core + qualified private adapters",
+      "verification": "Synthetic episode/queue contracts; real provider/native adoption requires workspace receipts.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair",
+          "verification",
+          "review",
+          "recovery",
+          "experience",
+          "preparation"
+        ],
+        "execution": "One episode and journal over the existing workbench",
+        "judgment": "Current findings automatically enter the next Jev decision; scoped Astra feedback stays separate"
+      }
     }
   ],
   "limits": [

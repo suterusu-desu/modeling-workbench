@@ -1,3 +1,29 @@
+# Current operating integration: 0.2.21.1
+
+Astra/Jev control is first class through OperatingSession over the existing
+episode, work queue, controller and service journal. The previous modeling tools
+and successful processes remain intact; every capability family has a control
+route. See [DESIGN.md](DESIGN.md) and the packaged operating-session contract.
+
+| Observed gap | Implemented change | Verification boundary |
+| --- | --- | --- |
+| Queue/native results lived beside workbench evidence | Selected capabilities enter existing episode leases and durable operation facts; exact inputs, procedure context and output evidence remain linked | Synthetic composed lifecycle; installed actual use retained privately |
+| Fresh qualification findings could be omitted from the next Jev choice | Automatic scoped findings and review feedback, bound to current dependencies and public observation revisions | No-op/other-region gain and mid-selection invalidation cases |
+| Modeling obligations had to be carried ad hoc | Profile input relationships, required evidence checks, consumed results and exact candidate review dependencies | Missing support refuses before dispatch; technical completion cannot invent evidence |
+| Astra review risked becoming another per-action handoff | Immutable scoped visual feedback, consumed at decision boundaries; unrelated useful work continues | Candidate/guide/intent invalidation; user acceptance remains separate |
+| Old queue work could be lost or replayed during adoption | Attach existing settled receipts with historical provenance; known-result recovery repairs indexes without dispatch | Historical-byte preservation and crash-recovery cases |
+| Known projection refusal looked like uncertain inference | Typed no-dispatch refusal and evidence-bound recovery of older pending selections | No provider call or history deletion; exact pending-selection identity required |
+| Windows reader contention could interrupt status retention | Bounded sharing-error retry on metadata rename only | Sharing error and nonsharing error regressions |
+
+This is implementation and integration work, not a new modeling prerequisite or
+an instruction to rerun old audits. Runtime installation and owner adoption are
+recorded in the private workspace with actual operation receipts. No universal
+character qualification, native concurrency or measured speedup is inferred.
+
+## Prior delivered increments
+
+The following is retained implementation history, not a competing current plan.
+
 # Accepted integration and closure
 
 The current direction is to finish every useful accepted audit improvement through implementation and verified use before the next anatomy/source-avatar reconstruction phase. Earlier trigger-based deferrals for native lineage, batching, save/rollback, library closure and provider composition are superseded. This is a finite completion queue. Native tests use disposable synthetic scenes under the sole native owner, independently of any character-work hold. No paid dispatch, publication or active-character runtime switch is implied.
@@ -43,3 +69,41 @@ The two observed lessons are implemented in the existing construction procedure,
 | A fixed attachment anchor can have a moving support frame | Reproduce the baseline from independent anchors, frame basis and local offsets, then compare expected candidate motion with observed geometry through existing sampled residuals. A hand-specified rotation fixture accepts expected motion, detects an injected unexplained residual, and rejects a mismatched baseline binding. | Expected motion needs measured binding/frame evidence and pose coverage. Exact cell preservation can be an experimental constraint; the procedure never weakens native fingerprints or later-edit guards. |
 
 The three added regression methods extend the existing construction suite to nine passing tests. The full301-test suite passes with one environment-specific symlink skip; skill validation and the118-file source inventory/privacy checks pass. A disposable workspace retrieves the applicable revised procedure without writes. Production executable modules and operation signatures stay unchanged; all108 adopted package files, installed instructions and the private rule index remain unchanged. Installation/operator pickup is pending a natural checkpoint. Numerical preservation or a justified attachment response does not reverse an appearance rejection.
+# Delivered: persistent owner execution
+
+The Python controller now composes fresh private observations, useful operation
+menus, direct bounded selection/execution, asynchronous advisory planning and
+durable recovery. A display-only Blender overlay shows actual objective, stage,
+action, progress, budget and stop/error state. The controller's sole writer is
+an execution lane; it does not require a language-model handoff for every action.
+Required operations bypass inference. See the [controller reference](modeling_system/plugin/skills/modeling-workbench/references/controller.md).
+Use the implemented path directly and fix observed problems during normal work;
+no separate adoption experiment is a prerequisite. Provider transports/budgets,
+native adapters and current artistic authority remain in the bound workspace.
+
+## Controller velocity increment (0.2.18)
+
+The controller now supports optional adapter-qualified selected-action revalidation,
+one-request compatible operation/target menus, and actual per-stage timings in
+its journal and Blender display. See the [controller contract](modeling_system/plugin/skills/modeling-workbench/references/controller.md).
+The full observation and atomic native guard remain the default. These changes
+remove avoidable orchestration where supported; no Blender speedup is inferred
+from browser or game demos. Use current modeling receipts to identify bottlenecks.
+
+## Recurring planning judgments (0.2.19)
+
+Jev can take recurring planning decisions in addition to choosing native actions.
+The reusable `judgments` compiler supports Choice, Score and Noul batches, structured
+criteria, private identifier maps, complete answer validation and evidence-bound
+resolution. Built-in planning questions cover priority, method, evidence, recovery
+and handler routing with an explicit return-to-reasoning outcome. See the
+[planning contract](modeling_system/plugin/skills/modeling-workbench/references/judgments.md).
+The workspace supplies transport/budget and qualified candidate catalogs; generic
+judgments do not invent native capabilities or certify appearance. Expand useful
+retained procedures from actual work rather than requiring candidate-specific
+controller/menu code. Provider/native adoption and saved reasoning effort are
+separate from implementation.
+
+## Shared Jev work queue (0.2.20)
+
+WorkQueue and LaneSelector compose qualified operations across diagnosis, repair, verification, review preparation, recovery, experience and preparation. Durable prerequisites and receipts replace per-candidate controller restarts; conditional lane choices are batched and reused under exact evidence bindings. Explicit needs_review is separate from uncertain dispatch. Direct TypeSafe transport retains token-based cost estimates with workspace-owned credential and budget. Native execution stays serial; visual acceptance and new mechanisms remain reasoning-owner work. See the packaged work-queue procedure. Source tests, installation identity and actual workspace adoption are reported separately.

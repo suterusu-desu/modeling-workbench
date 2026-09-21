@@ -11,7 +11,7 @@ LEASE = ContextVar('modeling_episode_lease',default=None)
 
 
 def completion_status(result):
-    return 'finished' if result.get('effect_status')=='refused before mutation dispatch' or result.get('status') not in ('failed','needs attention','conflicting') else 'needs effect reconciliation'
+    return 'finished' if result.get('effect_status')=='refused before mutation dispatch' or result.get('status') not in ('failed','needs attention','conflicting','needs_reconciliation') else 'needs effect reconciliation'
 
 
 def process_identity(pid=None):

@@ -1,5 +1,12 @@
 # Modeling Workbench
 
+Astra and Jev operate one evidence-based workbench: Astra maintains character
+intent and reviews actual images; Jev chooses useful modeling work; qualified
+capabilities execute it and feed their results into the next decision.
+The [operating session](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md)
+links the existing queue, tools and native adapter through one recoverable episode.
+See the [system design](DESIGN.md) for responsibilities and retained workflows.
+
 Reusable tools and an evidence-based workflow for character modeling: exact recorded geometry, matched observations, guide/depth qualification, coupled response analysis, recoverable trials and retained learning.
 
 [Start here](modeling_system/plugin/skills/modeling-workbench/references/getting-started.md) | [Retained method](modeling_system/plugin/skills/modeling-workbench/references/method.md) | [Native adapters](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md) | [Agent skill](modeling_system/plugin/skills/modeling-workbench/SKILL.md)
@@ -9,6 +16,8 @@ The tools repository contains source, generic methods and synthetic tests. Chara
 Python, CLI and MCP expose the same core. Native Blender operations require a separately configured and verified workspace adapter. This package preserves the modeling process and its contracts; it does not claim identical results or validated native control on every character. Broader quality requires actual trials across different characters.
 
 Tools-only export is the default. Explicit workspace/evidence transfers remain private. See [development and contribution boundaries](DEVELOPING.md).
+
+For sustained modeling, the [persistent controller](modeling_system/plugin/skills/modeling-workbench/references/controller.md) runs owner-authorized operations while planning updates asynchronously. It retains exact execution receipts and visible status, avoids repeated settled failures, and uses the workspace's existing bounded selector only for unresolved choices. Native operations and the Blender status display are bound through the private owner adapter.
 
 ## What can I use today?
 
@@ -58,3 +67,33 @@ These are learning acknowledgments, not claims of endorsement or equivalent capa
 This repository contains reusable source and synthetic examples, not the original character, private adapter, provider accounts or production evidence. Share only reviewed tools-only exports; workspace/evidence exports can contain personal paths and private assets.
 
 No license is currently included. Licensing is pending; do not describe the repository as an open-source release until a license is selected and added.
+
+## Controller velocity increment (0.2.18)
+
+The controller now supports optional adapter-qualified selected-action revalidation,
+one-request compatible operation/target menus, and actual per-stage timings in
+its journal and Blender display. See the [controller contract](modeling_system/plugin/skills/modeling-workbench/references/controller.md).
+The full observation and atomic native guard remain the default. These changes
+remove avoidable orchestration where supported; no Blender speedup is inferred
+from browser or game demos. Use current modeling receipts to identify bottlenecks.
+
+## Recurring planning judgments (0.2.19)
+
+Jev can take recurring planning decisions in addition to choosing native actions.
+
+The opt-in `modeling_system.typesafe_transport.TypeSafeTransport` supports the
+direct TypeSafe v1 endpoint with typed response validation. The bound workspace
+supplies credentials and durable request budgets. Token-based cost estimates are
+labeled separately from provider-reported billing; the transport has no automatic
+retry, provider fallback or native effects. Follow the official `typesafe-ai`
+skill and current TypeSafe API documentation when maintaining this route.
+The reusable `judgments` compiler supports Choice, Score and Noul batches, structured
+criteria, private identifier maps, complete answer validation and evidence-bound
+resolution. Built-in planning questions cover priority, method, evidence, recovery
+and handler routing with an explicit return-to-reasoning outcome. See the
+[planning contract](modeling_system/plugin/skills/modeling-workbench/references/judgments.md).
+The workspace supplies transport/budget and qualified candidate catalogs; generic
+judgments do not invent native capabilities or certify appearance. Expand useful
+retained procedures from actual work rather than requiring candidate-specific
+controller/menu code. Provider/native adoption and saved reasoning effort are
+separate from implementation.

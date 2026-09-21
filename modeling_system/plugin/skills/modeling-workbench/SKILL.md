@@ -3,7 +3,11 @@ name: modeling-workbench
 description: Operate the local modeling workbench for numerical scene inspection, exact-view image and mesh reference loops, guide-constrained Blender trials, and generated-video motion comparison. Use with an explicitly bound private character workspace; assets, identity, scope and generation authority remain there.
 ---
 
-Use the installed modeling-workbench MCP operations as the primary interface. Python and the JSON-file CLI call the same domain service when a session has not yet discovered the plugin. Install the reusable package separately from the private character workspace; the service reports the selected binding, authority and capability map. Start with [workspace setup](references/getting-started.md), [the retained method](references/method.md) and [the native adapter boundary](references/native-adapters.md). Never infer anatomy or scene controls from another character.
+Operate through the [Astra/Jev operating session](references/operating-session.md). Astra owns intent, likeness and actual image judgments; Jev selects recurring priority, method, scope, evidence and recovery choices; existing code executes immediately. All Blender access, including inspection, poses, captures and saves, belongs inside selected qualified capabilities and their fixed prerequisites. The operation names below describe those capabilities, not permission for Astra to bypass the controller. Read-only episode/evidence lookup and new tool development stay available to Astra.
+
+Use one active decision episode, the existing shared queue and the existing provider ledger. OperatingSession journals selected tasks through the common service, retains procedure context and typed evidence, and automatically supplies current findings and scoped visual feedback to the next Jev decision. Attach historical queue results without replay or retroactive qualification. Keep source, installed runtime, private adapter and actual use distinct. Python/CLI call the same service when an app MCP schema is stale. Use delivered verified capabilities immediately within current authorization.
+
+Install the reusable package separately from the private character workspace. Start with [workspace setup](references/getting-started.md), [the retained method](references/method.md) and [native adapter qualification](references/native-adapters.md). Never infer anatomy, correspondence, guide admission or scene controls from another character. Fixed preservation and persistence run in code; cache exact applicable judgments and reuse unchanged evidence. The [controller](references/controller.md) keeps one native lane and reports actual progress in Blender.
 
 Start with `inspect_situation`. Read current modeling authority and retrieve relevant lessons by mechanism. Use `synchronize_scene` or `query_live_geometry` for current numerical evidence; `native_inspect_live` reports invalidation without silently making old geometry current. Scene changes invalidate the representation, and explicit synchronization refreshes it. Complete stored arrays remain queryable historically with declared coverage, including base-only and evaluated geometry distinctions. A current result is verified at the reported instant. The editing owner is stable across an experiment. A changed expected state or unresolved execution requires reconciliation, not blind repetition.
 
@@ -60,3 +64,17 @@ When a topology-changing operation emits exact element ancestry, use [topology l
 In source construction studies, identify the primary movement, support/bulge, gaze and corrective mechanisms separately; trace material rim/fold/return paths, corners/contact and neighboring ocular or lash layers through actual native controls. These are diagnostic questions, not prescribed anatomy, a spherical rig, zero neighboring influence or a biological simulation. Retain the evidence that supports an intervention before implementing a new character-specific mechanism.
 
 When a construction score improves but ridges persist, recorded triangulation differs between poses, dependent geometry moves despite fixed anchors, a support formula has not reproduced saved native samples, or exact plane sections show suspicious gaps, read [construction diagnostics](references/construction-diagnostics.md). It supplies bounded offline Python checks, explicit native-versus-fixed-chart comparison and independent frame-response checks. Presentation borders, measured shape, predicted support and artistic acceptance remain distinct.
+
+For controller velocity, use compatible operation/target choices in one request,
+skip inference for determined actions, and inspect per-stage timings during normal
+work. Use optional scoped revalidation only with fresh dependency evidence from
+a qualified adapter; preserve the atomic native guard. See references/controller.md.
+
+For recurring planning judgments as well as action selection, use [planning judgments](references/judgments.md). It covers prioritizing issues, choosing retained methods and evidence, routing failures, typed Choice/Score/Noul batches and returning unresolved questions to the reasoning owner. Reuse applicable results and existing authorized budgets; do not make every micro-step an inference.
+
+For continued Jev execution across diagnosis, repair, review preparation, recovery
+and retained methods, use the [shared work queue](references/work-queue.md).
+Offer qualified executable work with actual prerequisites; batch independent lane
+choices and continue without a reasoning-agent handoff per operation. Keep image
+interpretation and missing mechanisms explicit. Use the workspace's selected direct
+TypeSafe transport and existing ledger when configured.

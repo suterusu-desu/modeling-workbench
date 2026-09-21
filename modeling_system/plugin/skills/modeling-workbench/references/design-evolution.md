@@ -1,0 +1,104 @@
+# Prior design evidence
+
+Historical design rationale and delivered increments. The current system design is in the repository DESIGN.md; this is not an active task queue.
+
+# Coherent workflow composition
+
+The durable unit is a decision episode: intent, exact state, observations and targets, candidate interventions, independent judgments and retained methods. The service is the shared execution boundary for Python, CLI and MCP. Private workspaces own character identity, evidence, native bindings and authorization. A scene semantic graph explains mechanisms; a reusable workflow recipe specifies how operations and review decisions depend on one another. They link through the episode but are different abstractions.
+
+## Delivered diagnostic increment
+
+`inspect_control_coverage` adds the reverse question missing from forward response evidence: which known controls can structurally reach the current targets, which were omitted, and why was freedom excluded? Pinned sparse ancestry, exact state and ordered identities yield a bounded summary with complete stored detail. The report explicitly leaves useful controllability unproved. `analyze_repair` assesses only the supplied finite coupled problem; native realization, connected-form review and method integration remain separate steps.
+
+`inspect_target_domain` adds the earlier question: how was the candidate domain chosen, and did that choice hide skin or transitions? Its independently supplied geometric screen, selected fit, authored support mask, response rows, numeric label availability and reviewed region correspondence remain separate relations over exact point identities. Named edge checks retain their measurement semantics and declared required categories. The report inventories missing evidence and provenance without admitting targets, inferring anatomical meaning from a mask, substituting one metric for another or changing a solver. It composes through the same pinned-case recipe/service boundary. See [the target-domain contract](target-domain.md).
+
+## Surface correspondence: bounded diagnostic
+
+The observed trigger is a geometric candidate whose surface role remains uncertain: a selected hit can lie behind an excluded surface, and similar locations or differing normals do not resolve correspondence. Version 0.2.8 implements `inspect_surface_correspondence` over a pinned operator contract, through the existing offline service/recipe boundary. The [case and interpretation contract](surface-correspondence.md) defines its bounded scope. Actual installed operator adoption is separate from source implementation.
+
+Reuse recorded geometry, ray/pixel queries, exact plane sections and authored material paths. Keep the full declared query domain and the selected subset visible together; distinguish the first full-domain hit from the first selected hit. Preserve coincident owners and alternative branches. An excluded foreground component remains evidence about order even when it cannot be a target. A hit count or a nearest point does not establish visible ownership outside the declared objects, view and ray range.
+
+Separate measured orientation, geometric connectivity, authored anatomical role, reviewed support/exclusions and pose applicability. A general vertex-sequence query reports authored order and lengths without proving edges. The ordered-correspondence diagnostic separately validates successive steps against explicitly identified native polygon edges or triangulation edges and name which relation was checked. A triangulation diagonal is not automatically a native material edge. A connected path alone does not establish the anatomical interpretation of its endpoints.
+
+Exact section evidence retains plane, source triangles, disconnected segments and omitted coplanar cases. Do not smooth, bridge gaps or silently pick a branch to make a correspondence appear supported. Link each proposed correspondence to its particular source/target states, view, pose, support scope and independent review. A normal discrepancy is a warning with a winding/frame convention, never an automatic anatomy classifier. Unmeasured placement and different-pose evidence remain explicit applicability limits.
+
+The compact result should expose the unresolved question, alternatives, contradictory evidence and cheapest missing measurement, with bounded links to the original arrays and judgments. Report an empty query only within its declared domain; distinguish ambiguity, occlusion and exhausted/incomplete searches from proven absence. Keep any new diagnostic on the existing record, episode and recipe execution boundary. It may organize evidence for review but cannot admit a target, change an exclusion, move native geometry or grant appearance acceptance.
+
+Acceptance requires synthetic counterexamples plus independent use on the pinned operator case. Compare whether an agent can recover the competing surface hypotheses and their actual limits with fewer repeated reads. Select code changes only after identifying a relation the existing queries and records cannot already express reliably; do not build another geometry or review authority.
+
+## Delivered offline recipe layer
+
+Version 0.2.4 adds a bounded typed dependency graph over the existing offline diagnostic operations. `recipe_template`, `create_recipe`, `inspect_recipe`, `revise_recipe_inputs`, `run_recipe_step`, `review_recipe_step` and `recover_recipe_step` share the existing service, episode leases and durable operation journal. The [operator contract](recipes.md) defines that delivered subset. The renewed [finite completion queue](../../../../../IMPLEMENTATION-QUEUE.md) supersedes earlier native/provider deferrals: closed native transactions and provider cost composition extend the same evidence and job authorities, with separate verification boundaries.
+
+The smallest coherent recipe is a versioned declarative description with a question, typed external inputs, operation nodes, output references, applicability dependencies and review gates. Instantiate it in one private workspace/episode with scoped node IDs. Resolve node operations through the existing service and journal. Native operations retain the sole owner; provider operations retain source-bound claim/reconcile and actual authorization. Never embed private character data or credentials in a generic recipe.
+
+Plan evaluation should return ready, waiting for evidence/review, reusable, stale, failed or uncertain nodes with reasons and exact expansion links. A completed artifact and a result applicable to current inputs are separate facts. A result key includes the operation/schema, exact arguments, pinned input content, relevant target/state/adapter dependencies and recipe version. A view-only change should not discard reusable geometry; a changed guide should invalidate dependent fit/review claims while retaining the original evidence. Missing compatibility remains unknown rather than reusable.
+
+Execution is incremental. The graph asks the existing execution boundary to perform one ready operation and records its receipt. It does not replay completed side effects after a crash, treat an unknown job as done, auto-rerun stale paid nodes, or bypass an artistic review gate. Recovery reconciles the same operation/job identity. Aggregate cost previews preserve distinct currencies, unknown future steps and authorization scopes; quotes do not grant spending authority.
+
+The bundled diagnostic template follows pinned inputs -> reverse control coverage -> scope review -> response analysis -> diagnostic review. The scope review includes the downstream case in its input dependencies, so changing that case invalidates its prior review. Review records retain exact upstream evidence and input identities. Episode judgment and method integration remain explicit existing operations. A later bounded native batch may reduce transport overhead for a proven deterministic sequence, but episode journaling alone does not provide native atomicity. Topology lineage, component catalogs and library import require their own verified adapter contracts; do not add overlapping batch languages.
+
+Inspection never materializes cases or dispatches an operation. Execution restores only the selected step's pinned file inputs and reserves its existing operation handle before dispatch. Result-index failure recovers the original durable result without repeating the analysis. Per-node keys include relevant inputs, upstream result identities and loaded source; a corrected review invalidates dependent uses. Package changes invalidate conservatively. Case rebinds are explicit; retained evidence does not assert live freshness. Native modeling continues on its verified environment while the new offline slice is adopted separately. See the [implementation queue](../../../../../IMPLEMENTATION-QUEUE.md) for remaining contracts and evidence needed to select them.
+
+Acceptance before operator adoption (source tests are necessary but do not prove actual use):
+
+- Two instances with identical display names cannot share operation/job identities or private bindings.
+- Missing outputs, cycles and unsupported operations fail before effects.
+- An input-content or relevant dependency change invalidates only affected uses; completed artifacts remain recoverable.
+- Crash after dispatch but before receipt leads to reconciliation, never duplicate dispatch.
+- Unsupported/rejected target evidence and pending appearance judgment block the appropriate downstream node.
+- A fresh process reconstructs the next justified step from retained inputs, recipe version and receipts without conversation history.
+
+Builder owns this layer; Planner supplies a repeated useful sequence and acceptance case; the native owner verifies native adoption. Implement it when it reduces measured repeated work without concealing review or uncertainty. The immediate control-coverage improvement does not wait for the entire graph facility.
+
+## Recorded connectivity, identity and execution evidence
+
+Version 0.2.9 extends the same decision loop at three missing relations. A component catalog answers which recorded connected part contains an exact element; a bounded graph query asks whether the selected relation supplies a route, retaining equal alternatives and exhaustion. Neither supplies anatomical roles. Topology lineage links an operation's declared before/after element identities, so later selectors can follow exact splits and merges or stop at ambiguity. A verified native producer remains a separate requirement.
+
+Execution-receipt inspection connects a caller's compact answer to the durable operation evidence and asks separately what effect was reported, which bytes exist, whether the process exited, whether required outputs were completed, and what later independent verification established. It never repeats the original effect. The standalone worker finalizer makes the declared completion manifest the last verified write; it can run inside an owner-authored isolated worker without replacing the native adapter. Its assertions are trusted-worker evidence, not proof of appearance or untrusted producer honesty.
+
+These operations reuse exact content records, bounded expansion, public service/CLI/MCP dispatch and existing operation recovery. The operator can begin with a small question, inspect only the relevant relations and trace each answer back to exact private inputs. New evidence enriches the episode and retained method without making a second source of geometry, authority or judgment. See the linked contracts in the packaged skill and the explicit implementation/adoption/defer dispositions in IMPLEMENTATION-QUEUE.md.
+# Persistent execution and asynchronous planning
+
+The owner-run `modeling_system.controller` joins the existing operation boundary
+into a continuing observe/select/execute/retain loop. It accepts explicit private
+adapters for fresh state, native execution, bounded selection and visible status.
+Only advisory planning overlaps native work; it cannot mutate the scene or expand
+the authored operation menu. Required sequences stay in code and optional choices
+use the existing selector transport/budget. Planning responses and selected actions
+are checked against relevant revisions before use, with the native adapter retaining
+its atomic expected-state and owner checks at execution.
+
+Durable attempts precede effects. Completed and settled failed/no-progress actions
+are suppressed until their actual method/evidence changes. Unknown execution or
+inference requires reconciliation rather than replay. Idle and waiting states end
+the bounded run instead of polling unchanged state. Workspace-bound status feeds
+the actual Blender viewport, including objective, stage, action, progress, budget
+and disconnection. See the [controller contract](controller.md).
+
+## Controller velocity increment (0.2.18)
+
+The controller now supports optional adapter-qualified selected-action revalidation,
+one-request compatible operation/target menus, and actual per-stage timings in
+its journal and Blender display. See the [controller contract](controller.md).
+The full observation and atomic native guard remain the default. These changes
+remove avoidable orchestration where supported; no Blender speedup is inferred
+from browser or game demos. Use current modeling receipts to identify bottlenecks.
+
+## Recurring planning judgments (0.2.19)
+
+Jev can take recurring planning decisions in addition to choosing native actions.
+The reusable `judgments` compiler supports Choice, Score and Noul batches, structured
+criteria, private identifier maps, complete answer validation and evidence-bound
+resolution. Built-in planning questions cover priority, method, evidence, recovery
+and handler routing with an explicit return-to-reasoning outcome. See the
+[planning contract](judgments.md).
+The workspace supplies transport/budget and qualified candidate catalogs; generic
+judgments do not invent native capabilities or certify appearance. Expand useful
+retained procedures from actual work rather than requiring candidate-specific
+controller/menu code. Provider/native adoption and saved reasoning effort are
+separate from implementation.
+
+## Shared Jev work queue (0.2.20)
+
+WorkQueue and LaneSelector compose qualified operations across diagnosis, repair, verification, review preparation, recovery, experience and preparation. Durable prerequisites and receipts replace per-candidate controller restarts; conditional lane choices are batched and reused under exact evidence bindings. Explicit needs_review is separate from uncertain dispatch. Direct TypeSafe transport retains token-based cost estimates with workspace-owned credential and budget. Native execution stays serial; visual acceptance and new mechanisms remain reasoning-owner work. See the packaged work-queue procedure. Source tests, installation identity and actual workspace adoption are reported separately.
