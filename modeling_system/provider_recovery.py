@@ -11,7 +11,163 @@ import math
 from .controller import fingerprint, read_json, write_json
 from .typesafe_transport import MODEL, ROUTE, validate_response_receipt
 
-SETTLED_PROVIDER = {'response_validated', 'verified_no_dispatch', 'terminal_http_error'}
+SETTLED_PROVIDER = {'response_validated', 'verified_no_dispatch', 'terminal_http_error',
+                    'transient_http_error', 'response_unavailable_accounted'}
+
+
+def budget_limits(ledger):
+    """Normal use follows account credits or explicit user limits, never a lab cap."""
+    policy = ledger.get('policy')
+    if policy is None:
+        return 4, .005  # Preserve explicitly legacy trial behavior only.
+    if policy.get('mode') != 'normal_use' or not policy.get('authority'):
+        raise ValueError('Existing normal-use authority required')
+    calls, cost = policy.get('max_requests'), policy.get('max_cost_usd')
+    if calls is not None and (type(calls) is not int or calls < 1):
+        raise ValueError('Explicit request limit must be positive')
+    if cost is not None and (type(cost) not in (int, float) or not math.isfinite(cost) or cost <= 0):
+        raise ValueError('Explicit spending limit must be positive and finite')
+    return math.inf if calls is None else calls, math.inf if cost is None else cost
+
+
+def validate_feedback_rebinding(proof, old_reads, new_reads):
+    """Refresh applicability and exclude newly stale reviews; invent no evidence."""
+    before, after = proof['before'], proof['after']
+    if (fingerprint(before) != old_reads.get('operating_feedback')
+            or fingerprint(after) != new_reads.get('operating_feedback')
+            or {k: v for k, v in before.items() if k not in ('findings', 'visual_feedback')} !=
+               {k: v for k, v in after.items() if k not in ('findings', 'visual_feedback')}
+            or len(before.get('findings', [])) != len(after.get('findings', []))):
+        raise ValueError('Authority feedback proof must bind the original and refreshed findings')
+    retained = iter(before['visual_feedback'])
+    if any(not any(row == old for old in retained) for row in after['visual_feedback']):
+        raise ValueError('Authority feedback refresh cannot introduce or change a review')
+    for old, new in zip(before['findings'], after['findings']):
+        if ({k: v for k, v in old.items() if k != 'applicability'} !=
+                {k: v for k, v in new.items() if k != 'applicability'}
+                or any(row.get('applicability') not in {'current inputs', 'historical; inputs changed'}
+                       for row in (old, new))):
+            raise ValueError('Authority feedback refresh cannot alter findings, checks or qualifications')
+
+
+def transient_retry_packet(packet, request, response, dispatch, error_type, *, rebinding=None):
+    """Link at most two retries to one decision; unavailable responses stay unknown."""
+    wire = {'model': MODEL, 'state': packet['state'], 'questions': packet['questions']}
+    if (request.get('transport') != ROUTE or request.get('request') != wire
+            or request.get('local_binding') != packet['local_binding']
+            or request.get('wire_request_digest') != fingerprint(wire)
+            or dispatch.get('calls_attempted') != 1 or dispatch.get('transport') != ROUTE):
+        raise ValueError('Exact original request and dispatch evidence required')
+    if response is None:
+        if error_type not in {'TimeoutError', 'ConnectionResetError', 'ConnectionAbortedError',
+                              'ConnectionRefusedError', 'RemoteDisconnected', 'IncompleteRead', 'BrokenPipeError'}:
+            raise ValueError('No supported transient network failure evidence')
+        outcome = 'unknown'
+    else:
+        if (response.get('transport') != ROUTE or response.get('wire_request_digest') != fingerprint(wire)
+                or response.get('http') not in {429, 500, 502, 503, 504, 529} or 'response' in response):
+            raise ValueError('Not a transient provider response; do not retry authorization, credits or invalid answers')
+        outcome = 'http_error'
+    prior = packet['local_binding'].get('provider_retry', {})
+    ordinal = prior.get('ordinal', 0) + 1
+    if ordinal > 2:
+        raise ValueError('Transient retry bound reached; retain original effects and stop')
+    base = deepcopy(packet); base['local_binding'].pop('provider_retry', None)
+    if rebinding is not None:
+        if prior or not rebinding.get('authority_keys') or not rebinding.get('evidence'):
+            raise ValueError('Authority rebind needs explicit evidence and cannot reset a retry chain')
+        fresh = rebinding['packet']
+        old_binding, new_binding = base['local_binding'], fresh['local_binding']
+        old_reads, new_reads = old_binding['dependencies']['reads'], new_binding['dependencies']['reads']
+        allowed = set(rebinding['authority_keys']) | {'work_queue_scope'}
+        if rebinding.get('feedback_rebinding') is not None:
+            validate_feedback_rebinding(rebinding['feedback_rebinding'], old_reads, new_reads)
+            allowed.add('operating_feedback')
+        if (old_binding['owner'] != new_binding['owner'] or set(old_reads) != set(new_reads)
+                or old_binding['dependencies']['writes'] != new_binding['dependencies']['writes']
+                or any(old_reads[k] != new_reads[k] for k in old_reads if k not in allowed)
+                or 'provider_retry' in new_binding):
+            raise ValueError('Authority rebind cannot change geometry, guide or other dependency revisions')
+        base = deepcopy(fresh)
+    root = fingerprint(base)
+    if prior and prior.get('root_packet_digest', prior.get('original_packet_digest')) != root:
+        raise ValueError('Retry lineage changed')
+    result = deepcopy(base)
+    result['local_binding']['provider_retry'] = {'kind': 'transient', 'ordinal': ordinal,
+        'root_packet_digest': root, 'previous_packet_digest': fingerprint(packet),
+        'failure_digest': fingerprint({'response': response, 'error_type': error_type}),
+        'previous_provider_outcome': outcome}
+    if rebinding is not None:
+        result['local_binding']['provider_retry']['authority_rebound_from'] = fingerprint(packet)
+    return result
+
+
+def prepare_transient_retry(call_directory, ledger_directory, current_reader, *, rebinding=None):
+    """Account once for a transient failure and prepare its bounded successor."""
+    call, directory = Path(call_directory).resolve(), Path(ledger_directory).resolve()
+    lock = directory/'dispatch.lock'
+    with lock.open('x', encoding='utf-8') as stream: stream.write('transient selection recovery')
+    try:
+        path = directory/'budget.json'; ledger = read_json(path)
+        rows = [a for a in ledger['attempts'] if Path(a['output']).resolve() == call]
+        if len(rows) != 1 or rows[0]['status'] not in (
+                'failed_or_uncertain', 'transient_http_error', 'response_unavailable_accounted'):
+            raise ValueError('Exact settled worker failure required; in-flight work is not retried')
+        entry = rows[0]
+        packet = read_json(call/'owner-packet.json')
+        if fingerprint(packet) != entry['packet_digest'] or read_json(entry['source_packet']) != packet:
+            raise ValueError('Original packet changed')
+        response_path = call/'decision-1.response.json'
+        response = read_json(response_path) if response_path.exists() else None
+        retry = transient_retry_packet(packet, read_json(call/'decision-1.request.json'), response,
+            read_json(call/'dispatch-count.json'), entry.get('error_type'), rebinding=rebinding)
+        check_current(rebinding['packet'] if rebinding else packet, current_reader())
+        max_requests, max_cost = budget_limits(ledger)
+        reserve, debited = entry.get('reserved_usd'), entry.get('conservative_cost_debit_usd', 0.)
+        total = ledger['known_cost_usd']
+        if (any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in (reserve, total, debited))
+                or reserve <= 0 or debited not in (0., reserve) or entry.get('estimated_cost_usd', 0.) != 0):
+            raise ValueError('Unknown response must retain its original reservation accounting')
+        retry_digest = fingerprint(retry)
+        existing = [a for a in ledger['attempts'] if a['packet_digest'] == retry_digest]
+        if len(existing) > 1 or any(a is not entry and a not in existing and a['status'] not in SETTLED_PROVIDER
+                                 for a in ledger['attempts']):
+            raise ValueError('Unrelated or duplicate unresolved requests cannot be cleared')
+        carried = ledger.get('carry_in_requests', 0)
+        if type(carried) is not int or carried < 0: raise ValueError('Invalid carried request count')
+        used = carried + sum(a['status'] != 'verified_no_dispatch' for a in ledger['attempts'])
+        accounted = total + (reserve - debited)
+        if not existing and (used + 1 > max_requests or accounted + reserve > max_cost):
+            raise ValueError('Explicit user budget cannot cover the next bounded retry')
+        before = call/('transient-before-' + fingerprint(ledger)[:16] + '.json')
+        if not before.exists(): write_json(before, ledger)
+        receipt_path = call/'transient-retry.json'
+        result = {'status': 'transient_retry_prepared', 'previous_call': str(call),
+            'root_packet_digest': retry['local_binding']['provider_retry']['root_packet_digest'],
+            'retry_packet': retry, 'retry_packet_digest': retry_digest,
+            'provider_outcome': retry['local_binding']['provider_retry']['previous_provider_outcome'],
+            'error_type': entry.get('error_type'), 'original_ledger_evidence': str(before),
+            'conservative_cost_debit_usd': reserve, 'cost_basis': 'original_reservation_allowance_not_reported_billing',
+            'backoff_seconds': (.5, 2.)[retry['local_binding']['provider_retry']['ordinal'] - 1],
+            'provider_calls_added': 0, 'native_dispatch': False}
+        if rebinding is not None: result['authority_rebinding'] = deepcopy(rebinding)
+        if receipt_path.exists():
+            prior = read_json(receipt_path)
+            if prior['retry_packet_digest'] != retry_digest: raise ValueError('Existing retry identity changed')
+            result = prior
+        else: write_json(receipt_path, result)
+        entry.update(status='response_unavailable_accounted' if response is None else 'transient_http_error',
+            provider_outcome=result['provider_outcome'], conservative_cost_debit_usd=reserve,
+            transient_retry={'retry_packet_digest': retry_digest, 'original_ledger_evidence': result['original_ledger_evidence']})
+        ledger['known_cost_usd'] = accounted
+        ledger['cost_basis'] = 'historical_cost_and_token_estimates_plus_explicit_conservative_debits'
+        outstanding = [a for a in ledger['attempts'] if a['status'] not in SETTLED_PROVIDER]
+        ledger['status'] = 'needs_reconciliation' if outstanding else 'ready'
+        ledger['reserved_usd'] = sum(a.get('reserved_usd', 0.) for a in outstanding if a['status'] == 'reserved')
+        write_json(path, ledger)
+        return result
+    finally:
+        lock.unlink()
 
 
 def terminal_retry_packet(packet, request, response, dispatch):
@@ -61,11 +217,7 @@ def prepare_terminal_retry(call_directory, ledger_directory, current_reader, *, 
         retry = terminal_retry_packet(packet, request, response, dispatch)
         check_current(packet, current_reader())
         policy = ledger.get('policy')
-        max_requests, max_cost = (4, .005) if policy is None else (policy.get('max_requests'), policy.get('max_cost_usd'))
-        if (policy is not None and (policy.get('mode') != 'normal_use' or not policy.get('authority'))
-                or type(max_requests) is not int or not 1 <= max_requests <= 128
-                or type(max_cost) not in (int, float) or not math.isfinite(max_cost) or not 0 < max_cost <= .005):
-            raise ValueError('Existing authorized budget limits required')
+        max_requests, max_cost = budget_limits(ledger)
         reserve = entry.get('reserved_usd')
         total, debited = ledger['known_cost_usd'], entry.get('conservative_cost_debit_usd', 0.)
         if (any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in (reserve, total, debited))
@@ -160,7 +312,8 @@ def reconcile_completed_response(call_directory, ledger_directory, current_reade
                 read_json(entry['source_packet']) != packet):
             raise ValueError('Original packet or owner source changed')
         source = Path(response_path).resolve() if response_path else call / 'decision-1.response.json'
-        if source.parent != call or not source.name.startswith('decision-1.response.json'):
+        if source.parent != call or not (source.name.startswith('decision-1.response.json')
+                or source.name.startswith('.wb-') and source.suffix == '.tmp'):
             raise ValueError('Response must belong to the original call directory')
         response = read_json(source)
         request = read_json(call / 'decision-1.request.json')

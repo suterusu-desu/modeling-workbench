@@ -82,8 +82,9 @@ implemented; concurrent native execution is not.
 
 The controller continues until its finite bound, no eligible work, review deferral,
 cancellation or uncertainty. `needs_review` is a normal semantic result and clears
-inference-in-flight state. Provider failure and unknown native effects require
-reconciliation and are never replayed automatically. `work-queue.json`, controller
+inference-in-flight state. Transient provider failures can use bounded, accounted retries with backoff and
+fresh dependencies. Unknown native effects require reconciliation and are never
+replayed automatically. `work-queue.json`, controller
 events and `last-batch.json` retain actual work, judgments, recommendations and
 outcomes. Judge success by useful visible results and avoided owner turns, not
 inference count. Lesson selection/proposed updates preserve original evidence and

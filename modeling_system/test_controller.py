@@ -211,7 +211,7 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(replace.call_count, 6)
             self.assertEqual(sleep.call_count, 5)
         self.assertEqual(read_json(path), {'old': True})
-        self.assertEqual(read_json(next(self.root.glob('response.json.tmp-*'))), {'complete_response': True})
+        self.assertEqual(read_json(next(self.root.glob('.wb-*.tmp'))), {'complete_response': True})
 
     def test_temporary_windows_sharing_failure_retries_metadata_only(self):
         import os
@@ -226,12 +226,23 @@ class ControllerTests(unittest.TestCase):
                 patch('modeling_system.controller.time.sleep'):
             write_json(self.root / 'response.json', {'complete': True})
         self.assertEqual(len(attempts), 3)
-        self.assertEqual(list(self.root.glob('*.tmp-*')), [])
+        self.assertEqual(list(self.root.glob('.wb-*.tmp')), [])
 
     def test_nonsharing_error_is_not_retried(self):
         with patch('modeling_system.controller.os.replace', side_effect=OSError('disk full')) as replace:
             with self.assertRaises(OSError): write_json(self.root / 'response.json', {'complete': True})
         self.assertEqual(replace.call_count, 1)
+
+    def test_long_receipt_name_does_not_lengthen_atomic_temporary_path(self):
+        import os
+        real = os.replace
+        path = self.root / ('receipt-' + 'x' * 170 + '.json')
+        def replace(source, destination):
+            self.assertLess(len(str(source)), len(str(destination)))
+            return real(source, destination)
+        with patch('modeling_system.controller.os.replace', side_effect=replace):
+            write_json(path, {'retained': True})
+        self.assertEqual(read_json(path), {'retained': True})
 
 
 if __name__ == '__main__':

@@ -25,7 +25,7 @@ Tools-only export is the default. Explicit workspace/evidence transfers remain p
 
 The [persistent controller](modeling_system/plugin/skills/modeling-workbench/references/controller.md) supports sustained work with bounded budgets, asynchronous planning, compatible action batches and per-stage timings. The private adapter supplies native operations and the Blender status display. Saved findings and Astra's review feedback inform subsequent choices; visual acceptance remains separate from numerical checks.
 
-The [TypeSafe integration](modeling_system/plugin/skills/modeling-workbench/references/judgments.md) provides typed Jev judgments through the direct API. Your private workspace supplies credentials, request budgets and the qualified action catalog. See the [operating-session contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) to connect the controller, queue, adapter and evidence records.
+The [TypeSafe integration](modeling_system/plugin/skills/modeling-workbench/references/judgments.md) provides typed Jev judgments through the direct API. Your private workspace supplies credentials, usage accounting and the qualified action catalog. See the [operating-session contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) to connect the controller, queue, adapter and evidence records.
 
 ## What can I use today?
 
@@ -50,7 +50,7 @@ An assistant can use the same core through Python, CLI or MCP. The method still 
 | Python 3.12+ | Install and run the core | Install separately; use a virtual environment. |
 | NumPy, SciPy, Pillow, MCP SDK, imageio-ffmpeg | Package runtime | Installed by `pip install .`; exact allowed ranges are in [pyproject.toml](pyproject.toml). |
 | Blender and a qualified workspace adapter | Inspect or edit a live character | Blender, the bridge setup and your rig/scene bindings are separate. See [native adapters](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md). |
-| TypeSafe API access | Jev-driven action selection and planning | Supply your own credentials and bounded budget in the private workspace; offline core use does not require it. |
+| TypeSafe API access | Jev-driven action selection and planning | Supply your own credentials and account-credit authorization in the private workspace; offline core use does not require it. |
 | An AI assistant / MCP client | Agent-operated workflow | Bring your own client, model access and applicable subscription. CLI/Python use does not require an AI account. |
 | Image generation or editing service | Create new character/pose/detail reference images | Optional external service. Bring a supported transport and account; existing artwork can also supply references. No image model or credits are bundled. |
 | Tripo Studio | Reconstruct generated 3D guides in the documented Tripo route | Optional external service with your own account and authorized credits. The package records and checks jobs; it does not operate the website by itself. |

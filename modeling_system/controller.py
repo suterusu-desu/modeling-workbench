@@ -21,7 +21,7 @@ def fingerprint(value):
 def write_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + '.tmp-' + uuid.uuid4().hex)
+    temporary = path.with_name('.wb-' + uuid.uuid4().hex + '.tmp')
     with temporary.open('w', encoding='utf-8', newline='\n') as stream:
         json.dump(value, stream, indent=2, allow_nan=False)
         stream.write('\n')

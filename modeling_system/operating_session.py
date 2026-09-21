@@ -244,6 +244,19 @@ class OperatingSession(WorkQueue):
             else:
                 ready.append(action)
         state['actions'] = ready
+        feedback = self._feedback(state)
+        state['observations']['workbench'] = feedback
+        state['values']['operating_feedback'] = fingerprint(feedback)
+        state['values']['operating_observation'] = fingerprint(state.get('public_state', {}))
+        for action in ready:
+            action['reads'].update({k: state['values'][k]
+                for k in ('operating_intent', 'operating_feedback', 'operating_observation')})
+        if not ready and blocked:
+            state['attention'] = {'reason': 'Resolve the scoped missing evidence or appearance question; saved work remains available',
+                                  'tasks': deepcopy(blocked)}
+        return state
+
+    def _feedback(self, state):
         # Facts are compiled after every actual operation, never frozen in a
         # startup prompt. IDs/locators remain private; only authored public text
         # and explicit coverage enter Jev state.
@@ -263,16 +276,26 @@ class OperatingSession(WorkQueue):
             'limits': 'Technical execution and metrics do not approve appearance. Scope_noop excludes only its stated scope; retain useful gains elsewhere.'}
         if len(canonical(feedback)) > 8000:
             raise ValueError('Modeling feedback exceeds the decision budget; narrow the active catalog, retaining old facts in the episode')
-        state['observations']['workbench'] = feedback
-        state['values']['operating_feedback'] = fingerprint(feedback)
-        state['values']['operating_observation'] = fingerprint(state.get('public_state', {}))
-        for action in ready:
-            action['reads'].update({k: state['values'][k]
-                for k in ('operating_intent', 'operating_feedback', 'operating_observation')})
-        if not ready and blocked:
-            state['attention'] = {'reason': 'Resolve the scoped missing evidence or appearance question; saved work remains available',
-                                  'tasks': deepcopy(blocked)}
-        return state
+        return feedback
+
+    def authority_feedback_rebinding(self, previous, current, authority_keys):
+        """Prove a feedback refresh follows only the explicitly changed authority.
+
+        Recompute the old view from current retained reports with only authority
+        values restored. Changed findings, reviews or other report dependencies
+        cannot pass by merely labelling a new feedback hash as authority-derived.
+        """
+        from .provider_recovery import validate_feedback_rebinding
+        restored = deepcopy(current)
+        restored['authority_revision'] = previous['authority_revision']
+        for key in set(authority_keys) | {'work_queue_scope'}:
+            restored['values'][key] = previous['values'][key]
+        proof = {'before': previous['observations']['workbench'],
+                 'after': current['observations']['workbench']}
+        if self._feedback(restored) != proof['before'] or self._feedback(current) != proof['after']:
+            raise ValueError('Retained feedback changed beyond the authority correction')
+        validate_feedback_rebinding(proof, previous['values'], current['values'])
+        return deepcopy(proof)
 
     def _project(self, snapshot, actions, plan):
         projected = deepcopy(self.projection(snapshot, actions, plan))
@@ -489,7 +512,7 @@ class OperatingSession(WorkQueue):
 
     def recover_completed_selection(self, *, expected_selection, packet_path,
                                     request_path, response_path, reconciliation_path,
-                                    terminal_retry_path=None):
+                                    terminal_retry_path=None, transient_retry_path=None):
         """Release an exact validated provider return, with no inference or effects.
 
         Reconcile its original ledger using provider_recovery first. Retained
@@ -532,7 +555,30 @@ class OperatingSession(WorkQueue):
             public = self.selector.project(deepcopy(state), deepcopy(state['actions']), deepcopy(selection['plan']))
             original_packet = batch['packet']
             retry_evidence, retry_lineage = [], None
-            if terminal_retry_path is not None:
+            if terminal_retry_path is not None and transient_retry_path is not None:
+                raise ValueError('Supply one explicit retry lineage')
+            if transient_retry_path is not None:
+                from .provider_recovery import transient_retry_packet
+                authorization = read_json(transient_retry_path)
+                origin = Path(authorization['previous_call'])
+                prior_packet, prior_request, prior_dispatch = [read_json(origin/name) for name in
+                    ('owner-packet.json', 'decision-1.request.json', 'dispatch-count.json')]
+                previous_response = origin/'decision-1.response.json'
+                failed_response = read_json(previous_response) if previous_response.exists() else None
+                derived = transient_retry_packet(prior_packet, prior_request, failed_response,
+                    prior_dispatch, authorization.get('error_type'), rebinding=authorization.get('authority_rebinding'))
+                base = deepcopy(derived); base['local_binding'].pop('provider_retry')
+                if (authorization.get('status') != 'transient_retry_prepared' or base != original_packet
+                        or authorization.get('root_packet_digest') != fingerprint(original_packet)
+                        or authorization.get('retry_packet_digest') != fingerprint(packet) or derived != packet):
+                    raise ValueError('Completed transient retry does not descend from this pending choice')
+                retry_lineage = {**packet['local_binding']['provider_retry'],
+                    'retry_packet': fingerprint(packet), 'original_outcome_preserved': True}
+                retry_evidence = [transient_retry_path, origin/'owner-packet.json',
+                    origin/'decision-1.request.json', origin/'dispatch-count.json',
+                    authorization['original_ledger_evidence']]
+                if previous_response.exists(): retry_evidence.append(previous_response)
+            elif terminal_retry_path is not None:
                 from .provider_recovery import terminal_retry_packet
                 authorization = read_json(terminal_retry_path)
                 origin = Path(authorization['original_call'])
@@ -558,7 +604,8 @@ class OperatingSession(WorkQueue):
                 choice = self.selector.recover_completed(selection, original_packet, response['response'], str(response_path))
                 return {'status': 'completed', 'selection': expected_selection, 'choice': choice,
                     'evidence': pinned, 'provider_calls_added': 0, 'effects_replayed': False,
-                    'terminal_retry_lineage': retry_lineage}
+                    'provider_retry_lineage': retry_lineage,
+                    'terminal_retry_lineage': retry_lineage if terminal_retry_path is not None else None}
             result = self.service._run_episode_callback(self.episode, 'recover_completed_modeling_selection',
                 {'selection': selection, 'evidence': pinned}, restore)
             current = read_json(path)

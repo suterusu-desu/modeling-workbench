@@ -11,6 +11,32 @@ from .work_queue import WorkQueue
 
 
 class OperatingTests(unittest.TestCase):
+    def test_authority_feedback_proof_reconstructs_retained_findings(self):
+        session = OperatingSession.__new__(OperatingSession)
+        session.items = {'old': {'writes': []}}
+        session.reviews = {}
+        report = {'basis': {'source': 'v1', 'authority': 'old'},
+            'findings': ['retained fact'], 'checks': {'analysis': {'status': 'pass'}},
+            'qualification': 'technical only'}
+        session.record = {'results': {'old': {'result': {'workbench': report}}}}
+        before = {'authority_revision': 'old', 'values': {
+            'source': 'v1', 'authority': 'old', 'work_queue_scope': 'old-scope'}}
+        after = deepcopy(before)
+        after['authority_revision'] = 'new'
+        after['values'].update(authority='new', work_queue_scope='new-scope')
+        for state in (before, after):
+            feedback = session._feedback(state)
+            state['observations'] = {'workbench': feedback}
+            state['values']['operating_feedback'] = fingerprint(feedback)
+        proof = session.authority_feedback_rebinding(before, after, ['authority'])
+        self.assertEqual(proof['after']['findings'][0]['applicability'], 'historical; inputs changed')
+        altered = deepcopy(after); altered['values']['source'] = 'changed'
+        with self.assertRaises(ValueError):
+            session.authority_feedback_rebinding(before, altered, ['authority'])
+        report['findings'] = ['different fact']
+        with self.assertRaises(ValueError):
+            session.authority_feedback_rebinding(before, after, ['authority'])
+
     def setUp(self):
         self.base = fixtures.EpisodeTests(); self.base.setUp()
         self.addCleanup(self.base.tearDown)
@@ -377,7 +403,7 @@ class MetadataWriteTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     write_json(Path(directory)/'status.json', {})
                 self.assertEqual(replace.call_count, 1)
-            self.assertEqual(read_json(next(Path(directory).glob('status.json.tmp-*'))), {})
+            self.assertEqual(read_json(next(Path(directory).glob('.wb-*.tmp'))), {})
 
 
 if __name__ == '__main__':

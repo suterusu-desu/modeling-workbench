@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.22.1
+# Current operating integration: 0.2.22.3
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -23,6 +23,21 @@ This is implementation and integration work, not a new modeling prerequisite or
 an instruction to rerun old audits. Runtime installation and owner adoption are
 recorded in the private workspace with actual operation receipts. No universal
 character qualification, native concurrency or measured speedup is inferred.
+
+## Current normal-use recovery
+
+Normal-use policy follows existing account credits without inherited experimental
+spending or request ceilings. Explicit user limits remain supported. Usage and
+conservative unknown-response accounting are retained. Recorded transient failures
+use up to two linked retries with backoff; missing responses remain unknown, and
+credit/authorization errors or uncertain native effects stop. Authority-only rebinds
+retain old and new selection contexts and require all other dependencies unchanged.
+When authority changes the applicability of retained findings, reconstruct the
+old feedback using only the old authority values and bind both feedback views.
+Finding content, check results and native inputs remain exact. Newly stale reviews
+leave the current view but remain retained; no judgment is introduced or rewritten.
+Short sibling temporary names and ancillary receipt names remove the observed
+Windows long-path failure without altering request identity.
 
 ## Prior delivered increments
 

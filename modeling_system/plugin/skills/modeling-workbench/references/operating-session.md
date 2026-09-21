@@ -230,22 +230,38 @@ exhaustion; explicitly inspect and supply its path as `response_path` to the
 ledger helper. Do not guess among temporary files, repeat HTTP or replay Blender
 work. The transport records response and cost metadata together in one write.
 
-A recorded terminal HTTP503 with no answer uses a separate explicit retry path.
-`provider_recovery.prepare_terminal_retry(call, ledger, current_reader, reason=...)`
-verifies the original request and terminal receipt, preserves its failed identity,
-and conservatively debits the original reserved cost once. This debit is an upper
-bound, not reported billing. It admits one new packet with a local `provider_retry`
-lineage only if the existing request and cost limits cover both attempts. The wire
-questions are unchanged; the ordinary dispatcher still reserves and records the
-new attempt. The helper itself performs no HTTP or native work.
+Normal Jev use follows existing account credits. A `normal_use` policy may omit
+`max_cost_usd` and `max_requests`; installation does not impose a lifetime spending
+or request cap. Preserve usage accounting, explicit user limits when supplied,
+and the prohibition on purchases/topups. Provider credit or authorization errors
+stop normally; a synthetic test budget is not a user's spending instruction.
 
-After the new attempt returns a valid answer, reconcile its completed response
-normally. Supply the original call's `terminal-retry.json` as `terminal_retry_path`
-to `recover_completed_selection`; both failed and successful calls become pinned
-selection evidence. No request is relabeled not-dispatched, and no native handler
-is replayed. A timeout, missing receipt, other status, changed inputs, unrelated
-uncertain attempt or second terminal error cannot use this one-retry route. Stop
-under the existing attempt identity; do not manufacture fresh IDs to retry again.
+For transient HTTP429/500/502/503/504/529 or a recorded network timeout/reset,
+`provider_recovery.prepare_transient_retry` preserves the original request and
+accounts its original reservation once. Missing responses retain an **unknown**
+provider outcome; they are never relabeled not-dispatched or successful. The helper
+prepares a distinct linked packet. The normal bridge allows two retries after the
+original attempt, with backoff and fresh dependency checks. This is a per-decision
+failure bound, not a lifetime usage gate. A further failure stops under its existing
+identity; invalid answers, exhausted credits and uncertain native effects never
+trigger this route.
+
+After a retry succeeds, reconcile its completed response and supply that retry's
+`transient-retry.json` as `transient_retry_path` to `recover_completed_selection`.
+Both original failure and new answer remain linked. An explicit authority correction
+can be rebound with pinned evidence only if every non-authority geometry, guide and
+operation dependency still matches; retain both old and fresh selection contexts.
+Never silently treat an older pending selection as current under changed authority.
+
+An authority correction can change the applicability labels of retained findings.
+Use `session.authority_feedback_rebinding(previous, current, authority_keys)` to
+reconstruct the saved feedback with only the old authority values restored. Pass
+that proof as `feedback_rebinding` with the explicit rebind. Every finding and check
+remains identical. Newly stale reviews leave the current view while their original
+records remain retained; no judgment can be added or rewritten. Geometry, guides
+and other dependency revisions must still match. A changed feedback hash alone is
+not evidence for this exception.
+The earlier terminal503-specific helper remains available for recorded older flows.
 
 Run existing `record_outcome`, `reconcile_episode`, `promote_procedure` and
 `retrieve_experience` through the episode as before. Preserve failures and exact

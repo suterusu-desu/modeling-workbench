@@ -184,7 +184,7 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
         self.path = self.directory / 'lane-advice.json'
         self.cache = read_json(self.path) if self.path.exists() else {}
 
-    def __call__(self, snapshot, actions, plan):
+    def __call__(self, snapshot, actions, plan, *, prepare_only=False):
         public = self.project(deepcopy(snapshot), deepcopy(actions), deepcopy(plan))
         if (not isinstance(public, dict) or not isinstance(public.get('state'), dict)
                 or set(public.get('descriptions', {})) != {a['id'] for a in actions}):
@@ -204,7 +204,7 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
         last_path = self.directory / 'last-batch.json'
         if last_path.exists():
             prior = read_json(last_path)
-            if prior.get('selection_key') == selection_key and 'choice' in prior:
+            if not prepare_only and prior.get('selection_key') == selection_key and 'choice' in prior:
                 return deepcopy(prior['choice'])
         decisions, lane_keys, resolved = [], {}, {}
         # Choices for different lanes share state but never assume other answers.
@@ -246,6 +246,8 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
             write_json(self.directory / 'batches' / (fingerprint(selection) + '.json'), batch)
         except OSError as error:
             raise SelectionNotDispatched('Could not retain selection preparation; inference was not called') from error
+        if prepare_only:
+            return deepcopy(batch)
         return self._complete(batch, self.judge(public['state'], decisions, binding))
 
     def recover_completed(self, selection, packet, response, provider_receipt):

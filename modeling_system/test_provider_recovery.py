@@ -187,4 +187,81 @@ class TerminalRetryTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.recover()
 
 
+class TransientRetryTests(unittest.TestCase):
+    def setUp(self):
+        ProviderRecoveryTests.setUp(self)
+        (self.call/'decision-1.response.json').unlink()
+        value=read_json(self.ledger/'budget.json')
+        value['policy']={'mode':'normal_use','spending':'existing_account_credits','authority':'explicit-user-authority'}
+        value['carry_in_requests']=1000;value['known_cost_usd']=5.
+        value['attempts'][0].update(error_type='TimeoutError',estimated_cost_usd=0.)
+        write_json(self.ledger/'budget.json',value)
+
+    def recover(self, **kwargs):
+        from .provider_recovery import prepare_transient_retry
+        return prepare_transient_retry(self.call,self.ledger,lambda:deepcopy(self.state),**kwargs)
+
+    def test_normal_use_has_no_inherited_lifetime_caps_and_debits_timeout_once(self):
+        first=self.recover();second=self.recover()
+        ledger=read_json(self.ledger/'budget.json')
+        self.assertEqual(first,second)
+        self.assertAlmostEqual(ledger['known_cost_usd'],5.001344)
+        self.assertEqual(ledger['attempts'][0]['provider_outcome'],'unknown')
+        self.assertEqual(ledger['attempts'][0]['status'],'response_unavailable_accounted')
+        self.assertEqual(len(ledger['attempts']),1)
+        self.assertFalse((self.call/'decision-1.response.json').exists())
+        self.assertEqual(ledger['policy'],{'mode':'normal_use','spending':'existing_account_credits','authority':'explicit-user-authority'})
+
+    def test_transient_lineage_allows_two_retries_then_stops(self):
+        from .provider_recovery import transient_retry_packet
+        packet=self.packet
+        for ordinal in (1,2):
+            request=read_json(self.call/'decision-1.request.json');request['local_binding']=packet['local_binding']
+            packet=transient_retry_packet(packet,request,None,read_json(self.call/'dispatch-count.json'),'TimeoutError')
+            self.assertEqual(packet['local_binding']['provider_retry']['ordinal'],ordinal)
+        request['local_binding']=packet['local_binding']
+        with self.assertRaises(ValueError):
+            transient_retry_packet(packet,request,None,read_json(self.call/'dispatch-count.json'),'TimeoutError')
+
+    def test_real_credit_or_authorization_failure_is_not_transient(self):
+        wire=read_json(self.call/'decision-1.request.json')['wire_request_digest']
+        for http in (401,402,403,422):
+            write_json(self.call/'decision-1.response.json',{'http':http,'transport':ROUTE,'wire_request_digest':wire})
+            with self.assertRaises(ValueError):self.recover()
+        self.assertEqual(read_json(self.ledger/'budget.json')['known_cost_usd'],5.)
+
+    def test_explicit_user_limit_is_still_respected(self):
+        value=read_json(self.ledger/'budget.json');value['policy']['max_cost_usd']=5.0001
+        write_json(self.ledger/'budget.json',value)
+        with self.assertRaises(ValueError):self.recover()
+
+    def test_authority_rebinding_does_not_permit_guide_changes(self):
+        packet=deepcopy(self.packet);packet['local_binding']['authority_revision']='new-authority'
+        self.state['authority_revision']='new-authority'
+        binding={'packet':packet,'authority_keys':['authority'],'evidence':['user-authority-receipt']}
+        result=self.recover(rebinding=binding)
+        self.assertIn('authority_rebound_from',result['retry_packet']['local_binding']['provider_retry'])
+        packet['local_binding']['dependencies']['reads']['mesh']='changed'
+        with self.assertRaises(ValueError):self.recover(rebinding=binding)
+
+    def test_feedback_rebind_requires_exact_facts_and_bound_hashes(self):
+        from .provider_recovery import validate_feedback_rebinding
+        before={'findings':[{'findings':['retained measured fact'],'checks':{'analysis':'pass'},
+            'qualification':'technical only','applicability':'current inputs'}], 'visual_feedback':[], 'limits':'unchanged'}
+        after=deepcopy(before);after['findings'][0]['applicability']='historical; inputs changed'
+        proof={'before':before,'after':after}
+        old={'operating_feedback':fingerprint(before)};new={'operating_feedback':fingerprint(after)}
+        validate_feedback_rebinding(proof,old,new)
+        historical=deepcopy(before);historical['visual_feedback']=[{'disposition':'useful','scope':'old authority'}]
+        validate_feedback_rebinding({'before':historical,'after':after},
+            {'operating_feedback':fingerprint(historical)},new)
+        for mutation in ('finding','check','review','hash'):
+            altered=deepcopy(proof)
+            if mutation=='finding':altered['after']['findings'][0]['findings']=['different fact']
+            if mutation=='check':altered['after']['findings'][0]['checks']['analysis']='fail'
+            if mutation=='review':altered['after']['visual_feedback']=['new approval']
+            changed={'operating_feedback':fingerprint(altered['after']) if mutation!='hash' else 'unbound'}
+            with self.assertRaises(ValueError):validate_feedback_rebinding(altered,old,changed)
+
+
 if __name__ == '__main__': unittest.main()
