@@ -17,7 +17,15 @@ Python, CLI and MCP expose the same core. Native Blender operations require a se
 
 Tools-only export is the default. Explicit workspace/evidence transfers remain private. See [development and contribution boundaries](DEVELOPING.md).
 
-For sustained modeling, the [persistent controller](modeling_system/plugin/skills/modeling-workbench/references/controller.md) runs owner-authorized operations while planning updates asynchronously. It retains exact execution receipts and visible status, avoids repeated settled failures, and uses the workspace's existing bounded selector only for unresolved choices. Native operations and the Blender status display are bound through the private owner adapter.
+## How Astra and Jev work together
+
+- **Astra** maintains character intent, interprets images, resolves difficult modeling questions and develops new capabilities.
+- **Jev** selects actions and recurring planning choices from qualified capabilities: priorities, methods, evidence collection, repair and recovery.
+- **The workbench** executes selected capabilities through one native Blender lane and retains dependencies, results and review feedback in a recoverable operating session.
+
+The [persistent controller](modeling_system/plugin/skills/modeling-workbench/references/controller.md) supports sustained work with bounded budgets, asynchronous planning, compatible action batches and per-stage timings. The private adapter supplies native operations and the Blender status display. Saved findings and Astra's review feedback inform subsequent choices; visual acceptance remains separate from numerical checks.
+
+The [TypeSafe integration](modeling_system/plugin/skills/modeling-workbench/references/judgments.md) provides typed Jev judgments through the direct API. Your private workspace supplies credentials, request budgets and the qualified action catalog. See the [operating-session contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) to connect the controller, queue, adapter and evidence records.
 
 ## What can I use today?
 
@@ -42,6 +50,7 @@ An assistant can use the same core through Python, CLI or MCP. The method still 
 | Python 3.12+ | Install and run the core | Install separately; use a virtual environment. |
 | NumPy, SciPy, Pillow, MCP SDK, imageio-ffmpeg | Package runtime | Installed by `pip install .`; exact allowed ranges are in [pyproject.toml](pyproject.toml). |
 | Blender and a qualified workspace adapter | Inspect or edit a live character | Blender, the bridge setup and your rig/scene bindings are separate. See [native adapters](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md). |
+| TypeSafe API access | Jev-driven action selection and planning | Supply your own credentials and bounded budget in the private workspace; offline core use does not require it. |
 | An AI assistant / MCP client | Agent-operated workflow | Bring your own client, model access and applicable subscription. CLI/Python use does not require an AI account. |
 | Image generation or editing service | Create new character/pose/detail reference images | Optional external service. Bring a supported transport and account; existing artwork can also supply references. No image model or credits are bundled. |
 | Tripo Studio | Reconstruct generated 3D guides in the documented Tripo route | Optional external service with your own account and authorized credits. The package records and checks jobs; it does not operate the website by itself. |
@@ -62,38 +71,10 @@ We studied these adjacent projects while developing the workflow and reusable to
 
 These are learning acknowledgments, not claims of endorsement or equivalent capabilities. They are design references rather than required runtime dependencies. Follow each upstream project's own licensing terms when using its code or assets; these acknowledgments do not replace any required notices for incorporated material.
 
-## Project status and sharing
+## Contributing and sharing
 
 This repository contains reusable source and synthetic examples, not the original character, private adapter, provider accounts or production evidence. Share only reviewed tools-only exports; workspace/evidence exports can contain personal paths and private assets.
 
+Issues and pull requests are welcome. See [DEVELOPING.md](DEVELOPING.md) for development checks and the boundary between reusable tools and private character material.
+
 No license is currently included. Licensing is pending; do not describe the repository as an open-source release until a license is selected and added.
-
-## Controller velocity increment (0.2.18)
-
-The controller now supports optional adapter-qualified selected-action revalidation,
-one-request compatible operation/target menus, and actual per-stage timings in
-its journal and Blender display. See the [controller contract](modeling_system/plugin/skills/modeling-workbench/references/controller.md).
-The full observation and atomic native guard remain the default. These changes
-remove avoidable orchestration where supported; no Blender speedup is inferred
-from browser or game demos. Use current modeling receipts to identify bottlenecks.
-
-## Recurring planning judgments (0.2.19)
-
-Jev can take recurring planning decisions in addition to choosing native actions.
-
-The opt-in `modeling_system.typesafe_transport.TypeSafeTransport` supports the
-direct TypeSafe v1 endpoint with typed response validation. The bound workspace
-supplies credentials and durable request budgets. Token-based cost estimates are
-labeled separately from provider-reported billing; the transport has no automatic
-retry, provider fallback or native effects. Follow the official `typesafe-ai`
-skill and current TypeSafe API documentation when maintaining this route.
-The reusable `judgments` compiler supports Choice, Score and Noul batches, structured
-criteria, private identifier maps, complete answer validation and evidence-bound
-resolution. Built-in planning questions cover priority, method, evidence, recovery
-and handler routing with an explicit return-to-reasoning outcome. See the
-[planning contract](modeling_system/plugin/skills/modeling-workbench/references/judgments.md).
-The workspace supplies transport/budget and qualified candidate catalogs; generic
-judgments do not invent native capabilities or certify appearance. Expand useful
-retained procedures from actual work rather than requiring candidate-specific
-controller/menu code. Provider/native adoption and saved reasoning effort are
-separate from implementation.
