@@ -85,19 +85,22 @@ def _reviews(service, directory):
 
 
 def inspect_session(service, directory):
+    from .decision_outcomes import decision_outcomes
     binding = read_json(_binding_path(directory))
     if binding['workspace'] != str(service.workspace):
         raise ValueError('Operating session belongs to a different workspace')
     episode = service.ledger.read(binding['episode'])
     queue = read_json(Path(directory) / 'work-queue.json')
+    reviews = _reviews(service, directory)
     return {'binding': binding, 'episode_revision': episode['revision'],
         'mode': 'Retained execution index; live freshness is checked by the owner at use',
         'tasks': {key: {'status': row['status'], 'operation_handle': row.get('operation_handle'),
             'report': row.get('result', {}).get('workbench'),
             'recovery': 'Reconcile original operation handle; never replay uncertain effects'}
             for key, row in queue['results'].items()},
-        'reviews': _reviews(service, directory),
+        'reviews': reviews,
         'metrics': session_metrics(directory),
+        'decision_outcomes': decision_outcomes(directory, reviews),
         'detail': {'episode': binding['episode'], 'operation': 'decision_workspace'}}
 
 
@@ -110,20 +113,22 @@ class OperatingSession(WorkQueue):
     Provider transport/budget remain workspace callbacks supplied to judge.
     """
     def __init__(self, directory, *, service, episode, owner, goal, observe_context,
-                 catalog, handlers, judge, public_projection, report=None, experience=None):
+                 catalog, handlers, judge, public_projection, report=None, experience=None, budget=None):
         self.service, self.episode = service, episode
         self.report_adapter = report
         self.private_handlers = dict(handlers)
         self.private_handlers.setdefault('service', self._service)
         self.projection = public_projection
+        from .decision_budget import decision_budget
+        self.decision_budget = decision_budget(budget)
         from .retained_context import RetainedContext
-        self.experience = experience if experience is not None else RetainedContext(service, sources=[])
+        self.experience = experience if experience is not None else RetainedContext(service, sources=[], budget=self.decision_budget)
         self.user_catalog = catalog
-        self.selector = LaneSelector(Path(directory) / 'advice', judge=judge, project=self._project)
+        self.selector = LaneSelector(Path(directory) / 'advice', judge=judge, project=self._project, budget=self.decision_budget)
         self._validate_episode(owner)
         super().__init__(directory, owner=owner, goal=goal, observe_context=observe_context,
             catalog=self._catalog, handlers={key: self._handle for key in self.private_handlers},
-            select=self.selector)
+            select=self.selector, budget=self.decision_budget)
         binding = {'schema_version': 1, 'workspace': str(service.workspace),
             'episode': episode, 'owner': owner, 'goal': fingerprint(goal)}
         path = _binding_path(directory)
@@ -197,7 +202,10 @@ class OperatingSession(WorkQueue):
         for dependency, checks in contract.get('consumes', {}).items():
             if dependency not in item.get('requires', {}) or not checks:
                 raise ValueError('Consumed evidence must name a declared prerequisite and its checks')
-        if item['handler'] == 'service':
+        if item.get('decision', {}).get('arguments'):
+            from .capability_calls import validate_call
+            validate_call(item)
+        if item['handler'] == 'service' and (not item.get('decision', {}).get('arguments') or contract.get('invocation')):
             payload = item['payload']
             operation, arguments = payload['operation'], payload.get('arguments', {})
             if operation.startswith('native_'):
@@ -281,6 +289,7 @@ class OperatingSession(WorkQueue):
             record = self.experience(deepcopy(state),
                 [deepcopy(self.items[action['id']]) for action in ready], deepcopy(self.record['results']))
             RetainedContext.retain(self.directory, record)
+            self._experience_record = deepcopy(record)
             state['observations']['experience'] = record['public']
             state['values']['operating_experience'] = record['revision']
             for action in ready:
@@ -308,7 +317,7 @@ class OperatingSession(WorkQueue):
                    if (row := self._review(task, state))]
         feedback = {'findings': facts, 'visual_feedback': reviews,
             'limits': 'Technical execution and metrics do not approve appearance. Scope_noop excludes only its stated scope; retain useful gains elsewhere.'}
-        if len(canonical(feedback)) > 8000:
+        if len(canonical(feedback)) > self.decision_budget.context_bytes:
             raise ValueError('Modeling feedback exceeds the decision budget; narrow the active catalog, retaining old facts in the episode')
         return feedback
 
@@ -337,7 +346,9 @@ class OperatingSession(WorkQueue):
         if 'experience' in snapshot['observations']:
             experience = deepcopy(snapshot['observations']['experience'])
             projected['state']['retained_experience'] = experience
-            projected['rank_experience'] = experience['passages'][:4]
+            projected['rank_experience'] = experience['passages']
+            record = self._experience_record
+            projected['experience_candidates'] = deepcopy(record.get('candidates', []))
         return projected
 
     def _service(self, item, context):
@@ -387,13 +398,27 @@ class OperatingSession(WorkQueue):
             'appearance_acceptance': 'not implied', 'method_benefit': 'not implied'}
 
     def _handle(self, item, context):
+        original_item = deepcopy(item)
+        trace_path = self.selector.directory / 'last-batch.json'
+        trace = read_json(trace_path) if trace_path.exists() else {}
+        chosen = next((a for a in trace.get('actions', []) if a['id'] == item['id']), {})
+        if (trace.get('choice') != item['id'] or chosen.get('revision') != fingerprint(item)
+                or chosen.get('reads') != context['expected_values']
+                or trace.get('binding', {}).get('authority_revision') != context['authority_revision']):
+            trace = {}
+        if item.get('decision', {}).get('arguments'):
+            from .capability_calls import compile_call
+            item = compile_call(item, trace.get('call', {}))
         contract = self._contract(item)
-        arguments = {'task': item, 'expected_values': context['expected_values'],
+        arguments = {'task': original_item, 'compiled_task': item, 'expected_values': context['expected_values'],
                      'attempt_key': context['attempt_key']}
 
         def reserve(lease):
             entry = self.record['results'][item['id']]
-            entry.update(operation_handle=lease['operation_handle'], episode=self.episode, task=deepcopy(item))
+            entry.update(operation_handle=lease['operation_handle'], episode=self.episode, task=original_item)
+            if trace:
+                entry['decision'] = {'selection_key': trace['selection_key'],
+                                     'trace_revision': fingerprint(trace)}
             write_json(self.path, self.record)
 
         def run():
@@ -410,6 +435,8 @@ class OperatingSession(WorkQueue):
             result = deepcopy(result)
             result['handler_elapsed_ms'] = round((time.perf_counter() - started) * 1000, 3)
             result['operation_context_record'] = decision_context['context_record']
+            if trace:
+                result['decision'] = {'selection_key': trace['selection_key'], 'call': trace.get('call')}
             write_json(self.service.store.root / 'calls' / handle / 'capability-result.json', result)
             result['workbench'] = self._report(item, result, context)
             result['workbench']['context_record'] = decision_context['context_record']
@@ -578,7 +605,7 @@ class OperatingSession(WorkQueue):
         adapter = self.report_adapter
         try:
             self.report_adapter = lambda item, result: report
-            repaired = self._report(intent['arguments']['task'], raw, intent['arguments'])
+            repaired = self._report(intent['arguments'].get('compiled_task', intent['arguments']['task']), raw, intent['arguments'])
         finally:
             self.report_adapter = adapter
         result = self.service._run_episode_callback(self.episode, 'repair_modeling_report',

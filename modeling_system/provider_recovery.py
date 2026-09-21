@@ -7,12 +7,29 @@ evidence; accounting is reconciled once under the existing attempt identity.
 from copy import deepcopy
 from pathlib import Path
 import math
+import time
 
 from .controller import fingerprint, read_json, write_json
 from .typesafe_transport import MODEL, ROUTE, validate_response_receipt
 
 SETTLED_PROVIDER = {'response_validated', 'verified_no_dispatch', 'terminal_http_error',
                     'transient_http_error', 'response_unavailable_accounted'}
+
+
+class ProviderRetryDeferred(RuntimeError):
+    """A known attempt is retained; resume when its retry is eligible."""
+    def __init__(self, not_before):
+        self.not_before = not_before
+        super().__init__('Provider retry is not eligible until the retained not_before time')
+
+
+def retry_ready(not_before, *, now=None):
+    if not_before is None:
+        return
+    if type(not_before) not in (int, float) or not math.isfinite(not_before) or not 0 <= not_before < 253402300800:
+        raise ValueError('Invalid provider retry eligibility time')
+    if (time.time() if now is None else now) < not_before:
+        raise ProviderRetryDeferred(not_before)
 
 
 def budget_limits(ledger):
@@ -97,6 +114,12 @@ def transient_retry_packet(packet, request, response, dispatch, error_type, *, r
         'root_packet_digest': root, 'previous_packet_digest': fingerprint(packet),
         'failure_digest': fingerprint({'response': response, 'error_type': error_type}),
         'previous_provider_outcome': outcome}
+    if response and type(response.get('received_at')) in (int, float):
+        delay = response.get('retry_after_seconds', 0.)
+        if (type(delay) not in (int, float) or not math.isfinite(delay) or delay < 0
+                or not math.isfinite(response['received_at'])):
+            raise ValueError('Invalid retained provider timing')
+        result['local_binding']['provider_retry']['not_before'] = response['received_at'] + max(delay, (.5, 2.)[ordinal - 1])
     if rebinding is not None:
         result['local_binding']['provider_retry']['authority_rebound_from'] = fingerprint(packet)
     return result
@@ -150,6 +173,9 @@ def prepare_transient_retry(call_directory, ledger_directory, current_reader, *,
             'conservative_cost_debit_usd': reserve, 'cost_basis': 'original_reservation_allowance_not_reported_billing',
             'backoff_seconds': (.5, 2.)[retry['local_binding']['provider_retry']['ordinal'] - 1],
             'provider_calls_added': 0, 'native_dispatch': False}
+        result['not_before'] = retry['local_binding']['provider_retry'].get(
+            'not_before', time.time() + result['backoff_seconds'])
+        result['backoff_seconds'] = max(0., result['not_before'] - time.time())
         if rebinding is not None: result['authority_rebinding'] = deepcopy(rebinding)
         if receipt_path.exists():
             prior = read_json(receipt_path)

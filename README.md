@@ -51,6 +51,14 @@ retain an action/defer choice. Retention uses returned fresh state to avoid
 duplicate scene inspections and skips reopening an already loaded exact candidate,
 while preserving native guards, independent reopen evidence and actual visual review.
 
+[Typed capability control](modeling_system/plugin/skills/modeling-workbench/references/typed-control.md)
+lets Jev select qualified operation arguments alongside the operation itself.
+When relevant experience exceeds the initial context, it selects useful sources
+before the action decision. Named uncertainty, optional grounded claim checks,
+and outcome-linked decision records keep choices connected to actual modeling
+evidence. Explicit decision budgets and provider retry timing use the existing
+workspace accounting and recovery path.
+
 ## What can I use today?
 
 This is an experimental workbench for technical artists and developers building characters with an AI assistant. You can create a private character workspace, inspect recorded geometry, compare surfaces, qualify reference support, organize recoverable experiments, and reuse supported diagnostic recipes.

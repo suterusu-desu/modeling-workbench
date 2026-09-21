@@ -13,6 +13,8 @@ from .work_queue import WorkQueue
 class OperatingTests(unittest.TestCase):
     def test_authority_feedback_proof_reconstructs_retained_findings(self):
         session = OperatingSession.__new__(OperatingSession)
+        from .decision_budget import DecisionBudget
+        session.decision_budget = DecisionBudget()
         session.items = {'old': {'writes': []}}
         session.reviews = {}
         report = {'basis': {'source': 'v1', 'authority': 'old'},

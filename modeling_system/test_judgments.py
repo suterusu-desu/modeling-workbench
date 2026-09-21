@@ -60,7 +60,7 @@ class JudgmentTests(unittest.TestCase):
         specs[0]['options'][0]['description'] = {'mechanism': 'correspondence repair', 'excludes': 'unknown topology'}
         self.assertIsInstance(prepare_judgments({}, specs, self.binding)['questions']['q0']['instructions'], dict)
         with self.assertRaises(ValueError): prepare_judgments({}, specs * 5, self.binding)
-        with self.assertRaises(ValueError): prepare_judgments({'irrelevant': 'x' * 12000}, specs, self.binding)
+        with self.assertRaises(ValueError): prepare_judgments({'irrelevant': 'x' * 32000}, specs, self.binding)
 
 
 if __name__ == '__main__':

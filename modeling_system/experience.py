@@ -73,8 +73,8 @@ def applicability(required, context):
 
 
 def retrieve(workspace, store, query, limit=6, context=None, sources=None, row_filter=None):
-    if not query.strip() or not 1 <= limit <= 20:
-        raise ValueError('Query and a limit from one to twenty required')
+    if not query.strip() or not 1 <= limit <= 254:
+        raise ValueError('Query and a bounded candidate limit from one to 254 required')
     context = context or {}
     if sources is None:
         from .bindings import load_binding

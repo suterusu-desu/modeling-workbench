@@ -60,9 +60,10 @@ retained visual review/lesson records. Exact passages, hashes and coverage stay 
 `experience/` records. `project(row)` explicitly creates a short safe public
 summary, or returns None. Identities, filenames and private locators are not
 copied to the provider automatically. Dedicated review/lesson records project
-only their already-public semantic fields. Projection precedes candidate limiting;
-twenty eligible candidates per category can fill at most four complete passages
-within 2400 serialized bytes, with excluded and omitted coverage exposed.
+only their already-public semantic fields. Projection precedes candidate limiting.
+The shared `DecisionBudget` defaults to eight complete context passages within
+8000 serialized bytes and a broader pool of 32 candidates within 16000 bytes.
+Excluded and omitted coverage stays explicit; caveats are never clipped.
 Queries may be strings or `(state, items, outcomes)` functions. Optional
 `context(state)` supplies applicability fields.
 
@@ -71,11 +72,14 @@ situation and offered work as the query. Add source projection only when needed.
 See [retained learning](retained-learning.md) for automatic review capture,
 conditional lessons and migration without replaying historical candidates.
 
-Jev receives the summaries alongside current findings before choosing. Up to four
-independent passage-relevance judgments share the existing action-selection
-request. The action questions already see the passages and do not assume another
-question's answer. `last-batch.json` retains method probability rankings and
-passage relevance; a relevance score never changes authority or visual judgment.
+Jev receives the summaries alongside current findings before choosing. When the
+candidate pool fits the initial context, independent relevance judgments share
+the action-selection request. A broader pool uses one cached evidence-selection
+request first; the resulting passages then enter the action request. This lets
+previously omitted contradictions influence the choice. See
+[typed control](typed-control.md) for staged retrieval, budget configuration and
+recovery. Decision traces retain the rankings and passage judgments; a relevance
+score never changes authority or visual judgment.
 Unchanged choices retain the normal exact cache. Changed passages invalidate the
 choice before execution. Missing history remains visible as missing coverage.
 

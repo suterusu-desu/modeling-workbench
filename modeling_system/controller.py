@@ -47,6 +47,9 @@ def read_json(path):
 
 class SelectionNotDispatched(ValueError):
     """A selector's deterministic preparation refused before any inference call."""
+    def __init__(self, message, *, completed_evidence=False):
+        super().__init__(message)
+        self.completed_evidence = completed_evidence
 
 
 def applicable(binding, state):
@@ -336,8 +339,9 @@ class PersistentController:
             except SelectionNotDispatched as exc:
                 self.record['selection'] = None
                 self._save()
-                self._event('selection_refused_before_dispatch', reason=str(exc))
-                return self._status('invalidated', state, reason=str(exc), provider_dispatched=False)
+                self._event('selection_refused_after_evidence' if exc.completed_evidence else
+                            'selection_refused_before_dispatch', reason=str(exc))
+                return self._status('invalidated', state, reason=str(exc), provider_dispatched=exc.completed_evidence)
             except Exception as exc:
                 self._event('selection_unresolved', error=type(exc).__name__)
                 return self._status('needs_reconciliation', state, reason='Selection failed; inspect provider ledger')

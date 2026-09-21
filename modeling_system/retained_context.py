@@ -5,12 +5,15 @@ import json
 from .controller import fingerprint, write_json
 from .experience import retrieve
 from .learning import public_experience
+from .decision_budget import decision_budget
 
 
 class RetainedContext:
-    def __init__(self, service, *, query=None, project=None, sources=None, limit=4, context=None):
-        if (project is not None and not callable(project)) or not 1 <= limit <= 4:
-            raise ValueError('Explicit public projection and one to four passages required')
+    def __init__(self, service, *, query=None, project=None, sources=None, limit=None, context=None, budget=None):
+        self.budget = decision_budget(budget)
+        limit = self.budget.context_passages if limit is None else limit
+        if (project is not None and not callable(project)) or not 1 <= limit <= self.budget.context_passages:
+            raise ValueError('Public projection and passage count within the explicit budget required')
         self.service, self.query, self.project = service, query, project
         self.sources, self.limit, self.context = sources, limit, context
 
@@ -32,8 +35,8 @@ class RetainedContext:
             projected[fingerprint(row)] = summary
             return True
         result = retrieve(self.service.workspace, self.service.store, query,
-                          20, context, self.sources, row_filter=project)
-        public, exact, omitted = [], [], 0
+                          self.budget.retrieval_candidates, context, self.sources, row_filter=project)
+        public, exact, omitted, candidates = [], [], 0, []
         seen, duplicates = set(), 0
         for kind in ('authority', 'matches'):
             for row in result[kind]:
@@ -45,13 +48,16 @@ class RetainedContext:
                     duplicates += 1
                     continue
                 seen.add(identity)
-                candidate = {'index': len(public), 'role': kind, 'content': summary}
+                candidate = {'index': len(exact), 'role': kind, 'content': summary}
+                if (len(candidates) < min(self.budget.retrieval_candidates, self.budget.max_questions // 2)
+                        and len(json.dumps(candidates + [candidate]).encode()) <= self.budget.retrieval_bytes):
+                    candidates.append(deepcopy(candidate))
                 size = len(json.dumps(public + [candidate], ensure_ascii=True).encode())
-                if len(public) >= self.limit or size > 2400:
+                if len(public) >= self.limit or size > self.budget.context_bytes:
                     omitted += 1
                     exact.append({'index': None, 'source': row})
                     continue
-                index = len(public)
+                index = candidate['index']
                 public.append(candidate)
                 exact.append({'index': index, 'source': row})
         # Do not hide missing retrieval coverage or turn relevance into authority.
@@ -64,10 +70,13 @@ class RetainedContext:
                     'unreturned_eligible_passages': sum(result['coverage']['eligible_' + kind] - result['coverage']['returned_' + kind]
                                                         for kind in ('authority', 'experience')),
                     'duplicate_public_passages': duplicates,
-                    'omitted_public_passages': omitted},
+                    'omitted_public_passages': omitted,
+                    'semantic_candidates': len(candidates),
+                    'unreturned_semantic_candidates': len(seen) - len(candidates)},
                 'limits': 'Historical reviews and conditional lessons inform choices, not current state or user acceptance. Different prerequisites can change a method result; interpret the evidence rather than blindly repeat or ban it. Relevance never admits a guide or approves appearance.'},
-            'exact': exact, 'query': query,
-            'revision': fingerprint({'retrieval': result, 'public': public})}
+            'candidates': candidates, 'exact': exact, 'query': query,
+            'revision': fingerprint({'retrieval': result, 'public': public, 'candidates': candidates,
+                                     'budget': self.budget.record()})}
 
     @staticmethod
     def retain(directory, record):

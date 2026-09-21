@@ -62,15 +62,20 @@ review/lesson records remain available even if its old projector accepts only a
 particular history file. Conditions use `public_state`, or `context(state)`.
 
 Projection precedes candidate limiting, so private records cannot crowd out
-usable history. Up to twenty eligible candidates per category are considered
-locally. The decision contains at most four complete passages within 2400
-serialized bytes. Coverage distinguishes excluded, duplicate, unreturned and
-size-omitted passages. Caveats are never clipped to fit another passage. Use
+usable history. The shared `DecisionBudget` defaults to eight complete context
+passages within 8000 serialized bytes, with up to 32 candidates within 16000
+bytes available for semantic selection. Coverage distinguishes excluded,
+duplicate, unreturned and size-omitted passages. Caveats are never clipped to fit
+another passage. Use
 `retrieve_experience` or exact retained records to expand missing coverage.
 
-The passages and independent relevance questions share existing action-selection
-requests. There is no new provider round trip. Relevance is not guide admission,
-appearance approval or proof that a mechanism caused improvement.
+When all candidates fit the initial context, the passages and independent
+relevance questions share the action-selection request. Otherwise one cached
+evidence-selection request precedes action selection, making selected passages
+and contradictions available to the action questions. Exact dependency changes
+invalidate both stages. See [typed control](typed-control.md) for configuration,
+coverage and interruption recovery. Relevance is not guide admission, appearance
+approval or proof that a mechanism caused improvement.
 
 Adopt old actual reviews once with:
 

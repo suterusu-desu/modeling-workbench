@@ -128,7 +128,9 @@ class LearningTests(unittest.TestCase):
     def test_bounded_context_reports_overflow_and_never_truncates_a_caveat(self):
         for i in range(22):
             record_lesson(self.service, lesson=self.lesson(observation=f'Material {i}. ' + 'Detail. '*75), evidence=self.evidence)
-        result = RetainedContext(self.service, query='material', sources=[])({}, [], {})
+        from .decision_budget import DecisionBudget
+        result = RetainedContext(self.service, query='material', sources=[], budget=DecisionBudget(
+            context_passages=4, context_bytes=2400, retrieval_candidates=20))({}, [], {})
         public = result['public']
         self.assertLessEqual(len(json.dumps(public['passages'], ensure_ascii=True).encode()), 2400)
         self.assertGreater(public['coverage']['unreturned_eligible_passages'], 0)

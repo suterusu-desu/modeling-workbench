@@ -134,6 +134,43 @@ The new control layer composes them; it does not supersede their contracts.
 
 ## Scale by reducing repeated interpretation
 
+The [typed capability contract](modeling_system/plugin/skills/modeling-workbench/references/typed-control.md)
+implements the control extensions identified by the
+[TypeSafe documentation review](modeling_system/docs/typesafe-review.md).
+The existing abstractions remain the integration path:
+
+```text
+intent + fresh facts + actual reviews + named uncertainty
+  -> qualified capability specifications and relevant retained evidence
+  -> Jev method, typed argument and observation judgments
+  -> deterministic compatibility check and exact queue-task compilation
+  -> existing serial native lane and recoverable operation journal
+  -> fresh observations, scoped appearance review and retained experience
+```
+
+`ParameterizedCatalog` supports complete prebound variants; `decision.arguments`
+lets Jev select eligible argument values as well as the mechanism,
+while code preserves qualification, defaults, exact source identity and geometric
+calculation. This moves recurring assembly out of Astra without adding another
+executor. Missing support remains explicit; a typed selection cannot invent it.
+
+Use one explicit decision budget across question compilation, context projection
+and transport. Count/byte caps are explicit workbench policies, separate from
+provider token limits and workspace resource authority. Retrieve a broader method
+or lesson set when coverage requires it, preserving exclusions and whole caveats.
+Independent conditional questions share a request; selection that reveals new
+evidence requires a subsequent request. Same-batch relevance answers cannot alter
+the context of their own action choice.
+
+Offer observations according to the competing explanations they distinguish and
+the next edit they could change. Link question versions and raw distributions to
+the actual operation and later review. This enables better wording, retrieval and
+decision policy from normal work; it does not claim learned calibration or require
+a separate experiment campaign. Original task definitions, compiled payloads and
+decision traces remain linked to the same episode operation. Grounded claim
+checks apply only to the selected operation's declared consequential claims.
+Provider trace and retry timing survive the existing linked-attempt recovery.
+
 Batch independent Jev choices against compact structured state, including useful
 conditional options, then consume only applicable answers. Cache exact evidence-
 and question-bound answers. Keep large arrays, native identity and private paths

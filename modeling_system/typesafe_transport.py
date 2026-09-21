@@ -8,6 +8,10 @@ import hashlib
 import http.client
 import json
 import time
+import re
+from datetime import timezone
+from email.utils import parsedate_to_datetime
+from .decision_budget import bound_budget
 
 MODEL = 'jev-1.13.0'
 INPUT_USD_PER_MILLION = .042
@@ -44,7 +48,7 @@ def validate_response_receipt(packet, request_receipt, receipt):
     cost = usage_cost(response)
     if 'estimated_cost_usd' in receipt and receipt['estimated_cost_usd'] != cost:
         raise ValueError('Response cost disagrees with recorded token usage')
-    return {'choices': validate_answers(packet['questions'], response.get('answers')),
+    return {'choices': validate_answers(packet['questions'], response.get('answers'), budget=bound_budget(packet['local_binding'])),
             'estimated_cost_usd': cost, 'wire_request_digest': digest(expected)}
 
 
@@ -64,11 +68,13 @@ class TypeSafeTransport:
             raise RuntimeError('Request already attempted; reconcile instead of retrying')
         if not self.key or any(c.isspace() for c in self.key):
             raise ValueError('Credential unavailable')
-        validate_questions(questions)
+        budget = bound_budget(local_binding)
+        validate_questions(questions, budget=budget)
+        budget.check(state, questions, MODEL)
+        from .provider_recovery import retry_ready
+        retry_ready(local_binding.get('provider_retry', {}).get('not_before'))
         request = {'model': MODEL, 'state': state, 'questions': questions}
         body = json.dumps(request, allow_nan=False).encode()
-        if len(body) > 12000:
-            raise ValueError('Compact selector payload exceeded 12k bytes')
         prefix = self.output / 'decision-1'
         self.write(prefix.with_suffix('.request.json'), {
             'transport': ROUTE, 'local_binding': local_binding,
@@ -83,7 +89,9 @@ class TypeSafeTransport:
         raw = reply.read()
         receipt = {'transport': ROUTE, 'http': reply.status,
                    'wire_request_digest': digest(request),
-                   'elapsed_ms': (time.perf_counter() - started) * 1000}
+                   'elapsed_ms': (time.perf_counter() - started) * 1000,
+                   'received_at': time.time()}
+        receipt.update(response_metadata(reply, self.key, receipt['received_at']))
         if reply.status != 200:
             # Error bodies can echo inputs; retain status, not unknown server text.
             self.write(prefix.with_suffix('.response.json'), receipt)
@@ -105,9 +113,40 @@ class TypeSafeTransport:
         self.write(prefix.with_suffix('.response.json'), receipt)
         if response.get('model') != MODEL:
             raise ValueError('Unreviewed TypeSafe model revision')
-        return validate_answers(questions, response.get('answers'))
+        return validate_answers(questions, response.get('answers'), budget=budget)
 
     def close(self):
         self.key = ''
         if self.connection is not None:
             self.connection.close()
+
+
+def response_metadata(reply, secret, received_at):
+    """Retain only bounded validated trace/timing fields, never arbitrary headers."""
+    get = getattr(reply, 'getheader', lambda name: None)
+    result = {}
+    request_id = get('x-typesafe-request-id')
+    if (isinstance(request_id, str) and re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', request_id)
+            and (not secret or secret not in request_id)):
+        result['request_id'] = request_id
+    delays = []
+    for name, scale in (('retry-after-ms', .001), ('Retry-After', 1.)):
+        value = get(name)
+        if not isinstance(value, str) or len(value) > 100 or secret and secret in value:
+            continue
+        try:
+            if re.fullmatch(r'\d{1,12}(?:\.\d{1,3})?', value.strip()):
+                seconds = float(value) * scale
+            elif name == 'Retry-After':
+                date = parsedate_to_datetime(value)
+                seconds = max(0., date.replace(tzinfo=date.tzinfo or timezone.utc).timestamp() - received_at)
+            else:
+                continue
+            # Long valid hints defer; they are not clamped into an early retry.
+            if 0 <= seconds <= 253402300799 - received_at:
+                delays.append(seconds)
+        except (ValueError, TypeError, OverflowError):
+            continue
+    if delays:
+        result['retry_after_seconds'] = max(delays)
+    return result

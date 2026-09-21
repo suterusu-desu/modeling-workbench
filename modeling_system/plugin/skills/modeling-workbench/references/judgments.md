@@ -44,6 +44,14 @@ packet = prepare_judgments(reviewed_public_state, decisions, current_binding)
 result = resolve_judgments(packet, validated_provider_answers, fresh_binding)
 ```
 
+The optional binding field `decision_budget` is a `DecisionBudget.record()`.
+The same versioned limits apply to compilation, wire validation and response
+validation. Defaults allow 96 useful questions, a 60000-byte request and a
+30000-byte state plus longest question. These are conservative local byte
+envelopes, not tokenizer measurements or spending authority. See
+[typed control](typed-control.md) for conditional argument composition, staged
+retrieval, grounded claims and decision-to-outcome inspection.
+
 Candidate rows have `id` (local only) and `description` (reviewed public string or
 structured content). `planning_choice` supports `priority`, `method`, `evidence`,
 `recovery` and `route`, adding an explicit `needs_astra` alternative. The fixed

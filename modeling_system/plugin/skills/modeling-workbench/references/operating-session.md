@@ -60,6 +60,15 @@ bound workspace. Use its current budget; persistence never renews it. The
 judgment callback rechecks the exact owner/menu/dependency binding before release.
 Status uses the same controller path and native display adapter as before.
 
+An optional `budget=DecisionBudget(...)` configures the queue, selector and
+default retained context together. New tasks can attach closed, typed
+`decision.arguments` to existing handlers; Jev chooses the operation and its
+arguments in one batch. The original task remains immutable while the exact
+compiled payload enters the existing journal and handler. See
+[typed control](typed-control.md) for the task schema, grounded observation
+contracts, staged retrieval and joined decision outcomes. The private transport
+must honor the packet's budget rather than keep an older fixed question limit.
+
 An existing settled WorkQueue can be attached at the same directory with the
 same owner and goal. Original completed item definitions and receipts stay
 unchanged. Attachment retains their historical provenance in the episode; it

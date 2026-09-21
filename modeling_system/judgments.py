@@ -7,6 +7,7 @@ from copy import deepcopy
 import json
 import math
 from .controller import fingerprint
+from .decision_budget import bound_budget, decision_budget
 
 
 PLANNING_QUESTIONS = {
@@ -39,9 +40,9 @@ def _description(value, nullable=False):
     return (nullable and value is None) or (isinstance(value, (str, dict, list)) and bool(value))
 
 
-def validate_questions(questions):
-    if not isinstance(questions, dict) or not 1 <= len(questions) <= 12:
-        raise ValueError('One to twelve useful independent questions per batch')
+def validate_questions(questions, *, budget=None):
+    if not isinstance(questions, dict) or not 1 <= len(questions) <= decision_budget(budget).max_questions:
+        raise ValueError('Useful question count exceeds the explicit decision budget')
     for key, q in questions.items():
         if not isinstance(key, str) or not key or not isinstance(q, dict):
             raise ValueError('Named typed questions required')
@@ -93,9 +94,9 @@ def prepare_judgments(public_state, decisions, local_binding):
         elif 'criteria' in decision:
             q['criteria'] = deepcopy(decision['criteria'])
         questions[key], mapping[key] = q, row
-    validate_questions(questions)
-    if len(json.dumps({'state': public_state, 'questions': questions}, allow_nan=False).encode()) > 11000:
-        raise ValueError('Filter irrelevant state before dispatch; compact batch exceeded')
+    budget = bound_budget(binding)
+    validate_questions(questions, budget=budget)
+    budget.check(public_state, questions)
     return {'state': deepcopy(public_state), 'questions': questions,
             'local_binding': binding, 'dispatch_mapping': mapping}
 
@@ -104,9 +105,9 @@ def _number(value, lower, upper):
     return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
 
 
-def validate_answers(questions, answers):
+def validate_answers(questions, answers, *, budget=None):
     """Validate full distributions; return values without discarding source answers."""
-    validate_questions(questions)
+    validate_questions(questions, budget=budget)
     if not isinstance(answers, dict) or set(answers) != set(questions):
         raise ValueError('Exact answer set required')
     values = {}
@@ -145,7 +146,7 @@ def resolve_judgments(packet, answers, current_binding):
     """Read-only decisions, never an appearance approval or permission token."""
     if fingerprint(packet['local_binding']) != fingerprint(current_binding):
         raise ValueError('Planning authority or relevant evidence changed')
-    values = validate_answers(packet['questions'], answers)
+    values = validate_answers(packet['questions'], answers, budget=bound_budget(packet['local_binding']))
     result = {}
     for key, value in values.items():
         row = packet['dispatch_mapping'][key]

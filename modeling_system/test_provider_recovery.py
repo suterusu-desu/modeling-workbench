@@ -235,6 +235,21 @@ class TransientRetryTests(unittest.TestCase):
         write_json(self.ledger/'budget.json',value)
         with self.assertRaises(ValueError):self.recover()
 
+    def test_server_retry_time_survives_restart_and_never_adds_a_dispatch(self):
+        from .provider_recovery import retry_ready, ProviderRetryDeferred
+        wire = read_json(self.call/'decision-1.request.json')['wire_request_digest']
+        response = {'http': 529, 'transport': ROUTE, 'wire_request_digest': wire,
+                    'received_at': 1700000000., 'retry_after_seconds': 3600., 'request_id': 'trace-123'}
+        write_json(self.call/'decision-1.response.json', response)
+        first = self.recover(); second = self.recover()
+        self.assertEqual(first, second)
+        self.assertEqual(first['not_before'], 1700003600.)
+        self.assertEqual(first['retry_packet']['local_binding']['provider_retry']['not_before'], first['not_before'])
+        with self.assertRaises(ProviderRetryDeferred): retry_ready(first['not_before'], now=1700000010.)
+        retry_ready(first['not_before'], now=1700003600.)
+        self.assertEqual(read_json(self.call/'decision-1.response.json'), response)
+        self.assertEqual(first['provider_calls_added'], 0)
+
     def test_authority_rebinding_does_not_permit_guide_changes(self):
         packet=deepcopy(self.packet);packet['local_binding']['authority_revision']='new-authority'
         self.state['authority_revision']='new-authority'

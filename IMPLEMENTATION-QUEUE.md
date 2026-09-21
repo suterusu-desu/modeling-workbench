@@ -1,12 +1,23 @@
-# Current operating integration: 0.2.26
+# Current operating integration: 0.2.27
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
 and successful processes remain intact; every capability family has a control
 route. See [DESIGN.md](DESIGN.md) and the packaged operating-session contract.
 
+The [TypeSafe documentation audit](modeling_system/docs/typesafe-review.md) records
+the reviewed provider contract and cookbook coverage. Its seven implementation
+targets are integrated below; installation and actual use remain separately evidenced.
+
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Jev chose operations whose full arguments Astra had already assembled | Typed argument specifications compile selected qualified values into ordinary handler payloads; optional defaults, sets and incompatible tuples are explicit | Integrated selection/execution/review, unused-branch, stale-state, privacy and no-replay tests |
+| Compiler, projection and transport imposed unrelated small limits | One versioned DecisionBudget, also supported by retrieval and method catalogs | More than twelve questions and larger state pass through transport; explicit lower limits refuse before dispatch |
+| Observation descriptions lacked the reason an observation changes an edit | Observation contracts retain named uncertainty, competing hypotheses, existing evidence and outcome-to-next-action distinctions | The discriminating question reaches the ordinary operation choice without another mandatory inference |
+| Same-batch relevance could not improve that action's input context | Staged semantic retrieval when the candidate pool exceeds initial context; preserve contradictions, conditional support and no-match | An omitted counterexample changes the next request; exact caches and interrupted-stage recovery retain no-replay behavior |
+| Exact lineage did not detect overbroad method claims | Optional exact-span claim judgments in the same conditional batch | Selected unsupported claims stop before effects; unchanged receipt saving has no added check |
+| Judgments were hard to join to actual outcomes | Immutable decision traces join execution and scoped reviews; normalized composite scores can be recomputed offline | A technically completed but visually rejected call retains both states, its arguments and full judgments; no calibration claim |
+| Direct transport dropped provider trace and retry guidance | Validated request ID and retry headers; persistent retry eligibility in linked recovery | Malformed/secret-bearing headers are excluded, server timing survives restart, early dispatch refuses without HTTP |
 | Visual reviews did not carry across scopes without manual history wiring | Automatic exact-review retention and default cross-scope retrieval; optional conditional lessons retain changed prerequisites | Receipt-identity, corrected-review, privacy, restart and later-choice tests; visual interpretation remains authored |
 | Private matches could starve public lessons before projection | Project before candidate limiting, pack whole passages under a fixed decision budget, expose incomplete coverage | More than twenty competing private matches cannot hide an eligible lesson; no extra provider request |
 | Copied fitting/native wrappers repeated scope and binding errors | ParameterizedCatalog, reusable material fitting/trajectories, active-surface realization and NativeJob/RetainCheckpoint handlers | Synthetic contracts and exact saved-data compatibility; actual native/appearance adoption remains privately evidenced |
@@ -56,6 +67,30 @@ its qualified validator cache under the existing owner and dependency checks.
 Known partial task failures with no returned capability receipt can be reconciled
 as failed from retained effect receipts; remaining work is a separate task, so a
 successful open or other completed substep is not replayed.
+
+## Integrated TypeSafe follow-ups
+
+The 0.2.26 documentation review identified D1-D7. The 0.2.27 implementation uses
+the existing session and is ready for ordinary qualified catalogs. Current
+workspace authority and explicit resource limits remain binding. Native adapter
+qualification and actual appearance review keep their existing meanings.
+
+| Review ID | Integrated change | Verification |
+| --- | --- | --- |
+| D1-D2 | Typed capability calls and unified decision budgets | Synthetic complete calls, optional/default/set semantics, incompatible and stale bindings, larger transport requests and explicit budget refusals |
+| D3-D4 | Discriminating observation contracts and staged experience selection | Exact omitted counterexample retrieval, no-match handling, preserved caveats, cache reuse and interrupted evidence-stage continuation |
+| D7 | Provider request IDs and validated retry timing | Mocked rate-limit/service responses honor timing without hidden retries, erased uncertainty or expanded authority |
+| D5-D6 | Grounded consequential claims and outcome-linked judgment records | Localized unsupported claim, actual rejected-review join, exact trace binding and offline normalized scoring with separate material violations |
+
+The audit baseline passed 37 focused tests. The expanded source suite passes
+487 tests with one environment-specific symlink skip. The installed package
+passes 107 focused tests and five workspace/export tests; six private bridge
+checks include typed batches beyond the old limit and persisted provider delays.
+Source/wheel/install identity is retained with the delivery; actual
+operator use is recorded separately. These checks do not establish better
+appearance, calibrated thresholds or overall Astra savings. Conditional later
+training and very large hierarchical catalogs remain techniques to apply when
+the workload needs them, not hidden unfinished stages of D1-D7.
 
 ## Prior delivered increments
 

@@ -5,11 +5,13 @@ historical success into permission. Register mechanisms once, then bind a scope.
 """
 from copy import deepcopy
 from .experience import applicability
+from .decision_budget import decision_budget
 
 
 class MethodCatalog:
-    def __init__(self, methods, *, context=None):
-        if (not isinstance(methods, list) or not methods or len(methods) > 32
+    def __init__(self, methods, *, context=None, budget=None):
+        self.budget = decision_budget(budget)
+        if (not isinstance(methods, list) or not methods or len(methods) > self.budget.max_methods
                 or any(not m.get('id') or not m.get('description')
                        or not callable(m.get('build')) for m in methods)
                 or len({m['id'] for m in methods}) != len(methods)):
@@ -42,7 +44,7 @@ class MethodCatalog:
                 continue
             supplied = method['build'](deepcopy(state), deepcopy(previous))
             rows.extend(self._bind(method, supplied, choose=True))
-        if len(rows) > 128 or len({row['id'] for row in rows}) != len(rows):
+        if len(rows) > self.budget.max_tasks or len({row['id'] for row in rows}) != len(rows):
             raise ValueError('Bounded methods must produce unique task IDs')
         return rows
 
@@ -74,7 +76,7 @@ class ParameterizedCatalog(MethodCatalog):
     applicability conditions. Enumerate useful alternatives, not blind Cartesian
     parameter sweeps. Identical mechanism/parameter aliases are rejected.
     """
-    def __init__(self, implementations, bindings, *, context=None):
+    def __init__(self, implementations, bindings, *, context=None, budget=None):
         from .controller import fingerprint
         seen, methods = set(), []
         for binding in bindings:
@@ -102,7 +104,7 @@ class ParameterizedCatalog(MethodCatalog):
             methods.append({'id': binding['id'], 'description': binding['description'],
                             'conditions': binding.get('conditions', {}),
                             **{stage: bind_factory(fn) for stage, fn in factories.items()}})
-        super().__init__(methods, context=context)
+        super().__init__(methods, context=context, budget=budget)
 
 
 def bind_array_method(state, previous, parameters):

@@ -12,6 +12,7 @@ class TypeSafeTransportTests(unittest.TestCase):
         self.records = {}
         self.requests = []
         self.status = 200
+        self.headers = {}
         self.response = {'model': MODEL, 'answers': {'action': {
             'type': 'choice', 'choice': 'inspect',
             'probabilities': {'inspect': .9, 'fit': .1}, 'confidence': .8}},
@@ -26,6 +27,7 @@ class TypeSafeTransportTests(unittest.TestCase):
                 class Response:
                     status = test.status
                     def read(self): return json.dumps(test.response).encode()
+                    def getheader(self, name): return test.headers.get(name)
                 return Response()
             def close(self): pass
         self.client = TypeSafeTransport(Path(self.root.name),
@@ -85,6 +87,50 @@ class TypeSafeTransportTests(unittest.TestCase):
         self.assertAlmostEqual(self.client.cost, .0000042)
         with self.assertRaises(RuntimeError): self.client.choose({}, self.questions, {})
         self.assertEqual(len(self.requests), 1)
+
+    def test_larger_budget_reaches_transport_and_is_enforced_before_auth_dispatch(self):
+        from .decision_budget import DecisionBudget
+        self.questions = {str(i): {'type': 'noul', 'instructions': 'Is this fact relevant?'} for i in range(20)}
+        self.response['answers'] = {k: {'type': 'noul', 'noul': .7} for k in self.questions}
+        binding = {'decision_budget': DecisionBudget(max_questions=19).record()}
+        with self.assertRaises(ValueError): self.client.choose({}, self.questions, binding)
+        self.assertEqual(self.requests, [])
+        binding['decision_budget']['max_questions'] = 20
+        self.client.choose({'reviewed_text': 'x' * 14000}, self.questions, binding)
+        self.assertEqual(len(self.requests), 1)
+
+    def test_safe_request_and_retry_metadata_are_retained_on_an_error(self):
+        self.status = 429
+        self.headers = {'x-typesafe-request-id': 'trace-123', 'Retry-After': '120',
+                        'retry-after-ms': '2500', 'Authorization': 'fixture-secret'}
+        with self.assertRaises(RuntimeError): self.client.choose({}, self.questions, {})
+        receipt = self.records['decision-1.response.json']
+        self.assertEqual(receipt['request_id'], 'trace-123')
+        self.assertEqual(receipt['retry_after_seconds'], 120)
+        self.assertNotIn('fixture-secret', json.dumps(self.records))
+        self.assertNotIn('Authorization', receipt)
+
+    def test_invalid_or_credential_bearing_headers_are_excluded(self):
+        self.headers = {'x-typesafe-request-id': 'fixture-secret', 'Retry-After': 'NaN', 'retry-after-ms': '-100'}
+        self.client.choose({}, self.questions, {})
+        receipt = self.records['decision-1.response.json']
+        self.assertNotIn('request_id', receipt)
+        self.assertNotIn('retry_after_seconds', receipt)
+
+    def test_future_retry_does_not_write_or_dispatch(self):
+        import time
+        from .provider_recovery import ProviderRetryDeferred
+        with self.assertRaises(ProviderRetryDeferred):
+            self.client.choose({}, self.questions, {'provider_retry': {'not_before': time.time() + 100}})
+        self.assertEqual(self.records, {})
+        self.assertEqual(self.requests, [])
+
+    def test_http_date_and_long_hints_remain_delays_not_early_retries(self):
+        from .typesafe_transport import response_metadata
+        class Reply:
+            def getheader(self, name):
+                return {'Retry-After': 'Tue, 14 Nov 2023 23:13:20 GMT'}.get(name)
+        self.assertEqual(response_metadata(Reply(), '', 1700000000)['retry_after_seconds'], 3600)
 
 
 if __name__ == '__main__':

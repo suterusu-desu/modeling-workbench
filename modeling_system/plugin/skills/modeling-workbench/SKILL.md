@@ -15,6 +15,13 @@ Use [executable methods](references/method-control.md) to register genuine prepa
 
 For repeated modeling mechanisms use [parameterized operations](references/operation-recipes.md): bind meaningful method alternatives as data, reuse guide-landmark/material-trajectory math, compare actual face-owning geometry, and execute NativeJob/RetainCheckpoint through the existing controller. Retention reuses returned fresh states while preserving native guards and independent reopen. Begin actual image review with `session.begin_review(task)` so workload coverage is retained automatically through submission.
 
+Use [typed capability control](references/typed-control.md) to let Jev bind qualified
+operation arguments, choose observations for named uncertainties, retrieve omitted
+experience before action selection, and check consequential claims against exact
+sources. These use the existing session, native lane and ledger. One explicit
+decision budget covers compilation and transport; retained decisions join actual
+results and reviews. Keep all private argument values and full sources local.
+
 Start with `inspect_situation`. Read current modeling authority and retrieve relevant lessons by mechanism. Use `synchronize_scene` or `query_live_geometry` for current numerical evidence; `native_inspect_live` reports invalidation without silently making old geometry current. Scene changes invalidate the representation, and explicit synchronization refreshes it. Complete stored arrays remain queryable historically with declared coverage, including base-only and evaluated geometry distinctions. A current result is verified at the reported instant. The editing owner is stable across an experiment. A changed expected state or unresolved execution requires reconciliation, not blind repetition.
 
 Use `capture_view_bundle` for the actual mesh preview being inspected, including its angle, zoom, pose and optional pixel crop. It links the image, wider context, geometry, guide, depth and sections. `record_observation` and `ingest_capture` retain completed evidence without recapturing or moving the view. `project_points` accounts for the recorded crop; projected points are not automatically visible surface hits.
