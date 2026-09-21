@@ -7,6 +7,11 @@ The [operating session](modeling_system/plugin/skills/modeling-workbench/referen
 links the existing queue, tools and native adapter through one recoverable episode.
 See the [system design](DESIGN.md) for responsibilities and retained workflows.
 
+Actual visual reviews and conditional lessons carry into later Jev decisions
+automatically. Their exact evidence stays in the private workspace; compact
+context distinguishes observed failures, changed prerequisites and remaining
+uncertainties. See [retained learning](modeling_system/plugin/skills/modeling-workbench/references/retained-learning.md).
+
 Reusable tools and an evidence-based workflow for character modeling: exact recorded geometry, matched observations, guide/depth qualification, coupled response analysis, recoverable trials and retained learning.
 
 [Start here](modeling_system/plugin/skills/modeling-workbench/references/getting-started.md) | [Retained method](modeling_system/plugin/skills/modeling-workbench/references/method.md) | [Native adapters](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md) | [Agent skill](modeling_system/plugin/skills/modeling-workbench/SKILL.md)

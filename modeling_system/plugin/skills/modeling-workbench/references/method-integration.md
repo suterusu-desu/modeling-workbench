@@ -6,6 +6,11 @@ Use the existing `record_outcome`, `reconcile_episode`, `promote_procedure` and 
 
 ## From evidence to a usable procedure
 
+During ordinary modeling, [retained learning](retained-learning.md) carries actual
+scoped reviews and optional conditional lessons into later decisions automatically.
+This keeps interpretation available before formal promotion; it does not supply
+the supported-benefit or distinct-reuse evidence required below.
+
 1. Name the observed failure and causal mechanism, the existing approach, the bounded change, and the comparison that supports or rejects the benefit. Separate measurements, construction evidence, artistic choices and untested hypotheses.
 2. Retain exact input manifests, code, dependencies, output receipts and counterexamples in the private workspace. Record support, exclusions, protected context, artistic variables, applicability and tests still missing. State the benefit narrowly: for example, grouping repeated missing-target constraints by native point reduces duplicate acquisition nominations without establishing target shape or native fitting quality.
 3. Use `record_outcome` to retain separate character and method dispositions. Link that outcome and the actual evidence in `reconcile_episode`. `method.status="supported"` refers only to the reason and applicability stated there. Keep unfinished claims in the character result and unresolved list, or a separate experimental method episode.

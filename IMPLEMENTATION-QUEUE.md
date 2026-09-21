@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.25
+# Current operating integration: 0.2.26
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -7,6 +7,8 @@ route. See [DESIGN.md](DESIGN.md) and the packaged operating-session contract.
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Visual reviews did not carry across scopes without manual history wiring | Automatic exact-review retention and default cross-scope retrieval; optional conditional lessons retain changed prerequisites | Receipt-identity, corrected-review, privacy, restart and later-choice tests; visual interpretation remains authored |
+| Private matches could starve public lessons before projection | Project before candidate limiting, pack whole passages under a fixed decision budget, expose incomplete coverage | More than twenty competing private matches cannot hide an eligible lesson; no extra provider request |
 | Copied fitting/native wrappers repeated scope and binding errors | ParameterizedCatalog, reusable material fitting/trajectories, active-surface realization and NativeJob/RetainCheckpoint handlers | Synthetic contracts and exact saved-data compatibility; actual native/appearance adoption remains privately evidenced |
 | Retention repeated full inspections after operations already returned fresh state | Consume immutable returned state, retain every native guard, skip open only for the exact clean loaded candidate | Intervening-edit, stale-file, independent-reopen, compact-result and partial-failure checks; real timings remain workload-dependent |
 | Standalone native singleton could bypass Jev and reviews lacked duration coverage | Native action/defer by default; explicitly selected method continuation; begin_review closes its timer on submission | Native choices and fixed follow-ups remain distinct; unmeasured reviews and script reuse remain visible |

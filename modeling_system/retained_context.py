@@ -4,47 +4,68 @@ from pathlib import Path
 import json
 from .controller import fingerprint, write_json
 from .experience import retrieve
+from .learning import public_experience
 
 
 class RetainedContext:
-    def __init__(self, service, *, query, project, sources=None, limit=4, context=None):
-        if not callable(project) or not 1 <= limit <= 4:
+    def __init__(self, service, *, query=None, project=None, sources=None, limit=4, context=None):
+        if (project is not None and not callable(project)) or not 1 <= limit <= 4:
             raise ValueError('Explicit public projection and one to four passages required')
         self.service, self.query, self.project = service, query, project
         self.sources, self.limit, self.context = sources, limit, context
 
     def __call__(self, state, items, outcomes):
         query = self.query(state, items, outcomes) if callable(self.query) else self.query
+        if query is None:
+            query = json.dumps({'situation': state.get('public_state', {}),
+                                'offered_work': [item['description'] for item in items]})
         context = self.context(state) if self.context else state.get('public_state', {})
+        projected = {}
+        def project(row):
+            summary = public_experience(row)
+            if summary is None and self.project:
+                summary = self.project(deepcopy(row))
+            if summary is None:
+                return False
+            if not isinstance(summary, (dict, str)) or not summary:
+                raise ValueError('Public experience must have deliberate semantic content')
+            projected[fingerprint(row)] = summary
+            return True
         result = retrieve(self.service.workspace, self.service.store, query,
-                          self.limit, context, self.sources)
+                          20, context, self.sources, row_filter=project)
         public, exact, omitted = [], [], 0
-        used = 0
+        seen, duplicates = set(), 0
         for kind in ('authority', 'matches'):
             for row in result[kind]:
                 # The workspace explicitly removes identities and locators. No
                 # retrieved prose, filename or record goes on wire by default.
-                summary = self.project(deepcopy(row))
-                if summary is None:
+                summary = projected[fingerprint(row)]
+                identity = fingerprint(summary)
+                if identity in seen:
+                    duplicates += 1
                     continue
-                if not isinstance(summary, (dict, str)) or not summary:
-                    raise ValueError('Public experience must have deliberate semantic content')
-                size = len(json.dumps(summary, ensure_ascii=True).encode())
-                if used + size > 2400:
+                seen.add(identity)
+                candidate = {'index': len(public), 'role': kind, 'content': summary}
+                size = len(json.dumps(public + [candidate], ensure_ascii=True).encode())
+                if len(public) >= self.limit or size > 2400:
                     omitted += 1
                     exact.append({'index': None, 'source': row})
                     continue
-                used += size
                 index = len(public)
-                public.append({'index': index, 'role': kind, 'content': summary})
+                public.append(candidate)
                 exact.append({'index': index, 'source': row})
         # Do not hide missing retrieval coverage or turn relevance into authority.
         return {'public': {'passages': public, 'coverage': {
                     'authority_matches': result['coverage']['authority_matches'],
                     'experience_matches': result['coverage']['experience_matches'],
                     'missing_source_count': len(result['coverage']['missing_sources']),
+                    'excluded_by_projection': sum(result['coverage'][kind + '_matches'] - result['coverage']['eligible_' + kind]
+                                                  for kind in ('authority', 'experience')),
+                    'unreturned_eligible_passages': sum(result['coverage']['eligible_' + kind] - result['coverage']['returned_' + kind]
+                                                        for kind in ('authority', 'experience')),
+                    'duplicate_public_passages': duplicates,
                     'omitted_public_passages': omitted},
-                'limits': 'Historical methods and failures inform choices; current bindings govern applicability. Relevance never admits a guide or approves appearance.'},
+                'limits': 'Historical reviews and conditional lessons inform choices, not current state or user acceptance. Different prerequisites can change a method result; interpret the evidence rather than blindly repeat or ban it. Relevance never admits a guide or approves appearance.'},
             'exact': exact, 'query': query,
             'revision': fingerprint({'retrieval': result, 'public': public})}
 

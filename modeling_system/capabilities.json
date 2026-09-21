@@ -585,9 +585,9 @@
     },
     {
       "name": "Executable Jev methods and retained experience",
-      "route": "MethodCatalog / RetainedContext / ArrayPreparation / OperatingSession.begin_intervention / OperatingSession.end_intervention / compare_sessions",
+      "route": "MethodCatalog / RetainedContext / ArrayPreparation / OperatingSession.begin_intervention / OperatingSession.end_intervention / compare_sessions / OperatingSession.record_review / learning.record_lesson / learning.import_review_history",
       "implementation": "core + qualified workspace factories and public projections",
-      "verification": "Synthetic method branching, settled recovery, changing experience, queued preparation, active-surface effects and timed workload. Actual normal use remains private evidence.",
+      "verification": "Synthetic method branching, cross-scope actual-review recall, conditional lessons, privacy-before-limit retrieval, queued preparation and timed workload. Actual normal use remains private evidence.",
       "control": {
         "lanes": [
           "preparation",

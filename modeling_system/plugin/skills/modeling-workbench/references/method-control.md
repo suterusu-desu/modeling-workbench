@@ -55,14 +55,21 @@ because its numerical target can execute.
 
 ## Retained experience in each choice
 
-`RetainedContext` queries existing authority, outcome, judgment and procedure
-records. Exact passages, hashes and coverage remain in the private run's
+`RetainedContext` queries authority, outcome, judgment, procedure and automatically
+retained visual review/lesson records. Exact passages, hashes and coverage stay in the private run's
 `experience/` records. `project(row)` explicitly creates a short safe public
 summary, or returns None. Identities, filenames and private locators are not
-copied to the provider automatically. Up to four matches per category are
-retrieved; the public content has a bounded size and exposes omitted coverage.
+copied to the provider automatically. Dedicated review/lesson records project
+only their already-public semantic fields. Projection precedes candidate limiting;
+twenty eligible candidates per category can fill at most four complete passages
+within 2400 serialized bytes, with excluded and omitted coverage exposed.
 Queries may be strings or `(state, items, outcomes)` functions. Optional
 `context(state)` supplies applicability fields.
+
+OperatingSession supplies review retrieval by default, using the current public
+situation and offered work as the query. Add source projection only when needed.
+See [retained learning](retained-learning.md) for automatic review capture,
+conditional lessons and migration without replaying historical candidates.
 
 Jev receives the summaries alongside current findings before choosing. Up to four
 independent passage-relevance judgments share the existing action-selection

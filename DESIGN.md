@@ -34,7 +34,7 @@ flowchart TD
 | Contextual selection | Jev chooses offered methods, scopes and next work from current facts, uncertainties and applicable retained experience. | `LaneSelector`, typed `judgments`, direct TypeSafe transport and workspace budget ledger |
 | Qualified capability | A reusable operation carries its method, exact input relationships, executable implementation, completion evidence and resource effects. | Existing service operations or trusted private handlers; no new parallel geometry API |
 | Effect and observation | Execute directly, protect user work, save actual results and report what happened. Native writes are serial. | Controller, native adapter, worker contract, transaction/job receipts, operation journal |
-| Learning | Distinguish local character gain, technical execution and method benefit. Preserve cause, failure, scope and actual reuse. | `record_outcome`, `reconcile_episode`, `promote_procedure`, `retrieve_experience` |
+| Learning | Carry scoped reviews and conditional lessons across scopes; distinguish local gain, technical execution and method benefit. Preserve failures, changed prerequisites and actual reuse. | `record_review`, `record_lesson`, `RetainedContext`, `record_outcome`, `reconcile_episode`, `promote_procedure` |
 
 Repeated candidate work uses `CandidatePipeline` to materialize qualified stages
 from actual predecessor results. It freezes dependency bindings and composes the

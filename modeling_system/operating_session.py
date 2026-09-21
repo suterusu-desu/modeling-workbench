@@ -116,7 +116,8 @@ class OperatingSession(WorkQueue):
         self.private_handlers = dict(handlers)
         self.private_handlers.setdefault('service', self._service)
         self.projection = public_projection
-        self.experience = experience
+        from .retained_context import RetainedContext
+        self.experience = experience if experience is not None else RetainedContext(service, sources=[])
         self.user_catalog = catalog
         self.selector = LaneSelector(Path(directory) / 'advice', judge=judge, project=self._project)
         self._validate_episode(owner)
@@ -142,6 +143,8 @@ class OperatingSession(WorkQueue):
             finally:
                 EPISODE.reset(token)
             write_json(path, {**binding, 'attachment_operation': retained['operation_handle']})
+        from .learning import import_review_history
+        import_review_history(service, [self.directory])
 
     def _validate_episode(self, owner):
         episode = self.service.ledger.read(self.episode)
@@ -425,8 +428,15 @@ class OperatingSession(WorkQueue):
             raise ValueError('Review requires an actual completed result')
         return self._review_basis(task, state)
 
-    def record_review(self, task, *, expected_basis, judgment, evidence):
-        """Astra records actual scoped visual interpretation; Jev never calls this."""
+    def record_review(self, task, *, expected_basis, judgment, evidence, lesson=None):
+        """Record actual scoped visual interpretation and optional conditional lesson.
+
+        Judgment and lesson text are deliberately public, as in current feedback.
+        Evidence, task identity and locators stay private. Jev never calls this.
+        """
+        from .learning import validate_lesson, retain_review
+        if lesson is not None:
+            lesson = validate_lesson(lesson)
         if expected_basis != self.review_basis(task):
             raise ValueError('Candidate, inputs or intent changed since visual review')
         if (set(judgment) != {'disposition', 'scope', 'reason', 'next_question'}
@@ -435,12 +445,13 @@ class OperatingSession(WorkQueue):
             raise ValueError('Scoped visual judgment needs disposition, reason, next question and actual evidence')
         pinned = [pin_link(self.service, link) for link in evidence]
         result = self.service._run_episode_callback(self.episode, 'review_modeling_task',
-            {'task': task, 'basis': expected_basis, 'judgment': judgment, 'evidence': pinned},
+            {'task': task, 'basis': expected_basis, 'judgment': judgment, 'evidence': pinned, 'lesson': lesson},
             lambda: {'status': 'completed', 'basis': expected_basis, 'task': task,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
-                'judgment': deepcopy(judgment), 'evidence': pinned,
+                'judgment': deepcopy(judgment), 'evidence': pinned, 'lesson': lesson,
                 'user_acceptance': 'not implied'})
         write_json(self.directory / 'reviews' / (result['operation_handle'] + '.json'), result)
+        retain_review(self.service, self.directory, result)
         self._account_review(result)
         return result
 
