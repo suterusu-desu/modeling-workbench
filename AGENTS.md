@@ -1,6 +1,7 @@
 # Reusable modeling workbench
 
 Read README.md and the packaged modeling-workbench skill before changing workflow behavior.
+Keep README.md aligned with shipped capabilities, setup, dependencies and limitations. It is a user guide, not a development journal; retain implementation history in the design and implementation records instead.
 The repository contains generic tools, methods, adapter contracts and synthetic tests. Character identity, art, models, job history, personal locations, credentials and native rig bindings belong in separate private workspaces.
 
 Keep source, installed package, bound workspace, running adapter and operator adoption distinct. The tools cannot claim modeling quality on an untested character. Preserve exact workflow evidence privately and extract only reviewed general methods and synthetic regressions into this repository.
