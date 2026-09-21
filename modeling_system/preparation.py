@@ -4,6 +4,7 @@ import hashlib
 import json
 import numpy as np
 from . import guide_fitting
+from . import material_operations
 
 
 def active_vertex_coverage(vertex_count, faces, driven):
@@ -83,7 +84,11 @@ def pose_correspondence(guide_points, pose_points, pose_values):
 ARRAY_OPERATIONS = {'section_fit': guide_fitting.prepare_section_fit,
     'material_path': guide_fitting.remap_material_path, 'compose_correspondence': compose_correspondence,
     'prepared_effect': prepared_effect, 'active_vertex_coverage': active_vertex_coverage,
-    'pose_correspondence': pose_correspondence}
+    'pose_correspondence': pose_correspondence,
+    'surface_realization': material_operations.surface_realization,
+    'fit_landmark_field': material_operations.fit_landmark_field,
+    'material_trajectory': material_operations.material_trajectory,
+    'attachment_motion': material_operations.attachment_motion}
 
 
 def prepare_arrays(operation, *, inputs, parameters=None):
@@ -155,7 +160,8 @@ class ArrayPreparation:
         evidence = [{'kind': 'file', 'path': row['path'], 'role': name} for name, row in artifacts.items()]
         summary = {k: v for k, v in result.items() if k in ('maximum', 'rms', 'changed_count',
             'has_effect_above_tolerance', 'complete_active_coverage', 'active_count', 'driven_active_count',
-            'unused_vertex_count', 'best_sample_index')}
+            'unused_vertex_count', 'best_sample_index', 'passed', 'landmark_maximum',
+            'orientation_determinant', 'maximum_by_pose', 'relative_motion_maximum')}
         no_progress = (payload.get('stop_on_no_effect') is True
                        and result.get('has_effect_above_tolerance') is False)
         return {'status': 'no_progress' if no_progress else 'completed', 'prepared': artifacts, 'summary': summary,

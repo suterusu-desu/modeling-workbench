@@ -82,7 +82,10 @@ with hashes, checks and compact numerical findings. Inputs and failures stay
 private; no arbitrary Python or Blender operation is executed.
 
 Supported operations: `section_fit`, `material_path`, `compose_correspondence`,
-`prepared_effect`, `active_vertex_coverage`, and `pose_correspondence`. The same
+`prepared_effect`, `active_vertex_coverage`, `pose_correspondence`,
+`fit_landmark_field`, `material_trajectory`, `surface_realization`, and
+`attachment_motion`. See [parameterized operations](operation-recipes.md) for
+reusable data-bound catalogs, native handlers and review timing. The same
 functions accept arrays directly inside existing qualified handlers.
 
 - `prepared_effect` measures displacement on the declared active surface using

@@ -180,6 +180,8 @@ class OperatingSession(WorkQueue):
         required = set(profile['inputs'])
         if contract.get('native'):
             required.add('adapter')
+        if item.get('required') and contract.get('profile') == 'appearance_edit':
+            raise ValueError('A substantive modeling pass cannot be required housekeeping')
         if not required <= bindings.keys():
             raise ValueError('Missing modeling input relationships: ' + ', '.join(sorted(required - bindings.keys())))
         for role, keys in bindings.items():
@@ -248,6 +250,19 @@ class OperatingSession(WorkQueue):
             if missing:
                 blocked[action['id']] = {'missing_evidence': missing}
             else:
+                if contract.get('native') and not action.get('required'):
+                    parent = contract.get('selected_method_from')
+                    prior = self.items.get(parent, {})
+                    continuation = (parent in self.items[action['id']].get('requires', {})
+                        and self.record['results'].get(parent, {}).get('status') == 'completed'
+                        and prior.get('select_with_jev') is True
+                        and contract.get('method_choice') is not None
+                        and prior.get('workbench', {}).get('method_choice') == contract['method_choice'])
+                    # Standalone native diagnostics, captures and singleton edits
+                    # retain a real action/defer choice. Only an actual selected
+                    # method's declared continuation avoids duplicate inference.
+                    if not continuation:
+                        action['select_with_jev'] = True
                 ready.append(action)
         state['actions'] = ready
         feedback = self._feedback(state)
@@ -426,7 +441,34 @@ class OperatingSession(WorkQueue):
                 'judgment': deepcopy(judgment), 'evidence': pinned,
                 'user_acceptance': 'not implied'})
         write_json(self.directory / 'reviews' / (result['operation_handle'] + '.json'), result)
+        self._account_review(result)
         return result
+
+    def begin_review(self, task):
+        """Open actual evidence and its timing interval together; no native call.
+
+        Elapsed review time is not model token usage. Start before inspecting the
+        returned artifacts. Reopening the same basis reuses its running timer.
+        """
+        basis = self.review_basis(task)
+        rows = [read_json(p) for p in (self.directory/'review-work').glob('*.json')]
+        row = next((r for r in rows if r['basis'] == basis and not r.get('completed')), None)
+        if row is None:
+            token = self.begin_intervention(kind='evidence_interpretation', reason='Review returned evidence: '+task)
+            row = {'task': task, 'basis': basis, 'timer': token, 'completed': False}
+            write_json(self.directory/'review-work'/(token+'.json'), row)
+        return {'basis': basis, 'timer': row['timer'], 'result': deepcopy(self.record['results'][task]['result'])}
+
+    def _account_review(self, review):
+        for path in (self.directory/'review-work').glob('*.json'):
+            row = read_json(path)
+            if row['basis'] == review['basis'] and not row.get('completed'):
+                intervention = self.end_intervention(row['timer'], evidence=review['evidence'])
+                row.update(completed=True, review=review['operation_handle'], intervention=intervention['operation_handle'])
+                write_json(path, row)
+                break
+        # No inferred duration if the reviewer did not start an interval. The
+        # metrics explicitly count this submission as unmeasured review work.
 
     def record_intervention(self, *, kind, reason, evidence, seconds=None, timer=None):
         """Retain actual Astra work; time is explicitly reported, never inferred."""

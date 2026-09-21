@@ -35,6 +35,15 @@ def session_metrics(directory):
     reviews = [read_json(p) for p in (directory / 'reviews').glob('*.json')]
     timers = [read_json(p) for p in (directory / 'intervention-timers').glob('*.json')]
     results = queue['results']
+    review_work = [read_json(p) for p in (directory / 'review-work').glob('*.json')]
+    timed_reviews = {row.get('review') for row in review_work if row.get('completed')}
+    native_stages, native_calls, implementations = Counter(), Counter(), Counter()
+    for row in results.values():
+        native_stages.update(row.get('result', {}).get('native_stages_ms', {}))
+        native_calls.update(row.get('result', {}).get('native_calls', {}))
+        recipe = row.get('task', {}).get('workbench', {}).get('recipe')
+        if recipe:
+            implementations[recipe['implementation']] += 1
     native_ms = sum(row.get('result', {}).get('handler_elapsed_ms', 0)
                     for row in results.values() if row.get('task', {}).get('workbench', {}).get('native'))
     missing_native_times = sum('handler_elapsed_ms' not in row.get('result', {})
@@ -45,16 +54,21 @@ def session_metrics(directory):
     return {'cycle_totals_ms': dict(totals), 'execution_by_task_ms': dict(actions),
         'native_handler_ms': round(native_ms, 3), 'native_tasks_without_timing': missing_native_times,
         'retained_tasks': retained,
+        'native_stages_ms': dict(native_stages), 'native_calls': dict(native_calls),
+        'checkpoint_opens_reused': sum(row.get('result', {}).get('checkpoint_open_reused') is True for row in results.values()),
+        'parameterized_implementations': dict(implementations),
+        'tasks_without_recipe_identity': sum(not row.get('task', {}).get('workbench', {}).get('recipe') for row in results.values()),
         'outcomes': dict(Counter(row['status'] for row in results.values())),
         'astra_interventions': dict(Counter(row['kind'] for row in interventions)),
         'reported_astra_seconds': sum(row.get('seconds') or 0 for row in interventions),
         'interventions_without_duration': sum(row.get('seconds') is None for row in interventions),
         'visual_review_submissions': len(reviews), 'incomplete_event_lines': incomplete,
+        'visual_reviews_without_timing': sum(row.get('operation_handle') not in timed_reviews for row in reviews),
         'action_routes': dict(routes), 'jev_choices_by_lane': dict(lanes), 'jev_choices': choices,
         'open_intervention_timers': [row['token'] for row in timers if row['status'] == 'running'],
         'timed_interventions': sum(row.get('seconds') is not None for row in interventions),
         'avoided_astra_turns': None,
-        'coverage': 'Controller times, execution routes and review submissions are automatic. Jev routes include valid cached decisions; they are not provider request counts. Explicit timers measure elapsed work intervals, not model token usage. Unreported effort and open timers remain unknown. Native handler time includes prerequisites. Cycle totals overlap component times. Retention is not user acceptance; no baseline speedup is inferred.'}
+        'coverage': 'Controller times, routes, parameterized implementation use, native recipe stages and review submissions are automatic. Jev routes include cached decisions, not provider request counts. begin_review measures evidence opening through submission; missing timers are counted explicitly. Other explicit timers measure elapsed work, not model tokens. Unreported effort remains unknown. Native and cycle totals overlap components. Retention is not user acceptance; no speedup is inferred.'}
 
 
 def compare_sessions(baseline, current, *, comparison_scope):
@@ -63,6 +77,7 @@ def compare_sessions(baseline, current, *, comparison_scope):
         raise ValueError('Describe why these scopes are comparable')
     before, after = session_metrics(baseline), session_metrics(current)
     known = all(not row['interventions_without_duration'] and not row['open_intervention_timers']
+                and not row['visual_reviews_without_timing']
                 and row['timed_interventions'] for row in (before, after))
     return {'comparison_scope': comparison_scope, 'baseline': before, 'current': after,
             'reported_astra_seconds_difference': after['reported_astra_seconds'] - before['reported_astra_seconds'] if known else None,

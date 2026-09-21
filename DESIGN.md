@@ -54,6 +54,18 @@ active-face coverage and pose correspondence inform choices without becoming
 blanket extra validation. Explicit timers and route events distinguish actual
 Astra work, Jev decisions and fixed continuation.
 
+`ParameterizedCatalog` separates a registered implementation from scope-specific
+data and qualified method alternatives. `material_operations` supplies reusable
+landmark fields, material trajectories, explicit attachment-pair diagnostics and
+face-owning realization comparisons. Complete evaluated positions remain distinct
+from additive corrections on a moving carrier. `NativeJob` and `RetainCheckpoint`
+are handlers inside the existing session, with pinned inputs and the same native
+lane. Returned live state flows directly into the next guarded mutation; compact
+results expand locally and exact already-loaded candidates need no duplicate open.
+Independent reopen and actual appearance review remain separate obligations.
+Review opening/submission and per-stage native timings expose incomplete workload
+coverage instead of treating missing Astra work as zero.
+
 Every row has links to the rows above and below. A short observation expands to
 an exact operation, input identity, original artifact, procedure and judgment.
 The queue is an execution index; native files, generation jobs, episode records

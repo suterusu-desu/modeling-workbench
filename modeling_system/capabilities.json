@@ -599,6 +599,23 @@
         "execution": "Existing OperatingSession and CandidatePipeline; no separate executor",
         "judgment": "Jev selects substantive methods and ranks retained context; fixed continuation consumes the chosen method result"
       }
+    },
+    {
+      "name": "Parameterized material methods and native operation recipes",
+      "route": "ParameterizedCatalog / bind_array_method / material_operations / NativeJob / RetainCheckpoint / OperatingSession.begin_review",
+      "implementation": "core and exact qualified private bindings",
+      "verification": "Synthetic landmark/motion/active-surface, native freshness and review-workload tests; saved-array and actual native adoption are separately retained by workspaces.",
+      "control": {
+        "lanes": [
+          "preparation",
+          "diagnosis",
+          "repair",
+          "verification",
+          "review"
+        ],
+        "execution": "Existing sole-owner OperatingSession handlers with returned live-state continuity and independent reopen requirements",
+        "judgment": "Jev selects applicable method bindings; standalone native singletons retain action/defer; Astra reviews actual evidence"
+      }
     }
   ],
   "limits": [

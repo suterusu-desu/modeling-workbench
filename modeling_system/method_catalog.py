@@ -58,5 +58,74 @@ class MethodCatalog:
             factory = method.get(stage)
             if not callable(factory):
                 raise ValueError('Selected method has no executable ' + stage)
-            return self._bind(method, factory(deepcopy(state), deepcopy(previous)), choose=False)
+            rows = self._bind(method, factory(deepcopy(state), deepcopy(previous)), choose=False)
+            for row in rows:
+                row['workbench']['selected_method_from'] = previous['task']['id']
+            return rows
         return build
+
+
+class ParameterizedCatalog(MethodCatalog):
+    """Bind registered implementations to qualified data, without copying factories.
+
+    implementations maps mechanism IDs to bind(state, previous, parameters), or
+    a dictionary with build and follow-up stage functions of that signature.
+    Each binding supplies id, implementation, description, parameters and optional
+    applicability conditions. Enumerate useful alternatives, not blind Cartesian
+    parameter sweeps. Identical mechanism/parameter aliases are rejected.
+    """
+    def __init__(self, implementations, bindings, *, context=None):
+        from .controller import fingerprint
+        seen, methods = set(), []
+        for binding in bindings:
+            key = binding['implementation']; parameters = deepcopy(binding['parameters'])
+            implementation = implementations.get(key)
+            factories = {'build': implementation} if callable(implementation) else implementation
+            if (not isinstance(factories, dict) or not callable(factories.get('build'))
+                    or not all(callable(fn) for fn in factories.values()) or not isinstance(parameters, dict)):
+                raise ValueError('Registered executable implementation and named parameters required')
+            identity = fingerprint({'implementation': key, 'parameters': parameters})
+            if identity in seen:
+                raise ValueError('Duplicate mechanism and parameters are not meaningful alternatives')
+            seen.add(identity)
+            def bind_factory(fn, row=deepcopy(binding), digest=identity):
+                def build(state, previous):
+                    tasks = fn(state, previous, deepcopy(row['parameters']))
+                    if tasks is None:
+                        return None
+                    tasks = deepcopy(tasks if isinstance(tasks, list) else [tasks])
+                    for task in tasks:
+                        task['workbench']['recipe'] = {'implementation': row['implementation'],
+                            'parameters_revision': digest}
+                    return tasks
+                return build
+            methods.append({'id': binding['id'], 'description': binding['description'],
+                            'conditions': binding.get('conditions', {}),
+                            **{stage: bind_factory(fn) for stage, fn in factories.items()}})
+        super().__init__(methods, context=context)
+
+
+def bind_array_method(state, previous, parameters):
+    """Ready-made ParameterizedCatalog implementation for saved-array recipes.
+
+    Parameters carry task, revision, question, method, operation, inputs, reads,
+    writes and optional operation parameters/lane/handler. File identities must
+    be current task dependencies; semantic qualification remains in method text
+    and its workspace evidence. It never loads Blender or guesses correspondence.
+    """
+    from .candidate_pipeline import capability_task
+    from .preparation import ARRAY_OPERATIONS
+    if parameters['operation'] not in ARRAY_OPERATIONS:
+        raise ValueError('Known saved-array operation required')
+    reads = parameters['reads']
+    revisions = {state['values'][key] for key in reads}
+    if any(ref['sha256'] not in revisions for ref in parameters['inputs'].values()):
+        raise ValueError('Every saved-array input must be bound to the method reads')
+    return capability_task(state, key=parameters['task'], revision=parameters['revision'],
+        lane=parameters.get('lane', 'preparation'), handler=parameters.get('handler', 'arrays'),
+        description=parameters['question'], completion='Recorded array result and exact input provenance.',
+        profile='analysis', capability=parameters['operation'], method=parameters['method'],
+        bindings={'evidence': reads}, reads=reads, writes=parameters.get('writes', []),
+        payload={'operation': parameters['operation'], 'inputs': parameters['inputs'],
+            'parameters': parameters.get('parameters', {}),
+            'stop_on_no_effect': parameters.get('stop_on_no_effect', False)})
