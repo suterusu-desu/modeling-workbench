@@ -310,9 +310,12 @@ class PersistentController:
         selected_plan = None
         if required:
             action = required[0]
-        elif len(actions) == 1:
+            route = 'fixed'
+        elif len(actions) == 1 and not actions[0].get('select_with_jev'):
             action = actions[0]
+            route = 'single_executable'
         else:
+            route = 'jev'
             if self.plan is None:
                 return self._status('waiting_plan', state)
             if self.select is None:
@@ -341,6 +344,8 @@ class PersistentController:
             self.record['selection'] = None
             self._save()
             self._event('selected', action=action['id'])
+        self._event('action_route', action=action['id'], route=route,
+                    lane=action.get('lane'), offered=len(actions))
         # A selected-action guard can avoid rebuilding the full observation/menu.
         fresh = self._timed('revalidate', self._fresh_for_action, action, state)
         self._poll_plan(fresh)

@@ -44,6 +44,16 @@ material allocation and explicit displacement coordinates below the capability
 layer. Session metrics join observed runtime, actual reviews and reported Astra
 interventions so workload improvements can be evaluated without invented speedups.
 
+`MethodCatalog` binds reusable executable alternatives into that frontier and
+routes follow-up from the actual selected method. `RetainedContext` retrieves
+source-exact experience before selection, publishes only deliberately projected
+summaries and binds changes to action freshness. Method rankings and independent
+passage relevance share the existing Jev request. `ArrayPreparation` executes
+declarative saved-array recipes through the same journal; effect magnitude,
+active-face coverage and pose correspondence inform choices without becoming
+blanket extra validation. Explicit timers and route events distinguish actual
+Astra work, Jev decisions and fixed continuation.
+
 Every row has links to the rows above and below. A short observation expands to
 an exact operation, input identity, original artifact, procedure and judgment.
 The queue is an execution index; native files, generation jobs, episode records

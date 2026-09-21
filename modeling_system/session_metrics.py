@@ -12,7 +12,8 @@ def session_metrics(directory):
     directory = Path(directory)
     path = directory / 'work-queue.json'
     queue = read_json(path) if path.exists() else {'results': {}}
-    totals, actions, incomplete = Counter(), Counter(), 0
+    totals, actions, routes, lanes, incomplete = Counter(), Counter(), Counter(), Counter(), 0
+    choices = []
     events = directory / 'controller/events.jsonl'
     if events.exists():
         for line in events.read_text(encoding='utf-8').splitlines():
@@ -25,8 +26,14 @@ def session_metrics(directory):
                 totals.update(row['timings_ms'])
                 if row.get('action'):
                     actions[row['action']] += row['timings_ms'].get('execute', 0)
+            elif row.get('event') == 'action_route':
+                routes[row['route']] += 1
+                if row['route'] == 'jev':
+                    lanes[row.get('lane', 'unspecified')] += 1
+                    choices.append({k: row.get(k) for k in ('action', 'lane', 'offered')})
     interventions = [read_json(p) for p in (directory / 'interventions').glob('*.json')]
     reviews = [read_json(p) for p in (directory / 'reviews').glob('*.json')]
+    timers = [read_json(p) for p in (directory / 'intervention-timers').glob('*.json')]
     results = queue['results']
     native_ms = sum(row.get('result', {}).get('handler_elapsed_ms', 0)
                     for row in results.values() if row.get('task', {}).get('workbench', {}).get('native'))
@@ -43,5 +50,20 @@ def session_metrics(directory):
         'reported_astra_seconds': sum(row.get('seconds') or 0 for row in interventions),
         'interventions_without_duration': sum(row.get('seconds') is None for row in interventions),
         'visual_review_submissions': len(reviews), 'incomplete_event_lines': incomplete,
+        'action_routes': dict(routes), 'jev_choices_by_lane': dict(lanes), 'jev_choices': choices,
+        'open_intervention_timers': [row['token'] for row in timers if row['status'] == 'running'],
+        'timed_interventions': sum(row.get('seconds') is not None for row in interventions),
         'avoided_astra_turns': None,
-        'coverage': 'Controller times and review submissions are automatic. Other Astra work is explicitly reported; unreported time is unknown. Native handler time includes its prerequisites. Cycle times overlap component times; do not add them together. Retention is not user acceptance. No baseline speedup is inferred.'}
+        'coverage': 'Controller times, execution routes and review submissions are automatic. Jev routes include valid cached decisions; they are not provider request counts. Explicit timers measure elapsed work intervals, not model token usage. Unreported effort and open timers remain unknown. Native handler time includes prerequisites. Cycle totals overlap component times. Retention is not user acceptance; no baseline speedup is inferred.'}
+
+
+def compare_sessions(baseline, current, *, comparison_scope):
+    """Observed difference for an explicitly declared comparison, not causality."""
+    if not isinstance(comparison_scope, str) or not comparison_scope.strip():
+        raise ValueError('Describe why these scopes are comparable')
+    before, after = session_metrics(baseline), session_metrics(current)
+    known = all(not row['interventions_without_duration'] and not row['open_intervention_timers']
+                and row['timed_interventions'] for row in (before, after))
+    return {'comparison_scope': comparison_scope, 'baseline': before, 'current': after,
+            'reported_astra_seconds_difference': after['reported_astra_seconds'] - before['reported_astra_seconds'] if known else None,
+            'limits': 'Only recorded intervals and outcomes are compared. Different model quality or task difficulty can explain differences. Unreported work and avoided turns remain unknown.'}

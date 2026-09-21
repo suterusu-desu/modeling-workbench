@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import time
+import uuid
 
 from .controller import applicable, fingerprint, read_json, write_json
 from .episodes import pin_link
@@ -109,12 +110,13 @@ class OperatingSession(WorkQueue):
     Provider transport/budget remain workspace callbacks supplied to judge.
     """
     def __init__(self, directory, *, service, episode, owner, goal, observe_context,
-                 catalog, handlers, judge, public_projection, report=None):
+                 catalog, handlers, judge, public_projection, report=None, experience=None):
         self.service, self.episode = service, episode
         self.report_adapter = report
         self.private_handlers = dict(handlers)
         self.private_handlers.setdefault('service', self._service)
         self.projection = public_projection
+        self.experience = experience
         self.user_catalog = catalog
         self.selector = LaneSelector(Path(directory) / 'advice', judge=judge, project=self._project)
         self._validate_episode(owner)
@@ -255,6 +257,16 @@ class OperatingSession(WorkQueue):
         for action in ready:
             action['reads'].update({k: state['values'][k]
                 for k in ('operating_intent', 'operating_feedback', 'operating_observation')})
+        if (self.experience and ready and not any(action.get('required') for action in ready)
+                and (len(ready) > 1 or ready[0].get('select_with_jev'))):
+            from .retained_context import RetainedContext
+            record = self.experience(deepcopy(state),
+                [deepcopy(self.items[action['id']]) for action in ready], deepcopy(self.record['results']))
+            RetainedContext.retain(self.directory, record)
+            state['observations']['experience'] = record['public']
+            state['values']['operating_experience'] = record['revision']
+            for action in ready:
+                action['reads']['operating_experience'] = record['revision']
         if not ready and blocked:
             state['attention'] = {'reason': 'Resolve the scoped missing evidence or appearance question; saved work remains available',
                                   'tasks': deepcopy(blocked)}
@@ -304,6 +316,10 @@ class OperatingSession(WorkQueue):
     def _project(self, snapshot, actions, plan):
         projected = deepcopy(self.projection(snapshot, actions, plan))
         projected['state']['workbench'] = deepcopy(snapshot['observations']['workbench'])
+        if 'experience' in snapshot['observations']:
+            experience = deepcopy(snapshot['observations']['experience'])
+            projected['state']['retained_experience'] = experience
+            projected['rank_experience'] = experience['passages'][:4]
         return projected
 
     def _service(self, item, context):
@@ -412,7 +428,7 @@ class OperatingSession(WorkQueue):
         write_json(self.directory / 'reviews' / (result['operation_handle'] + '.json'), result)
         return result
 
-    def record_intervention(self, *, kind, reason, evidence, seconds=None):
+    def record_intervention(self, *, kind, reason, evidence, seconds=None, timer=None):
         """Retain actual Astra work; time is explicitly reported, never inferred."""
         from .session_metrics import INTERVENTION_KINDS
         if (kind not in INTERVENTION_KINDS or not reason or not evidence or
@@ -422,6 +438,8 @@ class OperatingSession(WorkQueue):
         self._validate_episode(self.owner)
         pinned = [pin_link(self.service, link) for link in evidence]
         data = {'kind': kind, 'reason': reason, 'seconds': seconds, 'evidence': pinned}
+        if timer is not None:
+            data['timer'] = timer
         result = self.service._run_episode_callback(self.episode, 'record_astra_intervention', data,
             lambda: {**deepcopy(data), 'status': 'completed',
                      'submitted_at': datetime.now(timezone.utc).isoformat()})
@@ -430,6 +448,37 @@ class OperatingSession(WorkQueue):
 
     def metrics(self):
         return session_metrics(self.directory)
+
+    def begin_intervention(self, *, kind, reason):
+        """Start an explicit elapsed-work interval; survives owner process restart."""
+        from .session_metrics import INTERVENTION_KINDS
+        if kind not in INTERVENTION_KINDS or not reason:
+            raise ValueError('Known intervention kind and concrete purpose required')
+        self._validate_episode(self.owner)
+        token = uuid.uuid4().hex
+        write_json(self.directory / 'intervention-timers' / (token + '.json'), {
+            'token': token, 'kind': kind, 'reason': reason, 'started_at': time.time(),
+            'status': 'running', 'owner': self.owner, 'episode': self.episode})
+        return token
+
+    def end_intervention(self, token, *, evidence):
+        if not isinstance(token, str) or len(token) != 32 or any(c not in '0123456789abcdef' for c in token):
+            raise ValueError('Exact intervention timer token required')
+        path = self.directory / 'intervention-timers' / (token + '.json')
+        timer = read_json(path)
+        if timer['owner'] != self.owner or timer['episode'] != self.episode:
+            raise ValueError('Timer belongs to another operating session')
+        if timer['status'] == 'completed':
+            return read_json(self.directory / 'interventions' / (timer['operation_handle'] + '.json'))
+        # Recover an interruption after the immutable fact/index was saved.
+        prior = [read_json(p) for p in (self.directory / 'interventions').glob('*.json')]
+        result = next((row for row in prior if row.get('timer') == token), None)
+        if result is None:
+            result = self.record_intervention(kind=timer['kind'], reason=timer['reason'],
+                seconds=max(0., time.time() - timer['started_at']), evidence=evidence, timer=token)
+        timer.update(status='completed', operation_handle=result['operation_handle'])
+        write_json(path, timer)
+        return result
 
     def recover(self, task):
         """Restore only an already returned, qualified result; never call a handler."""

@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.23
+# Current operating integration: 0.2.24
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -7,6 +7,9 @@ route. See [DESIGN.md](DESIGN.md) and the packaged operating-session contract.
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Strategy catalogs often contained only the Astra-selected variant | MethodCatalog exposes genuine reusable methods and routes the chosen result into CandidatePipeline; singleton strategies retain Jev action/defer | Choice provenance and pipeline branch tests; active catalogs still require meaningful qualified alternatives |
+| Prior failures were manually recopied and preparation scripts repeated | Automatic source-exact RetainedContext and batched relevance; declarative ArrayPreparation with effect, active-surface, composition and pose evidence | Private locators stay local, changed evidence invalidates choice; numerical results do not approve appearance |
+| Astra effort lacked durations and singleton execution looked like Jev decisions | Persistent intervention timers, action-route events and explicit scope comparison | Open/unknown intervals remain unknown; comparison is not causal speedup |
 | Repeated fitting helpers and copied candidate wrappers consumed reasoning work | Recorded section/material fitting, explicit displacement coordinates and CandidatePipeline factories over the existing session | Synthetic geometry, bounded gap provenance, preserved boundaries and review-gated resume; actual native use is recorded privately |
 | One available lane still required a priority judgment | Purpose-specific diagnosis/method/evidence/recovery questions; one action/defer question for a single lane | Exact retained-answer recovery and fresh dependency validation preserved |
 | Provider latency alone obscured the workload bottleneck | Session stage/native timings, actual reviews and evidence-linked reported Astra interventions | Unknown manual effort and avoided turns remain unknown; no automatic speedup or appearance claim |

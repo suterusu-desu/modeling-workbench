@@ -12,7 +12,7 @@ LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
 # Advance when selection question meanings or their composition change.
-SELECTION_POLICY = 'qualified-lanes-v3'
+SELECTION_POLICY = 'qualified-lanes-v4'
 LANE_QUESTIONS = {
     'diagnosis': 'Which offered observation best distinguishes the remaining plausible causes and changes the next edit?',
     'repair': 'Which offered qualified method best addresses the observed failure mechanism while preserving retained gains?',
@@ -139,6 +139,8 @@ class WorkQueue:
                 'description': deepcopy(item['description']),
                 'completion_condition': item['completion_condition'],
                 'reads': reads, 'writes': item['writes'], 'required': bool(item.get('required', False))})
+            if item.get('select_with_jev'):
+                actions[-1]['select_with_jev'] = True
         state.update(actions=actions, done=all_settled and all(
             outcomes.get(key, {}).get('status') == 'completed' for key in items),
             observations={'public': deepcopy(state.get('public_state', {})),
@@ -242,6 +244,17 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                 'facts': public.get('lane_facts', {}).get(lane, {}),
                 'available_operations': [public['descriptions'][a['id']] for a in offered]}}
                 for lane, offered in grouped.items()] + [{'id': DEFER, 'description': 'Need new capability, conflicting-evidence resolution or actual visual interpretation.'}]})
+        # Relevance is independently useful for subsequent context reuse. All
+        # passages are already visible to action questions in this same batch;
+        # no question assumes another question's answer.
+        ranked_passages = public.get('rank_experience', [])[:max(0, 12 - len(decisions))]
+        for passage in ranked_passages:
+            decisions.append({'id': 'experience_relevance_' + str(passage['index']), 'type': 'score',
+                'instructions': {'question': 'How directly does the specified retained passage help select the next offered operation for the current defect, including warnings against repeating a failed mechanism?',
+                                 'passage': 'retained_experience.passages[' + str(passage['index']) + ']'},
+                'criteria': ['Unrelated to the current mechanism or scope',
+                             'Related context but does not distinguish offered methods',
+                             'Directly supports a method or identifies an applicable failure to avoid']})
         from .judgments import prepare_judgments
         try:
             packet = prepare_judgments(public['state'], decisions, binding) if decisions else None
@@ -296,7 +309,12 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
             choice = resolved[lane]['choice']
         write_json(self.directory / 'last-batch.json', {'binding': binding, 'judgments': answers,
             'applicable_lane_choices': resolved, 'provider_receipt': result.get('provider_receipt'),
-            'question_count': len(batch['decisions']), 'selection_key': batch['selection_key'], 'choice': choice})
+            'question_count': len(batch['decisions']), 'selection_key': batch['selection_key'], 'choice': choice,
+            'method_rankings': {lane: sorted(answer.get('probabilities', {}).items(), key=lambda row: (-row[1], row[0]))
+                                for lane, answer in resolved.items()},
+            'experience_rankings': sorted([{'index': int(key.rsplit('_', 1)[1]), 'judgment': value}
+                for key, value in answers.items() if key.startswith('experience_relevance_')],
+                key=lambda row: (-row['judgment']['score'], row['index']))})
         # Complete decisions (including deferrals) now survive restarts without
         # another priority call. Different context still invalidates this result.
         self.cache = dict(list(self.cache.items())[-128:])

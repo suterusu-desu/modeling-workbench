@@ -33,6 +33,12 @@ provenance, and continues selected candidates through verification and reviewed
 retention. Session accounting separates inference, native execution and reported
 Astra work so optimization follows observed bottlenecks.
 
+[Executable methods](modeling_system/plugin/skills/modeling-workbench/references/method-control.md)
+give Jev reusable alternatives for preparation, diagnosis and recovery, with
+automatic retrieval of relevant failures. Saved-array recipes expose prepared
+effect size, active geometry coverage and pose correspondence. Timed Astra work
+and actual Jev choices remain visible in session metrics.
+
 ## What can I use today?
 
 This is an experimental workbench for technical artists and developers building characters with an AI assistant. You can create a private character workspace, inspect recorded geometry, compare surfaces, qualify reference support, organize recoverable experiments, and reuse supported diagnostic recipes.
