@@ -22,6 +22,9 @@ bindings and native handlers; this is not another executor.
   are never labelled direct triangle support.
 - `remap_material_path(source, target)` allocates source arclength fractions along
   an already qualified ordered target and returns target-segment ancestry.
+  Equal fractions do not pair anatomy: establish corresponding roles and
+  landmarks first, retaining rejected branch alternatives as
+  [correspondence evidence](surface-correspondence.md).
 - `prepare_section_fit(stations, baseline, targets, supported, provenance, weights,
   max_gap=..., max_missing=..., space=..., frames=..., object_matrix=...)` combines
   bounded interpolation, preservation weights and displacement encoding. Arrays

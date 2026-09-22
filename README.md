@@ -86,7 +86,7 @@ The modeling loop is:
 
 1. Choose the character's identity references and a bounded modeling question.
 2. Record the working mesh, pose and matching views.
-3. Review or create a target; register a 3D guide and qualify its supported regions.
+3. Review or create a target; register a 3D guide and qualify its supported regions and correspondence across poses, including rejected surface alternatives.
 4. Fit the working mesh under guide/depth constraints in a recoverable trial.
 5. Check multiple views, relevant motion and neighboring surfaces; retain the result and what was learned.
 

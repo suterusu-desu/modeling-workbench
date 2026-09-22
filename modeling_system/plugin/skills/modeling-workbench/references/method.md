@@ -40,6 +40,15 @@ Inspect the actual reconstructed geometry before registration. Check whether the
 
 Register against stationary justified anchors. Do not use faulty or intentionally moving features as locks that eliminate the proposed correction. Record source/native pose, source-to-world transform, correspondence, supported triangles, exclusions and alignment sensitivity. Admit only the measured supported interior; unobserved depth and artistic freedom remain explicit.
 
+When section paths follow different surface roles across poses, qualify the
+corresponding anatomical region and landmarks before transporting coordinates.
+Shared components and triangle ancestry cannot distinguish exterior, return and
+neighboring detail. Retain rejected branch alternatives and their reasons;
+nearest points, curve extrema and equal arclength fractions cannot supply missing
+correspondence. A failed trace does not reject the guide. See
+[ordered correspondence evidence](surface-correspondence.md) for the existing
+records, crop/endpoint limits and supported plane contract.
+
 Repairing a guide is its own intervention: preserve the rejected parent, create a separate asset identity, and retain the exact edit script, inputs/delta, affected topology and frame, hypothesis, preserved context and before/after evidence. Independent review and region/depth qualification apply to the derivative. Never relabel edited geometry as an untouched provider export or clear the parent's rejection. The core currently retains this as explicit evidence; a first-class derivative qualification lifecycle is still a design gap.
 
 ## Test a bounded intervention
