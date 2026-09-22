@@ -1,10 +1,13 @@
 """Initialize private character inputs without putting them in the tools checkout."""
 from pathlib import Path
-import argparse,json
+import argparse,json,re
 
 
 def initialize(path, character):
     target=Path(path).resolve(); source=Path(__file__).resolve().parent
+    from .skill_bundle import verify_dependencies, install_skills
+    if verify_dependencies()['status'] != 'verified':
+        raise ValueError('Repair the installed skill dependency before initialization')
     if target==source.parent or source.parent in target.parents:
         raise ValueError('Keep the private workspace outside the installed tools checkout')
     if not character.strip(): raise ValueError('A character label is required')
@@ -19,21 +22,29 @@ def initialize(path, character):
         'authority':authority,'procedures':'procedures.json','evidence':[],
         'material_locations':{name:name for name in folders},'objects':{},'controls':{},'semantic_regions':{},
         'units':'unqualified','frames':[], 'limits':['Native object/control/semantic bindings and scale must be established for this workspace.']}
+    method=(source/'plugin/skills/modeling-workbench/references/method.md').read_text(encoding='utf-8')
+    method=re.sub(r'\]\((?![a-z]+:|#)([^)]+)\)', r'](.agents/skills/modeling-workbench/references/\1)', method)
     files={'modeling-workspace.json':json.dumps(binding,indent=2),
         'PROJECT.md':'# Current project\n\nRecord the selected character reference, current saved checkpoint, scope, outstanding quality question, protected objects, native owner and unresolved evidence. No character is selected by the tools package.\n',
         'DECISIONS.md':'# Decisions\n\nRecord user choices, scope, approvals, rejected directions and which earlier decisions they supersede.\n',
         'LESSONS.md':'# Local experience\n\nRetain exact inputs, interventions, comparisons and outcomes with applicability and counterexamples. Promote reusable methods only after demonstrated reuse and privacy review.\n',
-        'METHOD.md':(source/'plugin/skills/modeling-workbench/references/method.md').read_text(),
-        'OPERATING.md':(source/'plugin/skills/modeling-workbench/references/operating-session.md').read_text(),
-        'procedures.json':(source/'procedures.json').read_text(),
+        'METHOD.md':method,
+        'OPERATING.md':'# Operating this workspace\n\nRead [Astra/Jev operation](.agents/skills/modeling-workbench/references/operating-session.md) and [portable setup](.agents/skills/modeling-workbench/references/portable-setup.md). Bind this workspace explicitly in every process.\n',
+        'AGENTS.md':'# Character workspace\n\nRead PROJECT.md for current identity, checkpoint, scope, owner and unresolved work. Use [the workbench skill](.agents/skills/modeling-workbench/SKILL.md) and [the TypeSafe skill](.agents/skills/typesafe-ai/SKILL.md) for Jev work. The skill bundle is included locally; do not depend on another agent session or machine.\n\nAstra supplies objectives, reusable capabilities and visual review. Jev selects qualified Blender operations; code executes them under one owner with fresh state, preservation and recovery. Initialization grants no native, provider or unattended-work authority. Keep credentials external, maintain existing provider accounting, and keep character material private.\n',
+        'procedures.json':(source/'procedures.json').read_text(encoding='utf-8'),
         'generation-policy.json':json.dumps({'version':1,'authorization':'No generation authorized by initialization','providers':{},
             'tripo':{'mode':'Smart Mesh','model':'P2.0','transport':{'selected':'unconfigured'},
                 'authorized_comparisons':{},'authorized_local_reconstructions':{}}},indent=2),
-        '.gitignore':'.modeling/\n*.blend\n*.blend1\n*.npz\n*.png\n*.mp4\n'}
+        '.gitignore':'.modeling/\nruntime/\n.env\n.env.*\n*.key\n*.blend\n*.blend1\n*.npz\n*.png\n*.mp4\n'}
     for name,value in files.items(): (target/name).write_text(value+'\n',encoding='utf-8')
-    return {'workspace':str(target),'character':character,'native_adapter':'unconfigured','files':list(files),'folders':list(folders)}
+    skills = install_skills(target/'.agents/skills')
+    return {'workspace':str(target),'character':character,'native_adapter':'unconfigured','files':list(files),'folders':list(folders),'skills':skills}
+
+
+def main():
+    p=argparse.ArgumentParser(); p.add_argument('workspace'); p.add_argument('--character',required=True); a=p.parse_args()
+    print(json.dumps(initialize(a.workspace,a.character),indent=2))
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(); p.add_argument('workspace'); p.add_argument('--character',required=True); a=p.parse_args()
-    print(json.dumps(initialize(a.workspace,a.character),indent=2))
+    main()

@@ -53,7 +53,7 @@ visual interpretation, conflicting evidence and new capabilities.
 
 The [persistent controller](modeling_system/plugin/skills/modeling-workbench/references/controller.md) supports sustained work with bounded budgets, asynchronous planning, compatible action batches and per-stage timings. The private adapter supplies native operations and the Blender status display. Saved findings and Astra's review feedback inform subsequent choices; visual acceptance remains separate from numerical checks.
 
-The [TypeSafe integration](modeling_system/plugin/skills/modeling-workbench/references/judgments.md) provides typed Jev judgments through the direct API. Your private workspace supplies credentials, usage accounting and the qualified action catalog. See the [operating-session contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) to connect the controller, queue, adapter and evidence records.
+The [TypeSafe integration](modeling_system/plugin/skills/modeling-workbench/references/judgments.md) provides typed Jev judgments through the direct API. `jev_session.create_session` binds the packaged transport, shared accounting and recovery to the operating session. Your private workspace supplies external credentials, existing account-credit authorization and its qualified action catalog. See the [operating-session contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) to connect the controller, queue, adapter and evidence records.
 
 The [candidate pipeline](modeling_system/plugin/skills/modeling-workbench/references/candidate-pipeline.md)
 reuses measured guide sections and material paths, preserves explicit interpolation
@@ -154,13 +154,20 @@ The modeling loop is:
 
 An assistant can use the same core through Python, CLI or MCP. The method still requires artistic judgment, meaningful references and verified native integration.
 
+## Install on another machine
+
+Use [portable setup](modeling_system/plugin/skills/modeling-workbench/references/portable-setup.md). The wheel and tools-only archive include both the workbench and official TypeSafe skills, their references, the shared Jev session, dispatch, accounting and recovery code, and an [isolated Blender job runner](modeling_system/plugin/skills/modeling-workbench/references/isolated-blender.md). New character workspaces carry complete project-local skills; Codex plugin materialization includes both as well. No private bridge script or second skill installer is needed for Jev.
+
+Run `python -m modeling_system.setup_check --workspace PATH` to distinguish installed tools, credential availability and native configuration without reading secrets or contacting Blender or TypeSafe. Recreate the virtual environment and local plugin configuration on each machine. Scene/rig qualification and external account authorization remain explicit inputs.
+
 ## Dependencies
 
 | Dependency | When needed | Included here? |
 | --- | --- | --- |
 | Python 3.12+ | Install and run the core | Install separately; use a virtual environment. |
-| NumPy, SciPy, Pillow, MCP SDK, imageio-ffmpeg | Package runtime | Installed by `pip install .`; exact allowed ranges are in [pyproject.toml](pyproject.toml). |
+| AnyIO, NumPy, SciPy, Pillow, MCP SDK, imageio-ffmpeg | Package runtime | Installed by `pip install .`; exact allowed ranges are in [pyproject.toml](pyproject.toml). |
 | Blender and a qualified workspace adapter | Inspect or edit a live character | Blender, the bridge setup and your rig/scene bindings are separate. See [native adapters](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md). |
+| Official TypeSafe skill | Agent guidance for Jev integration and operation | Bundled with its MIT license and a verified upstream revision; installed with the workbench skill. |
 | TypeSafe API access | Jev-driven action selection and planning | Supply your own credentials and account-credit authorization in the private workspace; offline core use does not require it. |
 | An AI assistant / MCP client | Agent-operated workflow | Bring your own client, model access and applicable subscription. CLI/Python use does not require an AI account. |
 | Image generation or editing service | Create new character/pose/detail reference images | Optional external service. Bring a supported transport and account; existing artwork can also supply references. No image model or credits are bundled. |
@@ -188,4 +195,4 @@ This repository contains reusable source and synthetic examples, not the origina
 
 Issues and pull requests are welcome. See [DEVELOPING.md](DEVELOPING.md) for development checks and the boundary between reusable tools and private character material.
 
-No license is currently included. Licensing is pending; do not describe the repository as an open-source release until a license is selected and added.
+Licensing for the workbench itself is pending; do not describe it as an open-source release until a license is selected. The bundled official TypeSafe skill has its own [MIT license](modeling_system/plugin/skills/typesafe-ai/LICENSE) and [pinned provenance](modeling_system/skill-dependencies.json); that license applies to the upstream skill, not to the entire workbench.

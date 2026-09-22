@@ -285,3 +285,7 @@ separate from implementation.
 ## Shared Jev work queue (0.2.20)
 
 WorkQueue and LaneSelector compose qualified operations across diagnosis, repair, verification, review preparation, recovery, experience and preparation. Durable prerequisites and receipts replace per-candidate controller restarts; conditional lane choices are batched and reused under exact evidence bindings. Explicit needs_review is separate from uncertain dispatch. Direct TypeSafe transport retains token-based cost estimates with workspace-owned credential and budget. Native execution stays serial; visual acceptance and new mechanisms remain reasoning-owner work. See the packaged work-queue procedure. Source tests, installation identity and actual workspace adoption are reported separately.
+
+## Portable setup completion (0.2.38)
+
+Bundled upstream TypeSafe skill/license with integrity metadata; extracted reusable Jev session/dispatch/recovery and composed-scope glue; removed machine-specific credential/interpreter defaults; preserved project-local skill links; added offline setup checks and clean wheel/tools-archive installation checks on the CI operating-system matrix. Native scene qualification, external service accounts and live operator adoption remain separate from distribution verification.

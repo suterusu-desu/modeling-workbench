@@ -55,8 +55,7 @@ session = OperatingSession(
 session.run(max_steps=authorized_step_bound, on_status=owner_status_callback)
 ```
 
-The direct TypeSafe transport, credentials and provider ledger stay with the
-bound workspace. Use its current budget; persistence never renews it. The
+The direct TypeSafe transport, session factory and accounting/recovery implementation ship in the package. Use `modeling_system.jev_session.create_session` with `ledger_directory` to supply the budgeted judgment callback above; see [portable setup](portable-setup.md). Credentials and ledger data stay with the bound workspace. Use its current budget; persistence never renews it. The
 judgment callback rechecks the exact owner/menu/dependency binding before release.
 Status uses the same controller path and native display adapter as before.
 

@@ -1,6 +1,6 @@
 """Check tracked source boundaries; optional private deny terms never enter the repo."""
 from pathlib import Path
-import os,re,subprocess,sys
+import json,os,re,subprocess,sys,tomllib
 
 root=Path(__file__).resolve().parents[1]
 tracked=subprocess.run(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root,capture_output=True)
@@ -12,6 +12,14 @@ else:
 allowed_roots={'modeling_system','scripts','.github'}
 allowed_files={'README.md','AGENTS.md','DEVELOPING.md','DESIGN.md','IMPLEMENTATION-QUEUE.md','pyproject.toml','.gitignore','.gitattributes'}
 errors=[]
+metadata=tomllib.loads((root/'pyproject.toml').read_text(encoding='utf-8'))
+distribution=tomllib.loads((root/'modeling_system/distribution-pyproject.toml').read_text(encoding='utf-8'))
+plugin=json.loads((root/'modeling_system/plugin/.codex-plugin/plugin.json').read_text(encoding='utf-8'))
+if metadata!=distribution or plugin['version']!=metadata['project']['version']:
+    errors.append(('package metadata','source, archive and plugin versions/dependencies must agree'))
+inventory=json.loads((root/'modeling_system/distribution-files.json').read_text(encoding='utf-8'))['files']
+for p in (root/'modeling_system').glob('*.py'):
+    if p.name not in inventory: errors.append((p.name,'Python module missing from tools export'))
 private_terms=[t.strip().casefold() for t in os.environ.get('MODELING_PRIVATE_TERMS','').split(',') if t.strip()]
 for p in files:
     rel=p.relative_to(root)

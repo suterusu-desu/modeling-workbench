@@ -4,16 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modeling-workbench"
-version = "0.2.37"
+version = "0.2.38"
 description = "Numerical scene reasoning and exact-view character modeling workflows"
 requires-python = ">=3.12"
-dependencies = ["mcp>=2.2,<3", "numpy>=2,<3", "scipy>=1.16,<2", "Pillow>=12,<13", "imageio-ffmpeg>=0.6,<1"]
+dependencies = ["anyio>=4,<5", "mcp>=2.2,<3", "numpy>=2,<3", "scipy>=1.16,<2", "Pillow>=12,<13", "imageio-ffmpeg>=0.6,<1"]
 
 [project.scripts]
 modeling-workbench-mcp = "modeling_system.mcp_server:main"
+modeling-workbench-init = "modeling_system.init_workspace:main"
+modeling-workbench-doctor = "modeling_system.setup_check:main"
 
 [tool.setuptools.packages.find]
 include = ["modeling_system"]
 
 [tool.setuptools.package-data]
-modeling_system = ["recipe_templates/*.json", "capabilities.json", "procedures.json", "distribution-files.json", "distribution-pyproject.toml", "requirements-lock.txt", "plugin/launch.py", "plugin/.codex-plugin/plugin.json", "plugin/skills/modeling-workbench/*.md", "plugin/skills/modeling-workbench/references/*.md"]
+modeling_system = ["recipe_templates/*.json", "capabilities.json", "procedures.json", "distribution-files.json", "distribution-pyproject.toml", "requirements-lock.txt", "skill-dependencies.json", "plugin/launch.py", "plugin/.codex-plugin/plugin.json", "plugin/skills/typesafe-ai/*", "plugin/skills/modeling-workbench/*.md", "plugin/skills/modeling-workbench/references/*.md"]

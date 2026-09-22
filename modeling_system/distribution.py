@@ -15,7 +15,15 @@ def export_tools(output_path):
         if not p.is_relative_to(root.resolve()): raise ValueError('Distribution entry escapes source package')
         files['modeling_system/'+name]=p.read_bytes()
     files['pyproject.toml']=(root/'distribution-pyproject.toml').read_bytes()
-    files['README.md']=(root/'plugin/skills/modeling-workbench/references/getting-started.md').read_bytes()
+    files['README.md']=b'''# Modeling Workbench
+
+Install with Python 3.12+ using `python -m pip install .` in a virtual environment.
+Read [getting started](modeling_system/plugin/skills/modeling-workbench/references/getting-started.md)
+and [portable setup](modeling_system/plugin/skills/modeling-workbench/references/portable-setup.md).
+The complete workbench and TypeSafe skills, references and upstream license are included.
+Character evidence and credentials are not included. Native Blender work requires a
+qualified workspace adapter; this tools archive does not qualify an arbitrary rig.
+'''
     inventory={name:{'sha256':digest(data),'bytes':len(data)} for name,data in sorted(files.items())}
     manifest={'schema_version':1,'kind':'tools_only','workspace_data_included':False,'files':inventory}
     files['package-manifest.json']=json.dumps(manifest,indent=2).encode()

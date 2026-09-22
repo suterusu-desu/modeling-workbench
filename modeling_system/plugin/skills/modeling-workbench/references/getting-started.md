@@ -15,6 +15,7 @@ Activate it with `.venv\Scripts\Activate.ps1` in PowerShell, or `source .venv/bi
 ```sh
 python -m pip install .
 python -m modeling_system.init_workspace /path/to/private-project --character "Example character"
+python -m modeling_system.setup_check --workspace /path/to/private-project
 python -m modeling_system --workspace /path/to/private-project inspect
 python -m modeling_system --workspace /path/to/private-project decision_workspace
 ```
@@ -28,6 +29,8 @@ python -c "import numpy as np; from modeling_system.geometry import nearest_surf
 ```
 
 The result should be `[0.25, 0.25, 0.0]`: the closest point on a synthetic triangle. This verifies a basic numerical operation, not native Blender integration.
+
+The workspace includes `AGENTS.md` and complete `.agents/skills/modeling-workbench` and `.agents/skills/typesafe-ai` directories. Both skills and all their local references travel with it. For credentials, shared accounting, packaged Jev session creation and relocation, read [portable setup](portable-setup.md).
 
 Keep the private project outside the tools checkout. The initializer creates current-state, decision, method and lesson records, a workspace binding and an unauthorized provider policy. Populate actual identity references, assets, object/control/semantic mappings, units and scopes there. No named character or native adapter is inherited.
 
@@ -57,7 +60,8 @@ Python, the JSON-file CLI and MCP use the same service. Instantiate `ModelingSer
 For a Codex plugin, install the package in the chosen interpreter first, then materialize local configuration outside this checkout:
 
 ```sh
-python -m modeling_system.prepare_plugin /path/to/local-plugin --workspace /path/to/private-project
+python -m modeling_system.prepare_plugin /path/to/modeling-workbench --workspace /path/to/private-project
+python -m modeling_system.setup_check --workspace /path/to/private-project --plugin /path/to/modeling-workbench
 ```
 
 Use the normal Codex plugin installation flow for that materialized directory. The tracked plugin source has no machine paths; the generated local configuration binds the interpreter and private workspace. Installation does not migrate an existing Blender runtime. Verify the installed launcher, then actual operator use, before changing an active project.

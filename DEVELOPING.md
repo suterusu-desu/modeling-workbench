@@ -2,7 +2,7 @@
 
 [System design and workflow composition](DESIGN.md) and the [finite integration queue](IMPLEMENTATION-QUEUE.md) distinguish implemented interfaces, installed verification, actual operator use and unsupported content.
 
-Install in an isolated Python environment with `python -m pip install .`. Run `python -m unittest discover -s modeling_system -t .` and `python scripts/check_distribution.py` before publishing source changes. Native, provider and artistic acceptance are separate from this synthetic suite.
+Install in an isolated Python environment with `python -m pip install .`. Run `python -m unittest discover -s modeling_system -t .` and `python scripts/check_distribution.py` and `python scripts/check_clean_install.py` before publishing source changes. The clean check installs the wheel and tools archive into new environments outside the checkout, strips inherited credentials/workspace configuration, exercises the shipped Jev integration without HTTP, and probes the generated plugin. CI runs on Windows, macOS and Linux. Native, provider and artistic acceptance are separate from this synthetic suite.
 
 The workbench environment and Blender's embedded Python are separate dependency domains. Do not add the workbench environment's entire `site-packages` directory to a native worker's search path. Compiled extensions must support the worker's Python version, ABI and platform; importing them successfully in offline preparation does not verify native compatibility. See [Blender's bundled-Python guidance](https://github.com/blender/blender/blob/main/doc/python_api/rst/info_tips_and_tricks.rst#bundled-python--extensions) and [Python wheel compatibility tags](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/).
 

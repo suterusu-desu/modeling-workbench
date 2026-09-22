@@ -270,3 +270,7 @@ for the exact API and migration. Earlier rationale and detailed contracts remain
 in [design evolution](modeling_system/plugin/skills/modeling-workbench/references/design-evolution.md)
 and the linked feature references. The [implementation record](IMPLEMENTATION-QUEUE.md)
 keeps implementation and observed adoption distinct.
+
+## Portable distribution boundary
+
+Both agent skills, including the pinned MIT-licensed official TypeSafe dependency, travel with wheel/tools exports and new private workspaces. Generic session creation, dispatch, provider accounting/recovery and composed saved-array runners live in the package. Character catalogs, fitters, evidence, native adapters and account authorization remain private inputs. Machine-local launch configuration is generated and verified by a fresh interpreter; offline setup diagnostics never claim live native or account readiness.

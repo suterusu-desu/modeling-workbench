@@ -5,7 +5,7 @@ reasoning owner establishes objectives, novel mechanisms and visual interpretati
 Use reusable state projections and decision specifications instead of writing a
 new menu/controller for every candidate. The generic `modeling_system.judgments`
 module compiles and validates decisions; the workspace supplies its authorized
-transport, accounting and execution binding. No provider credentials are packaged.
+account authorization and execution binding. The reusable transport and accounting implementation ship as `typesafe_transport`, `provider_dispatch`, `planning_batch` and `jev_session`; see [portable setup](portable-setup.md). No provider credentials are packaged.
 
 ## Useful division of work
 
