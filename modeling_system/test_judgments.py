@@ -92,10 +92,30 @@ class JudgmentTests(unittest.TestCase):
             with self.subTest(answers=answers), self.assertRaises(ValueError):
                 validate_answers(questions, answers)
 
-    def test_cent_compatibility_does_not_change_score_contract(self):
+    def test_cent_compatibility_rejects_an_infeasible_score_expectation(self):
         answers = deepcopy(self.answers)
         answers['q2']['probabilities']['0'] = .01
+        answers['q2']['score'] = 1.28
         with self.assertRaises(ValueError): validate_answers(self.packet['questions'], answers)
+
+    def test_rounded_score_preserves_original_values_with_joint_feasibility(self):
+        for probabilities, score in (({'0': .07, '1': .11, '2': .81}, 1.74),
+                                     ({'0': .01, '1': .75, '2': .25}, 1.24)):
+            answers = deepcopy(self.answers)
+            answers['q2'].update(probabilities=probabilities, score=score)
+            original = deepcopy(answers)
+            self.assertEqual(validate_answers(self.packet['questions'], answers)['q2'], score)
+            self.assertEqual(answers, original)
+
+    def test_rounded_score_rejects_unsupported_mass_precision_or_expectation(self):
+        for probabilities, score in (({'0': .07, '1': .11, '2': .80}, 1.74),
+                                     ({'0': .071, '1': .11, '2': .81}, 1.74),
+                                     ({'0': .07, '1': .11, '2': .81}, 1.7401),
+                                     ({'0': .07, '1': .11, '2': .81}, 1.71)):
+            answers = deepcopy(self.answers)
+            answers['q2'].update(probabilities=probabilities, score=score)
+            with self.subTest(probabilities=probabilities, score=score), self.assertRaises(ValueError):
+                validate_answers(self.packet['questions'], answers)
 
 
 if __name__ == '__main__':

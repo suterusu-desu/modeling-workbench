@@ -20,6 +20,12 @@ An apparent hole can be another surface in front. This is diagnosis, not a fitti
 target. Two successive ray hits do not establish anatomical inner/outer thickness;
 qualify orientation, connectivity and corresponding roles before imposing clearance.
 
+Inspect evaluated motion outside a correction's support as well as inside it.
+Zero support can pass through an older deformation; it does not necessarily mean
+stationary skin. One final position node does not prove the new field controls
+the entire defective region. Attribute inherited motion and seam behavior before
+extending a guide-constrained repair.
+
 ## Acquire missing form deliberately
 
 Distinguish a missing artistic target from missing correspondence, uncertain alignment, insufficient control authority and conflicting preservation requirements. Reuse useful existing captures and qualified guides before acquiring new ones. Nominate the smallest view or section that answers the particular observed uncertainty, preserving stationary context and identity evidence.

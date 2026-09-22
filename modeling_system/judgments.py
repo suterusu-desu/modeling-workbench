@@ -109,16 +109,41 @@ def _complete_probability_mass(probs, kind):
     total = math.fsum(probs.values())
     if abs(total - 1) <= 1e-5:
         return True
-    # Compatibility with observed Choice responses serialized in hundredths.
+    # Compatibility with observed Choice/Score responses serialized in hundredths.
     # The upstream contract says sum=1; it does not promise this rounding mode.
     # Accept at most one cent of drift, only when a unit-mass distribution can
     # round to these exact entries. Never normalize or replace the raw values.
-    if (kind != 'choice' or abs(total - 1) > .010000000001
+    if (kind not in ('choice', 'score') or abs(total - 1) > .010000000001
             or any(abs(p * 100 - round(p * 100)) > 1e-10 for p in probs.values())):
         return False
     lower = math.fsum(max(0., p - .005) for p in probs.values())
     upper = math.fsum(min(1., p + .005) for p in probs.values())
     return lower <= 1 + 1e-12 and upper >= 1 - 1e-12
+
+
+def _rounded_score_consistent(probs, score):
+    """Check joint rounding feasibility, never invent replacement probabilities.
+
+    A unit-mass distribution must fit every serialized probability interval and
+    produce an expectation that can round to this exact serialized score.
+    """
+    if abs(score * 100 - round(score * 100)) > 1e-10:
+        return False
+    lower = [max(0., probs[str(i)] - .005) for i in range(len(probs))]
+    upper = [min(1., probs[str(i)] + .005) for i in range(len(probs))]
+    remaining = 1 - math.fsum(lower)
+    if remaining < -1e-12 or math.fsum(upper) < 1 - 1e-12:
+        return False
+    def extreme(order):
+        value = math.fsum(i * p for i, p in enumerate(lower))
+        left = max(0., remaining)
+        for i in order:
+            amount = min(left, upper[i] - lower[i])
+            value += i * amount; left -= amount
+        return value
+    lo = extreme(range(len(probs)))
+    hi = extreme(reversed(range(len(probs))))
+    return lo <= score + .005 + 1e-12 and hi >= score - .005 - 1e-12
 
 
 def validate_answers(questions, answers, *, budget=None):
@@ -151,8 +176,9 @@ def validate_answers(questions, answers, *, budget=None):
             else:
                 value = answer.get('score')
                 weighted = sum(int(k) * p for k, p in probs.items())
+                rounded_mass = abs(math.fsum(probs.values()) - 1) > 1e-5
                 if (answer.get('legend') != expected or not _number(value, 0, len(expected) - 1)
-                        or abs(value - weighted) > .011):
+                        or (not _rounded_score_consistent(probs, value) if rounded_mass else abs(value - weighted) > .011)):
                     raise ValueError('Score/legend must match ordered levels and their expectation')
         values[key] = value
     return values

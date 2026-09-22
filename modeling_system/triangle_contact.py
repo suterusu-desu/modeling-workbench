@@ -3,6 +3,7 @@
 This measures piecewise-linear contact for supplied poses and directions. It
 does not infer anatomy, visibility, guide authority, thickness or swept motion.
 """
+from fractions import Fraction
 import numpy as np
 from .preparation_contracts import check_arrays
 
@@ -18,26 +19,85 @@ def _barycentric(points, triangle):
     return np.stack([1 - x - y, x, y], axis=-1)
 
 
-def _clip(subject, triangle, tolerance):
-    polygon = list(subject)
-    sign = 1 if _cross(triangle[1] - triangle[0], triangle[2] - triangle[0]) > 0 else -1
-    for a, b in zip(triangle, np.roll(triangle, -1, axis=0)):
+def _clip_weights(weights):
+    polygon = list(weights)
+    for component in range(3, 6):
         if not polygon:
-            return np.empty((0, 2))
+            return np.empty((0, 6))
         result = []
         previous = polygon[-1]
-        d_previous = sign * _cross(b - a, previous - a)
-        d_previous = 0. if abs(d_previous) <= tolerance else d_previous
+        d_previous = previous[component]
         for current in polygon:
-            d_current = sign * _cross(b - a, current - a)
-            d_current = 0. if abs(d_current) <= tolerance else d_current
+            d_current = current[component]
             if (d_current >= 0) != (d_previous >= 0):
-                result.append(previous + (current - previous) * (d_previous / (d_previous - d_current)))
+                fraction = d_previous / (d_previous - d_current)
+                crossing = (1 - fraction) * previous + fraction * current
+                crossing[component] = 0
+                result.append(crossing)
             if d_current >= 0:
                 result.append(current)
             previous, d_previous = current, d_current
         polygon = result
-    return np.asarray(polygon)
+    return np.asarray(polygon).reshape(-1, 6)
+
+
+def _exact_overlap_weights(subject, triangle):
+    # Fraction.from_float preserves the actual binary input coordinates. This
+    # fallback is confined to ill-conditioned pairs, not an alternate geometry.
+    source = np.array([[Fraction(float(v)) for v in row] for row in subject], dtype=object)
+    obstacle = np.array([[Fraction(float(v)) for v in row] for row in triangle], dtype=object)
+    identity = np.array([[Fraction(int(i == j)) for j in range(3)] for i in range(3)], dtype=object)
+    weights = _clip_weights(np.column_stack([identity, _barycentric(source, obstacle)]))
+    if len(weights):
+        weights[:, :3] /= weights[:, :3].sum(axis=1)[:, None]
+        weights[:, 3:] /= weights[:, 3:].sum(axis=1)[:, None]
+    return np.asarray(weights, float)
+
+
+def _overlap(subject, triangle, tolerance):
+    """Strict paired barycentric clipping, with exact arithmetic for thin pairs.
+
+    A cross product has area units; a projection tolerance cannot classify it
+    as zero. Carry weights through intersections rather than invert rounded
+    points again. Every retained witness stays inside both supplied triangles.
+    """
+    subject, triangle = np.asarray(subject, float), np.asarray(triangle, float)
+    u, v = triangle[1] - triangle[0], triangle[2] - triangle[0]
+    area = abs(_cross(u, v))
+    if not area:
+        raise ValueError('Contact overlap needs a nondegenerate projected triangle')
+    roundoff = 32 * np.finfo(float).eps * max(1., float(np.abs(subject).max()), float(np.abs(triangle).max()))
+    span = max(float(np.abs(subject - triangle[0]).max()), float(np.abs(triangle - triangle[0]).max()))
+    condition = max(float(u @ u), float(v @ v)) / area
+    # User projection slack never relaxes interpolation correspondence. Use only
+    # arithmetic roundoff here; projection_tolerance remains a broad-phase and
+    # fixed-projection comparison tolerance at the public operation boundary.
+    precise = np.finfo(float).eps * condition * span > roundoff
+    weights = (_exact_overlap_weights(subject, triangle) if precise else
+               _clip_weights(np.column_stack([np.eye(3), _barycentric(subject, triangle)])))
+    if not len(weights):
+        return np.empty((0, 2)), np.empty((0, 3)), np.empty((0, 3))
+    if not np.isfinite(weights).all() or np.any(weights < 0):
+        raise ValueError('Contact overlap has unresolved barycentric containment')
+    sb, ob = weights[:, :3], weights[:, 3:]
+    if np.any(sb.sum(axis=1) <= 0) or np.any(ob.sum(axis=1) <= 0):
+        raise ValueError('Contact overlap has unresolved barycentric normalization')
+    sb = sb / sb.sum(axis=1)[:, None]
+    ob = ob / ob.sum(axis=1)[:, None]
+    points, other_points = sb @ subject, ob @ triangle
+    if np.max(np.abs(points - other_points)) > roundoff:
+        if precise:
+            raise ValueError('Contact overlap has unresolved projected correspondence')
+        weights = _exact_overlap_weights(subject, triangle)
+        sb, ob = weights[:, :3], weights[:, 3:]
+        points = sb @ subject
+        if len(weights) and np.max(np.abs(points - ob @ triangle)) > roundoff:
+            raise ValueError('Contact overlap has unresolved projected correspondence')
+    return points, sb, ob
+
+
+def _clip(subject, triangle, tolerance):
+    return _overlap(subject, triangle, tolerance)[0]
 
 
 def projected_triangle_contact(surface, baseline, triangles, obstacle, obstacle_triangles,
@@ -104,23 +164,25 @@ def projected_triangle_contact(surface, baseline, triangles, obstacle, obstacle_
         candidates = np.flatnonzero(((low <= uv.max(axis=0) + projection_tolerance)
                                    & (high >= uv.min(axis=0) - projection_tolerance)).all(axis=1))
         for j in candidates:
-            polygon = _clip(uv, obstacle_points[j, :, :2], projection_tolerance)
-            if len(polygon) < 3 or abs(np.sum(_cross(polygon, np.roll(polygon, -1, axis=0)))) <= overlap_area_tolerance:
+            polygon, sb, ob = _overlap(uv, obstacle_points[j, :, :2], projection_tolerance)
+            local = polygon - polygon[0] if len(polygon) else polygon
+            if len(polygon) < 3 or abs(np.sum(_cross(local, np.roll(local, -1, axis=0)))) <= overlap_area_tolerance:
                 continue
-            sb = _barycentric(polygon, uv); ob = _barycentric(polygon, obstacle_points[j, :, :2])
             old_height, other_height = sb @ original[ids, 2], ob @ obstacle_points[j, :, 2]
             if bound_mode == 'preserve_baseline':
                 difference = old_height - other_height - margin
-                extra = []
+                extra, extra_sb, extra_ob = [], [], []
                 for k in range(len(polygon)):
                     following = (k + 1) % len(polygon)
-                    if difference[k] * difference[following] < 0:
-                        extra.append(polygon[k] + (polygon[following] - polygon[k])
-                                     * difference[k] / (difference[k] - difference[following]))
+                    if (difference[k] < 0 < difference[following]) or (difference[following] < 0 < difference[k]):
+                        fraction = difference[k] / (difference[k] - difference[following])
+                        extra.append((1 - fraction) * polygon[k] + fraction * polygon[following])
+                        extra_sb.append((1 - fraction) * sb[k] + fraction * sb[following])
+                        extra_ob.append((1 - fraction) * ob[k] + fraction * ob[following])
                 if extra:
                     crossings += len(extra)
                     polygon = np.concatenate([polygon, extra])
-                    sb = _barycentric(polygon, uv); ob = _barycentric(polygon, obstacle_points[j, :, :2])
+                    sb = np.concatenate([sb, extra_sb]); ob = np.concatenate([ob, extra_ob])
                     old_height, other_height = sb @ original[ids, 2], ob @ obstacle_points[j, :, 2]
             required = other_height + margin
             if bound_mode == 'preserve_baseline':

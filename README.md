@@ -54,7 +54,8 @@ while preserving native guards, independent reopen evidence and actual visual re
 [Preparation and scoped setup](modeling_system/plugin/skills/modeling-workbench/references/preparation-and-bootstrap.md)
 check declared dependencies and array shapes, preserve numerical results, and
 keep long reports recoverable without repeating completed work. Complete projected
-triangle contact catches intersections missed by sparse samples. Qualified native
+triangle contact uses contained interpolation and exact fallback for thin
+fragments, catching intersections missed by sparse samples. Qualified native
 jobs can replace broad scene exports with explicit feature checks and record
 setup, execution and evidence timings; actual savings depend on the workload.
 Native job configuration is checked before Jev selection, so missing runner

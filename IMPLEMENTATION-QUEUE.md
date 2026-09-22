@@ -1,4 +1,14 @@
-# Current operating integration: 0.2.30
+# Current operating integration: 0.2.31
+
+Projected contact now carries paired barycentric weights through strict
+half-space clipping and bound crossings. Exact rational fallback handles
+ill-conditioned pairs; translated polygon area avoids cancellation. Synthetic
+slivers cover false overlap, missed overlap, winding and contained interpolation.
+Upstream fragment qualification remains independent of this numerical fix.
+The response reader also handles complete hundredth-rounded Score probabilities
+only when their unit-mass distribution and returned score are jointly feasible.
+Original answers and accounting stay unchanged; failed raw conformance remains
+disclosed as bounded reader compatibility rather than an upstream guarantee.
 
 Native adapter guidance separates fresh source verification from explicit
 numerical-cache export. Nested call timing identifies guard, rollback, open and

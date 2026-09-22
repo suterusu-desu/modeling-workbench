@@ -75,13 +75,19 @@ and finite numeric ranges. Native execution still checks its actual lane and
 expected geometry immediately before effects. A planning result cannot itself
 approve appearance, confer authority or prove a confidence value is correctness.
 
-The reader has a narrow compatibility rule for observed Choice responses whose
+The reader has a narrow compatibility rule for observed Choice/Score responses whose
 complete probabilities are serialized in hundredths and total 0.99 or 1.01.
 It accepts at most 0.01 mass drift only when per-entry rounding intervals of
 0.005 admit a unit-mass distribution. Original probabilities, confidence and the
 selected maximum remain unchanged; missing options, invalid numbers, larger
-drift and inconsistent higher-precision values still fail. Score validation is
-unchanged. The upstream API documents a sum of one, not a rounding guarantee;
+drift and inconsistent higher-precision values still fail. For a Score with
+rounded probability mass, the score must also be on the hundredth grid and its
+rounding interval must intersect an attainable expectation of a unit-mass
+distribution inside all probability intervals. Checking mass alone is insufficient.
+Original scores and probabilities are never normalized or replaced. Exact legends,
+answer sets and native action guards remain required; truly malformed optional
+advice is not silently turned into a valid action choice.
+The upstream API documents a sum of one, not a rounding guarantee;
 this is an explicitly bounded reader accommodation, not upstream conformance.
 Recover an already saved response through the original completed-response path
 and ledger identity, without repeating inference or rewriting the raw response.

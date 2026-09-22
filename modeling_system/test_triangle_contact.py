@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from .triangle_contact import projected_triangle_contact, _clip
+from .triangle_contact import projected_triangle_contact, _clip, _overlap
 
 
 class TriangleContactTests(unittest.TestCase):
@@ -62,6 +62,41 @@ class TriangleContactTests(unittest.TestCase):
                               build_constraints=True, displacement_direction=[0, 0, 1], displacement_scale=0.)
         self.assertEqual(result['fixed_infeasible_rows'], 3)
         self.assertEqual(len(result['constraint_values']), 0)
+
+    def test_thin_triangle_depth_is_interpolated_only_inside_both_surfaces(self):
+        surface = self.surface * .01
+        obstacle = np.array([[.004, .002, .001], [.006, .002, .002], [.004, .002+1e-10, .003]])
+        for shift in ([0., 0., 0.], [2., -3., 0.]):
+            for order in ([0, 1, 2], [2, 1, 0]):
+                actual = self.contact(surface=surface+shift, baseline=surface+shift,
+                    obstacle=obstacle+shift, obstacle_triangles=[order], bound_mode='clearance',
+                    build_constraints=True, displacement_direction=[0, 0, 1])
+                self.assertTrue(actual['coverage_complete'])
+                self.assertAlmostEqual(actual['minimum_slack'], -.003, places=8)
+                self.assertTrue(np.all(actual['constraint_values'] >= 0))
+                for witness in actual['worst']:
+                    for name in ('surface_weights', 'obstacle_weights'):
+                        self.assertTrue(np.all(np.asarray(witness[name]) >= 0))
+                        self.assertAlmostEqual(sum(witness[name]), 1.)
+
+    def test_projection_tolerance_does_not_expand_a_thin_triangle(self):
+        subject = np.array([[0., 0.], [.01, 0.], [0., .01]])
+        obstacle = np.array([[.004, .002], [.006, .002], [.004, .002+1e-10]])
+        for tolerance in (0., 1e-12, 1e-6):
+            points, sb, ob = _overlap(subject, obstacle, tolerance)
+            self.assertTrue(np.all(sb >= 0)); self.assertTrue(np.all(ob >= 0))
+            np.testing.assert_allclose(points, sb @ subject, atol=1e-15, rtol=0)
+            np.testing.assert_allclose(points, ob @ obstacle, atol=1e-15, rtol=0)
+            self.assertGreaterEqual(points[:, 1].min(), .002-1e-15)
+            self.assertLessEqual(points[:, 1].max(), .002+1e-10+1e-15)
+
+    def test_disjoint_sliver_cannot_create_a_complete_extrapolated_contact(self):
+        surface = np.array([[.00086, .00182, 0.], [.00914, .00550, 0.], [.00558, .00979, 0.]])
+        obstacle = np.array([[.004, .002, .001], [.006, .002, .002], [.004, .002+3.27e-10, .003]])
+        result = self.contact(surface=surface, baseline=surface, obstacle=obstacle, bound_mode='clearance')
+        self.assertEqual(result['overlap_pairs'], 0)
+        self.assertIsNone(result['minimum_slack'])
+        self.assertFalse(result['coverage_complete'])
 
     def test_bad_frame_and_changed_projection_cannot_authorize_constraints(self):
         with self.assertRaisesRegex(ValueError, 'expected shape'):

@@ -47,6 +47,14 @@ still require their ordinary reconciliation.
 
 ## Complete projected contact
 
+Overlap vertices carry nonnegative barycentric weights for both surfaces through
+clipping and bound crossings. Projection tolerance never expands triangle
+half-spaces; cross products have area units. Ill-conditioned pairs use exact
+rational clipping of the supplied floating-point coordinates. Projected witness
+positions must still agree to arithmetic precision. This prevents thin fragments
+from extrapolating depth outside their triangles. It does not qualify fragments
+created by an upstream visibility or correspondence operation.
+
 `triangle_contact.projected_triangle_contact` takes finite corresponding
 `surface`/`baseline` positions, actual `triangles`, `obstacle` positions and
 `obstacle_triangles`, an orthonormal three-column `frame`, and explicit `margin`
