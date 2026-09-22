@@ -80,7 +80,7 @@ class WorkspaceSetupTests(unittest.TestCase):
             root=Path(d); initialize(root/'project','Synthetic')
             dest=prepare(root/'plugin',root/'project')
             config=json.loads((dest/'.mcp.json').read_text())['mcpServers']['modeling-workbench']
-            self.assertEqual(config['args'][-1],str(root/'project'))
+            self.assertEqual(config['args'][-1],str((root/'project').resolve()))
             self.assertTrue(Path(config['command']).is_file())
             self.assertNotIn('Scripts',config['args'][0])
             with self.assertRaises(ValueError):prepare(root/'other')
