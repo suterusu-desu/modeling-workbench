@@ -169,6 +169,7 @@ class PreservationTests(unittest.TestCase):
 
     def test_session_overrides_self_reported_pass_and_keeps_completed_effect(self):
         task=self.policy.bind_task(self.item('edit','appearance_edit'),stage='apply',adapter='fit')
+        task['select_with_jev']=True
         def handler(item,context):
             self.ran.append(item)
             result=self.result(values={'open':0.,'half':0.3,'closed':0.})
@@ -176,6 +177,11 @@ class PreservationTests(unittest.TestCase):
             result['workbench']={'checks':{k:{'status':'pass','evidence':[link]} for k in PROFILES['appearance_edit']['outputs']},'findings':[]}
             return result
         session=self.session(lambda state,results:[task],handler)
+        normal_judge=session.selector.judge
+        def qualified_choice(state,questions,binding):
+            self.assertFalse(any(q['id'].startswith('method_') for q in questions))
+            return normal_judge(state,questions,binding)
+        session.selector.judge=qualified_choice
         session.run(max_steps=1)
         entry=read_json(session.path)['results']['edit']
         self.assertEqual(entry['status'],'completed')

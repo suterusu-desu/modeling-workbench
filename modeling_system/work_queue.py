@@ -13,7 +13,7 @@ LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
 # Advance when selection question meanings or their composition change.
-SELECTION_POLICY = 'qualified-method-remedies-v8'
+SELECTION_POLICY = 'qualified-method-prerequisites-v9'
 LANE_QUESTIONS = {
     'diagnosis': 'Which offered observation best distinguishes the remaining plausible causes and changes the next edit?',
     'repair': 'Which offered qualified method best addresses the observed failure mechanism while preserving retained gains?',

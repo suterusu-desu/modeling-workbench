@@ -116,8 +116,10 @@ candidate improves without unacceptable collateral loss.
 ## Jev and durable learning
 
 Required outcomes/current construction enter decision state outside
-`RetainedContext` ranking. Preparation/application tasks add conditional method
-applicability and preservation coverage questions. Known checks stay in code.
+`RetainedContext` ranking. Actual source, coverage, consumed constraints and
+evaluated output checks stay in code. Binding preservation does not add a second
+abstract approval question over an eligible Jev-selected operation. Author
+semantic method/coverage questions only for specific unresolved conditions.
 Optional `decision.method_checks.remedies` names currently qualified operations;
 Jev can choose the relevant prerequisite in the same batch. Only the selected
 branch is consumed, preserving exact cached-answer reuse and existing accounting.

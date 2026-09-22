@@ -153,5 +153,35 @@ class MethodReasoningTests(unittest.TestCase):
         self.assertEqual(result['status'],'needs_review')
         self.assertFalse(any(q['id'].endswith('_remedy') for q in self.calls[0]))
 
+    def test_same_batch_names_the_missing_prerequisite_and_routes_its_remedy(self):
+        self.actions[0]['decision']['method_checks']['prerequisites']={'graph':'Current evaluated dependency observation is missing.'}
+        original=self.judge
+        def judge(state,questions,binding):
+            result=original(state,questions,binding)
+            for q in questions:
+                if q['id'].endswith('_prerequisite'):result['judgments'][q['id']]={'choice':'graph'}
+            return result
+        selector=self.selector();selector.judge=judge
+        self.assertEqual(selector(self.snapshot,self.actions,self.plan),'inspect')
+        trace=read_json(self.root/'last-batch.json')
+        self.assertEqual(trace['method_checks']['fit']['unmet_prerequisite'],'graph')
+        self.assertEqual(len(self.calls),1)
+
+    def test_named_reason_disagreement_never_waives_missing_condition(self):
+        from .method_reasoning import resolve_method
+        report=resolve_method({'a':'method','b':'prerequisite'}, {'a':{'choice':'missing'},'b':{'choice':'__none__'}})
+        self.assertEqual(report['status'],'unmet');self.assertFalse(report['prerequisite_consistent'])
+        self.assertIsNone(report['unmet_prerequisite'])
+
+    def test_named_condition_can_block_an_otherwise_ready_method(self):
+        from .method_reasoning import resolve_method
+        report=resolve_method({'a':'method','b':'prerequisite'}, {'a':{'choice':'ready'},'b':{'choice':'qualified_targets'}})
+        self.assertEqual(report['status'],'unmet');self.assertEqual(report['unmet_prerequisite'],'qualified_targets')
+
+    def test_remedy_links_alone_do_not_add_an_abstract_approval_gate(self):
+        self.actions[0]['decision']['method_checks']={'remedies':['inspect']}
+        self.assertEqual(self.selector()(self.snapshot,self.actions,self.plan),'fit')
+        self.assertFalse(any(q['id'].startswith('method_') for q in self.calls[0]))
+
 
 if __name__=='__main__':unittest.main()

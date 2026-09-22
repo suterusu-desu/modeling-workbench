@@ -142,10 +142,9 @@ class PreservationPolicy:
             'upstream': deepcopy((previous or {}).get('result', {}).get('preservation')),
             'upstream_task': (previous or {}).get('task', {}).get('id')}
         row['reads'].update({_key(ref): ref['sha256'] for ref in self.references})
-        if stage in ('prepare', 'apply'):
-            row.setdefault('decision', {}).setdefault('method_checks', {
-                'method': 'Does this method apply to the current construction under the source-backed lesson conditions, without repeating a recorded failure unchanged?',
-                'coverage': 'Does this proposed operation preserve the established evaluated shapes and relationships through the affected motion, including connected transitions?'})
+        # Required source/coverage/consumption/output checks are enforced here
+        # by code. Preserve authored semantic questions, but do not invent an
+        # abstract approval gate over an already-qualified Jev operation choice.
         return row
 
     def relevant(self, item):

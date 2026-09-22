@@ -41,7 +41,6 @@ class MethodCatalog:
                     row.setdefault('decision', {})['method_checks'] = deepcopy(method['method_checks'])
                 if method.get('remedy_methods'):
                     checks = row.setdefault('decision', {}).setdefault('method_checks', {})
-                    checks.setdefault('method', 'Do the current observations and retained lessons support this method, with its required conditions satisfied?')
                     checks['remedy_methods'] = deepcopy(method['remedy_methods'])
         return rows
 

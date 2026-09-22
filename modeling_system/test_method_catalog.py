@@ -49,7 +49,8 @@ class MethodTests(unittest.TestCase):
         self.assertEqual(self.base.ran, [])
 
     def test_registered_remedy_routes_cross_lane_then_continues_in_same_session(self):
-        fit = self.method('fit', remedy_methods=['inspect'])
+        fit = self.method('fit', remedy_methods=['inspect'],
+            method_checks={'method':'Does the current dependency observation support this fit?'})
         inspect = self.method('inspect')
         inspect['build'] = lambda s,p: self.base.item('diagnose-current', lane='diagnosis')
         session = self.base.session(); session.user_catalog = MethodCatalog([fit, inspect])

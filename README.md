@@ -103,12 +103,18 @@ release and native execution checks still apply. Compare recorded HTTP time with
 whole-selection time before attributing delays to Jev; local evidence preparation
 and validation can dominate.
 
-Method catalogs can link a fit to relevant diagnostic or recovery methods. Jev
-checks applicability and missing preservation coverage in the action batch and
-can select an eligible remedy immediately. The same session continues from its
-result. Completed or unavailable remedies are excluded automatically. Repeated
+Method catalogs can link a fit to relevant diagnostic or recovery methods. For
+specific unresolved conditions, Jev can check applicability or missing coverage
+in the action batch and select an eligible remedy. The same session continues from its
+result. Completed or unavailable remedies are excluded automatically. Methods
+can include a named prerequisite question in that same batch,
+making the actual missing condition and inconsistent judgments visible. Repeated
 experience lookup caches only record headers; selected evidence is read and
 hash-checked afresh.
+
+Known prerequisites and preservation are enforced by code. Additional semantic
+checks are authored for specific unresolved questions; merely binding
+preservation does not add a second model approval over an eligible action.
 
 Local corrections can use explicit guide-error tolerances instead of freezing
 every surrounding control. A recorded-array feasibility helper compares a local

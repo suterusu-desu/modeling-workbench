@@ -1,4 +1,14 @@
-# Current operating integration: 0.2.36
+# Current operating integration: 0.2.36.1
+
+Optional named prerequisites now accompany method applicability in the same
+request. Unexplained or inconsistent missing-condition judgments retain their
+answers for explicit diagnosis; they never become silent permission or a reason
+to reroll unchanged inputs. Current projection must distinguish completed facts
+from future-stage validation and old plans.
+Automatic broad method/coverage approval questions were removed from preservation
+binding and remedy registration. Actual source, consumed-constraint and evaluated
+output enforcement remains; deliberately authored semantic checks stay supported.
+This fixes repeated unexplained deferral of already-qualified operation choices.
 
 Registered methods now link to meaningful diagnostic/recovery alternatives by
 method ID. The final eligible frontier resolves actual task IDs for conditional

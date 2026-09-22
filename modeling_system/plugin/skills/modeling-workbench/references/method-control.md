@@ -64,6 +64,23 @@ pass. A missing remedy returns the unresolved question rather than inventing
 work or running the fit. The existing session continues from actual results.
 Explicit `method_checks.remedies` still names exact currently eligible task IDs.
 
+Supply `method_checks.prerequisites={"condition_id": "Specific current-stage missing condition"}`
+when a general missing/unknown judgment would be ambiguous. One conditional
+question in the same batch identifies the concrete unresolved condition, none,
+or an unlisted gap. Its answer remains in `unmet_prerequisite`. Conflicting
+applicability and reason answers stay visible and cannot waive the blocker.
+Use completed source-bound observations in the current projection; remove stale
+future-tense plans. Distinguish prerequisites for a recoverable trial from its
+later native verification, visual review and retention. If a deferral is still
+unexplained, resolve that specific uncertainty rather than repeat an unchanged
+action question or fabricate a missing requirement.
+
+Preservation bindings and remedy links alone do not generate semantic approval
+questions. Code enforces observed prerequisites and actual preservation; Jev
+selects among the resulting operations. Add `method_checks` questions only when
+a specific semantic uncertainty still matters. A recoverable trial does not
+need its future output to already be verified or visually accepted.
+
 Register diagnostic and recovery mechanisms before fitting when they can change
 the next edit. Offer a fit, an evidence-resolving diagnosis and a scoped recovery
 only when each is executable and useful for the current uncertainty. Do not
