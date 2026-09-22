@@ -13,7 +13,7 @@ LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
 # Advance when selection question meanings or their composition change.
-SELECTION_POLICY = 'typed-capabilities-and-preserved-outcomes-v7'
+SELECTION_POLICY = 'qualified-method-remedies-v8'
 LANE_QUESTIONS = {
     'diagnosis': 'Which offered observation best distinguishes the remaining plausible causes and changes the next edit?',
     'repair': 'Which offered qualified method best addresses the observed failure mechanism while preserving retained gains?',
@@ -143,6 +143,8 @@ class WorkQueue:
                 'reads': reads, 'writes': item['writes'], 'required': bool(item.get('required', False))})
             if item.get('select_with_jev'):
                 actions[-1]['select_with_jev'] = True
+            if item.get('workbench', {}).get('method_choice'):
+                actions[-1]['method_choice'] = item['workbench']['method_choice']
             if item.get('decision'):
                 from .capability_calls import validate_call
                 validate_call(item)
@@ -390,15 +392,14 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
             choice = resolved[lane]['choice']
         call, checks, method_checks, method_route = None, {}, {}, None
         if isinstance(choice, str):
-            from .method_reasoning import resolve_method
+            from .method_reasoning import resolve_method, allowed_remedy
             initial = choice
             evaluated = resolve_method(batch.get('method_mappings', {}).get(choice, {}), answers)
             method_checks[choice] = evaluated
             if evaluated['status'] == 'unmet':
                 remedy = evaluated['remedy']
                 offered = {a['id']: a for rows in grouped.values() for a in rows}
-                allowed = offered[initial].get('decision', {}).get('method_checks', {}).get('remedies', [])
-                if remedy in offered and remedy != initial and remedy in allowed:
+                if remedy in offered and remedy != initial and allowed_remedy(offered[initial], offered[remedy]):
                     remedial = resolve_method(batch.get('method_mappings', {}).get(remedy, {}), answers)
                     method_checks[remedy] = remedial
                     if remedial['status'] == 'ready':

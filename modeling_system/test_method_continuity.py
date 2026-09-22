@@ -141,5 +141,17 @@ class MethodReasoningTests(unittest.TestCase):
         self.assertEqual(result['status'],'needs_review')
         self.assertEqual(result['method_checks']['fit']['status'],'unmet')
 
+    def test_method_remedy_resolves_actual_eligible_task_without_fixed_task_id(self):
+        self.actions[0]['decision']['method_checks'].update(remedies=[], remedy_methods=['dependency_diagnosis'])
+        self.actions[1]['method_choice'] = 'dependency_diagnosis'
+        self.assertEqual(self.selector()(self.snapshot,self.actions,self.plan),'inspect')
+        self.assertEqual(len(self.calls),1)
+
+    def test_unavailable_method_remedy_defers_without_fabricating_work(self):
+        self.actions[0]['decision']['method_checks'].update(remedies=[], remedy_methods=['unavailable'])
+        result = self.selector()(self.snapshot,self.actions,self.plan)
+        self.assertEqual(result['status'],'needs_review')
+        self.assertFalse(any(q['id'].endswith('_remedy') for q in self.calls[0]))
+
 
 if __name__=='__main__':unittest.main()

@@ -20,7 +20,7 @@ COVERAGE = {
 def method_questions(action, ordinal, available, descriptions):
     spec = action.get('decision', {}).get('method_checks')
     if not spec: return [], {}
-    if not isinstance(spec, dict) or set(spec)-{'method', 'coverage', 'remedies'}:
+    if not isinstance(spec, dict) or set(spec)-{'method', 'coverage', 'remedies', 'remedy_methods'}:
         raise ValueError('Method checks have named method/coverage questions and qualified remedies')
     questions, mapping = [], {}
     for name, options in (('method', METHOD), ('coverage', COVERAGE)):
@@ -33,11 +33,20 @@ def method_questions(action, ordinal, available, descriptions):
             'limits': 'Known fixed checks are enforced by code. Historical successes are conditional. Unknown is not pass; confidence cannot waive requirements. Judge only this operation, not unrelated harmless work.'},
             'options': [{'id': key, 'description': value} for key,value in options.items()]})
         mapping[qid] = name
+    offered = {a['id']: a for a in available}
     remedies = spec.get('remedies', [])
+    methods = spec.get('remedy_methods', [])
+    if (not isinstance(remedies, list) or not isinstance(methods, list)
+            or any(not isinstance(k,str) or not k for k in remedies+methods)
+            or len(set(methods)) != len(methods) or len(set(remedies)) != len(remedies)
+            or any(k not in offered or k == action['id'] for k in remedies)):
+        raise ValueError('Remedies must be distinct qualified operations or registered method names')
+    # Resolve method-level links only against the final eligible action menu.
+    # A completed, stale or blocked diagnostic is never offered as executable;
+    # its absence does not invalidate an otherwise useful decision batch.
+    remedies = list(dict.fromkeys(remedies + [row['id'] for row in available
+        if row.get('method_choice') in methods and row['id'] != action['id']]))
     if remedies:
-        offered = {a['id']: a for a in available}
-        if len(set(remedies)) != len(remedies) or any(k not in offered or k == action['id'] for k in remedies):
-            raise ValueError('Remedies must be different currently qualified offered operations')
         qid = f'method_{ordinal}_remedy'
         questions.append({'id': qid, 'type': 'choice', 'instructions': {
             'question': 'Only if this proposed method is missing, contradicted, repeated without repair or unknown: which offered operation most directly resolves its relevant prerequisite?',
@@ -47,6 +56,12 @@ def method_questions(action, ordinal, available, descriptions):
                        + [{'id': '__defer__', 'description': 'No offered remedy resolves this prerequisite.'}]})
         mapping[qid] = 'remedy'
     return questions, mapping
+
+
+def allowed_remedy(action, candidate):
+    spec = action.get('decision', {}).get('method_checks', {})
+    return (candidate['id'] in spec.get('remedies', [])
+            or candidate.get('method_choice') in spec.get('remedy_methods', []))
 
 
 def resolve_method(mapping, answers):

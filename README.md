@@ -103,9 +103,25 @@ release and native execution checks still apply. Compare recorded HTTP time with
 whole-selection time before attributing delays to Jev; local evidence preparation
 and validation can dominate.
 
+Method catalogs can link a fit to relevant diagnostic or recovery methods. Jev
+checks applicability and missing preservation coverage in the action batch and
+can select an eligible remedy immediately. The same session continues from its
+result. Completed or unavailable remedies are excluded automatically. Repeated
+experience lookup caches only record headers; selected evidence is read and
+hash-checked afresh.
+
+Local corrections can use explicit guide-error tolerances instead of freezing
+every surrounding control. A recorded-array feasibility helper compares a local
+solve with a qualified connected correction under the same bounds. Actual
+evaluated motion and whole-region appearance review still decide retention.
+
 The response reader validates provider answers while preserving their original
 values. See the [reader compatibility limits](modeling_system/plugin/skills/modeling-workbench/references/judgments.md)
 for its narrow handling of rounded Choice and Score answers.
+An invalid typed answer with verified request identity and usage can be accounted
+without releasing an action, then retried with the same questions. Invalid-answer
+and transient transport retries share a two-retry bound; original responses and
+costs remain in the existing workspace ledger.
 
 ## What can I use today?
 

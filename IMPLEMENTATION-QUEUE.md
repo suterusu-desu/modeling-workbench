@@ -1,4 +1,25 @@
-# Current operating integration: 0.2.35
+# Current operating integration: 0.2.36
+
+Registered methods now link to meaningful diagnostic/recovery alternatives by
+method ID. The final eligible frontier resolves actual task IDs for conditional
+same-batch routing; completed and unavailable remedies are not offered. A
+synthetic session verifies cross-lane diagnosis followed by fitting without a
+new controller. Repeated store lookup caches unchanged record headers while
+freshly verifying every selected record, with additions/deletions discovered.
+
+Invalid typed HTTP200 answers are explicitly accounted without releasing a
+selection. Exact original wire identity, model and usage are required. The same
+questions can be retried within the shared two-retry transport/answer bound;
+raw evidence, costs and original failed attempts remain. Interrupted decision
+recovery validates that lineage. Production fitting, native retention adoption
+and actual character improvement remain separate private evidence.
+
+Local-versus-coupled feasibility is available in pinned-array preparation for a
+qualified linear response and declared trust region. Both branches preserve the
+same guide bounds, keep outside controls fixed and report numerical residuals.
+Solver failure remains unknown. Synthetic tests cover locally tolerable movement,
+necessary connected repair, infeasible declared scopes and false solver success.
+Private geometry needs its own response qualification and evaluated verification.
 
 Established guide-fit outcomes are now source-bound requirements carried by
 OperatingSession/CandidatePipeline outside ranked history. Pinned private

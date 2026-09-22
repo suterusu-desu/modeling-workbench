@@ -7,6 +7,15 @@ the workbench supplies truthful state, qualified action, recovery and accumulate
 methods. The unit of continuity is the existing **decision episode**, not a model
 conversation, isolated command, or second parallel planning ledger.
 
+Method relationships belong in that same work frontier: registered fitting,
+diagnostic and recovery operations resolve to currently eligible tasks. Jev can
+select a missing-condition remedy in the action batch, and ordinary execution
+continues from the resulting evidence. Protected evaluated outcomes enter the
+actual fitting constraints and final measurements. Invalid provider answers are
+accounted without becoming actions; bounded retries preserve decision lineage.
+Context acceleration skips repeated unrelated-header reads while retaining fresh
+selected evidence and native checks.
+
 ```mermaid
 flowchart TD
     A[Astra: identity, intent, visual judgment, new mechanisms] --> E[Decision episode: requirements, evidence, hypotheses, methods]

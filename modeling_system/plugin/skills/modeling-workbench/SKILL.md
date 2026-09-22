@@ -26,6 +26,17 @@ sources. These use the existing session, native lane and ledger. One explicit
 decision budget covers compilation and transport; retained decisions join actual
 results and reviews. Keep all private argument values and full sources local.
 
+Link qualified methods to relevant diagnostics/recovery with `remedy_methods` in
+the existing catalog; the same decision batch can route missing conditions to
+eligible remedies. Use the [response recovery contract](references/judgments.md)
+for invalid typed answers: retain raw answers and cost, then perform a bounded
+same-decision retry. Do not manually replace Jev's choice or reset retry history.
+
+When local preservation conflicts with a needed correction, use the
+[local/connected repair procedure](references/preservation-and-lessons.md#local-correction-and-connected-repair).
+Preserve qualified guide bounds while allowing necessary connected controls to
+move. Retain the combined correction only after evaluated and visual review.
+
 Start with `inspect_situation`. Read current modeling authority and retrieve relevant lessons by mechanism. Use `synchronize_scene` or `query_live_geometry` for current numerical evidence; `native_inspect_live` reports invalidation without silently making old geometry current. Scene changes invalidate the representation, and explicit synchronization refreshes it. Complete stored arrays remain queryable historically with declared coverage, including base-only and evaluated geometry distinctions. A current result is verified at the reported instant. The editing owner is stable across an experiment. A changed expected state or unresolved execution requires reconciliation, not blind repetition.
 
 Use `capture_view_bundle` for the actual mesh preview being inspected, including its angle, zoom, pose and optional pixel crop. It links the image, wider context, geometry, guide, depth and sections. `record_observation` and `ingest_capture` retain completed evidence without recapturing or moving the view. `project_points` accounts for the recorded crop; projected points are not automatically visible surface hits.

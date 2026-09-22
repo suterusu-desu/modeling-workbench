@@ -9,6 +9,7 @@ from .preparation_contracts import PreparationOperation
 from .result_reporting import json_data, compact_summary
 from .triangle_contact import projected_triangle_contact
 from .metric_fitting import planar_fem_metric
+from .correction_scope import correction_scope
 
 
 def active_vertex_coverage(vertex_count, faces, driven):
@@ -86,6 +87,7 @@ def pose_correspondence(guide_points, pose_points, pose_values):
 
 
 ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric,
+    'correction_scope': correction_scope,
     'section_fit': guide_fitting.prepare_section_fit,
     'material_path': guide_fitting.remap_material_path, 'compose_correspondence': compose_correspondence,
     'prepared_effect': prepared_effect, 'active_vertex_coverage': active_vertex_coverage,

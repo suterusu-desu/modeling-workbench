@@ -31,9 +31,8 @@ def usage_cost(response):
     return usage['input_tokens'] * INPUT_USD_PER_MILLION / 1_000_000
 
 
-def validate_response_receipt(packet, request_receipt, receipt):
-    """Verify saved wire evidence without credentials, network or ledger writes."""
-    from .judgments import validate_answers
+def validate_response_envelope(packet, request_receipt, receipt):
+    """Verify exact wire identity and reported cost; this does not release answers."""
     expected = {'model': MODEL, 'state': packet['state'], 'questions': packet['questions']}
     if (request_receipt.get('transport') != ROUTE or receipt.get('transport') != ROUTE
             or request_receipt.get('request') != expected
@@ -48,8 +47,16 @@ def validate_response_receipt(packet, request_receipt, receipt):
     cost = usage_cost(response)
     if 'estimated_cost_usd' in receipt and receipt['estimated_cost_usd'] != cost:
         raise ValueError('Response cost disagrees with recorded token usage')
-    return {'choices': validate_answers(packet['questions'], response.get('answers'), budget=bound_budget(packet['local_binding'])),
-            'estimated_cost_usd': cost, 'wire_request_digest': digest(expected)}
+    return {'estimated_cost_usd': cost, 'wire_request_digest': digest(expected)}
+
+
+def validate_response_receipt(packet, request_receipt, receipt):
+    """Verify saved wire evidence and answers without network or ledger writes."""
+    from .judgments import validate_answers
+    result = validate_response_envelope(packet, request_receipt, receipt)
+    result['choices'] = validate_answers(packet['questions'], receipt['response'].get('answers'),
+                                        budget=bound_budget(packet['local_binding']))
+    return result
 
 
 class TypeSafeTransport:

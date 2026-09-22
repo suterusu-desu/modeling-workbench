@@ -13,7 +13,7 @@ from .controller import fingerprint, read_json, write_json
 from .typesafe_transport import MODEL, ROUTE, validate_response_receipt
 
 SETTLED_PROVIDER = {'response_validated', 'verified_no_dispatch', 'terminal_http_error',
-                    'transient_http_error', 'response_unavailable_accounted'}
+                    'transient_http_error', 'response_unavailable_accounted', 'invalid_answer_accounted'}
 
 
 class ProviderRetryDeferred(RuntimeError):

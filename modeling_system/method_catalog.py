@@ -17,6 +17,11 @@ class MethodCatalog:
                 or len({m['id'] for m in methods}) != len(methods)):
             raise ValueError('Unique described executable methods required')
         self.methods = {m['id']: dict(m) for m in methods}
+        for method in self.methods.values():
+            remedies = method.get('remedy_methods', [])
+            if (not isinstance(remedies, list) or len(set(remedies)) != len(remedies)
+                    or not set(remedies) <= self.methods.keys() or method['id'] in remedies):
+                raise ValueError('Remedy methods must name distinct other registered methods')
         self.context = context or (lambda state: state.get('public_state', {}))
         self.excluded = {}
 
@@ -34,6 +39,10 @@ class MethodCatalog:
                 row['select_with_jev'] = True
                 if method.get('method_checks'):
                     row.setdefault('decision', {})['method_checks'] = deepcopy(method['method_checks'])
+                if method.get('remedy_methods'):
+                    checks = row.setdefault('decision', {}).setdefault('method_checks', {})
+                    checks.setdefault('method', 'Do the current observations and retained lessons support this method, with its required conditions satisfied?')
+                    checks['remedy_methods'] = deepcopy(method['remedy_methods'])
         return rows
 
     def __call__(self, state, previous=None):
@@ -106,6 +115,7 @@ class ParameterizedCatalog(MethodCatalog):
             methods.append({'id': binding['id'], 'description': binding['description'],
                             'conditions': binding.get('conditions', {}),
                             'method_checks': deepcopy(binding.get('method_checks', {})),
+                            'remedy_methods': deepcopy(binding.get('remedy_methods', [])),
                             **{stage: bind_factory(fn) for stage, fn in factories.items()}})
         super().__init__(methods, context=context, budget=budget)
 

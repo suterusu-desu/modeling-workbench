@@ -42,6 +42,7 @@ class Store:
     def __init__(self, path):
         self.root = native_path(path).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self._record_headers = {}
 
     def blob(self, path):
         source=str(Path(path).resolve())
@@ -91,13 +92,39 @@ class Store:
         return json.loads(path.read_text(encoding='utf-8'))['question'] if path.exists() else None
 
     def records(self, kinds):
-        """Verified small records by kind, without loading unrelated geometry."""
+        """Fresh verified records; cache only unrelated-file classification.
+
+        The content-addressed store is append-only. A directory scan discovers
+        new/deleted files on every call; changed metadata invalidates a cached
+        header. Every selected record still goes through get(), which reads and
+        hashes its actual bytes even when timestamps have been preserved. No
+        payload, modeling dependency or native-state check is cached here.
+        """
         prefixes = tuple(('{"kind":"' + kind + '"').encode() for kind in kinds)
-        for path in sorted((self.root / 'records').glob('*.json')):
-            with path.open('rb') as stream:
-                relevant = stream.read(128).startswith(prefixes)
-            if relevant:
-                yield path.stem, self.get(path.stem)
+        directory = self.root / 'records'
+        if not directory.exists():
+            self._record_headers.clear()
+            return
+        # scandir supplies directory metadata cheaply on Windows; avoid opening
+        # thousands of unrelated receipts at every decision validation boundary.
+        with os.scandir(directory) as entries:
+            files = sorted((entry for entry in entries if entry.name.endswith('.json') and entry.is_file()),
+                           key=lambda entry: entry.name)
+        current = {}
+        for entry in files:
+            stat = entry.stat()
+            identity = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+            cached = self._record_headers.get(entry.name)
+            if cached is not None and cached[0] == identity:
+                header = cached[1]
+            else:
+                with open(entry.path, 'rb') as stream:
+                    header = stream.read(128)
+            current[entry.name] = (identity, header)
+            if header.startswith(prefixes):
+                key = entry.name[:-5]
+                yield key, self.get(key)
+        self._record_headers = current
 
     def set_current(self, question, expected):
         self.get(question, 'question')

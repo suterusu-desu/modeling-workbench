@@ -107,6 +107,21 @@ this is an explicitly bounded reader accommodation, not upstream conformance.
 Recover an already saved response through the original completed-response path
 and ledger identity, without repeating inference or rewriting the raw response.
 
+For genuinely invalid typed answers, `invalid_response.prepare_selection_retry`
+routes HTTP200 responses to exact-envelope and usage validation before marking
+the original attempt `invalid_answer_accounted`. It never creates a selection or
+corrects the chosen option. Known reported cost is reconciled once, even if
+inputs have since changed or retries are exhausted. Only a fresh, unchanged
+decision receives a successor packet, with the original state and questions.
+Model, wire identity, unknown usage and credit failures are not invalid-answer
+retry candidates. Invalid answers and transient transport failures share two
+retries for the same decision with backoff; a restart does not reset that bound.
+The workspace transport loops over the returned retry packet and receipt,
+checks freshness after waiting, and reuses an already dispatched successor.
+An interrupted session can pass this receipt through its existing
+`recover_completed_selection(..., transient_retry_path=...)` lineage reader.
+Accounting or recovery alone never invokes native work.
+
 Retain probability distributions and score levels alongside the selected value.
 An arbitrary .9 confidence gate is not a calibrated Blender criterion. A known
 missing prerequisite blocks in code regardless of the answer. A `needs_astra`

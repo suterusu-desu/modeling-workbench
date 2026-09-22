@@ -74,6 +74,45 @@ the workspace's normal operator bridge; the public default stays compatible
 with old scopes. A scoped structural reconstruction must carry and restore the
 original guide-defined outcomes, not silently waive them.
 
+## Local correction and connected repair
+
+Preserve the guide-defined outcome within a qualified tolerance, not every raw
+control value. Distinguish exact identity/topology constraints from allowable
+guide error and allowable increase over an earlier useful evaluated fit. State
+units, region, pose, correspondence, and the evidence supporting each bound.
+Numerical solver tolerances are separate from visual/guide tolerances.
+
+Start with a local solve using those constraints. If it cannot satisfy the
+required correction, distinguish a measured constraint conflict from missing
+support or solver failure. Offer a coupled correction over the smallest
+qualified connected transition, retaining the same guide targets and bounds.
+The local correction and surrounding repair form one recoverable candidate;
+do not promote an intermediate broken surround and promise to fix it later.
+Jev can select this registered remedy from actual feasibility evidence. Changing
+the target, relaxing an authority-defined bound, or widening into unsupported
+anatomy requires new qualification; it is not an automatic fallback.
+
+`correction_scope` is available through the existing pinned-array preparation
+handler. Inputs are a qualified linear `response` matrix, current guide
+`residual`, per-output `tolerance`, `local_controls`, `coupled_controls` and
+per-control `control_radius`. Supply `units`, a `qualification` description and
+an explicit `numerical_tolerance` (1e-10 through 1e-7). Rows must cover affected
+guide/relationship measurements through the relevant motion; columns represent
+actual controls. It finds a minimum-absolute-movement feasibility witness under
+`abs(residual + response @ step) <= tolerance`. Controls outside the proposed
+scope remain fixed. It tests connected controls only when the local linear
+problem is infeasible, using unchanged guide bounds; solver failures remain
+unknown. Residual and bound violations are checked independently of the solver
+success flag. Sparse matrices are supported when called directly.
+
+This screens only the declared linear response and trust region; nonlinear
+Blender behavior requires actual evaluated verification. No generic helper can
+invent that response, anatomical scope, visual tolerance or missing motion.
+PreservationPolicy still checks the actual candidate against its source-bound
+requirements, followed by whole-region comparison to the guide and earlier
+useful appearance. A scoped improvement is retained only when the overall
+candidate improves without unacceptable collateral loss.
+
 ## Jev and durable learning
 
 Required outcomes/current construction enter decision state outside

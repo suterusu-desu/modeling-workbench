@@ -48,6 +48,28 @@ class MethodTests(unittest.TestCase):
         self.assertEqual(session.run(max_steps=3)['status'], 'needs_review')
         self.assertEqual(self.base.ran, [])
 
+    def test_registered_remedy_routes_cross_lane_then_continues_in_same_session(self):
+        fit = self.method('fit', remedy_methods=['inspect'])
+        inspect = self.method('inspect')
+        inspect['build'] = lambda s,p: self.base.item('diagnose-current', lane='diagnosis')
+        session = self.base.session(); session.user_catalog = MethodCatalog([fit, inspect])
+        batches = []
+        def choose(state, questions, binding):
+            batches.append(deepcopy(questions)); answers = {}
+            for q in questions:
+                ids = [o['id'] for o in q['options']]; value = ids[0]
+                if q['id'] == 'next_lane': value = 'preparation'
+                if q['id'].endswith('_method'): value = 'missing' if not self.base.ran else 'ready'
+                if q['id'].endswith('_remedy'): value = 'diagnose-current'
+                answers[q['id']] = {'choice': value}
+            return {'binding':binding, 'judgments':answers}
+        session.selector.judge = choose
+        session.run(max_steps=2)
+        self.assertEqual(self.base.ran, ['diagnose-current','fit'])
+        self.assertEqual(len(batches),2)
+        self.assertFalse(any(q['id'].endswith('_remedy') for q in batches[1]))
+        with self.assertRaises(ValueError): MethodCatalog([self.method('fit', remedy_methods=['invented'])])
+
     def test_unwrapped_native_singleton_still_reaches_jev(self):
         task = self.base.item('inspect', native=True)
         task['workbench']['bindings']['adapter'] = ['adapter']

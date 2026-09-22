@@ -53,6 +53,25 @@ effects must first be reconciled by the existing controller; a registry cannot
 make them settled. Never hide old failures or run a sibling after rejection just
 because its numerical target can execute.
 
+Link methods with `remedy_methods=["diagnose_dependency", "compare_recovery"]`
+using IDs registered in the same catalog. `method_checks` can supply specific
+`method` and `coverage` questions. The final eligible action menu resolves those
+links to actual task IDs; missing, completed or blocked remedies are not offered.
+Jev answers applicability, coverage and a conditional remedy question in the
+same batch as action selection. A relevant unmet condition can route directly
+to the selected remedy, including across lanes, if that remedy's own checks
+pass. A missing remedy returns the unresolved question rather than inventing
+work or running the fit. The existing session continues from actual results.
+Explicit `method_checks.remedies` still names exact currently eligible task IDs.
+
+Register diagnostic and recovery mechanisms before fitting when they can change
+the next edit. Offer a fit, an evidence-resolving diagnosis and a scoped recovery
+only when each is executable and useful for the current uncertainty. Do not
+manufacture alternatives or force redundant diagnostics after their evidence
+already exists. Bind preserved evaluated positions into the actual fitter's
+equations or fixed variables before solving, with explicit conflicts; a payload
+label or post-hoc distance report alone does not preserve a fit.
+
 ## Retained experience in each choice
 
 `RetainedContext` queries authority, outcome, judgment, procedure and automatically
@@ -82,6 +101,12 @@ recovery. Decision traces retain the rankings and passage judgments; a relevance
 score never changes authority or visual judgment.
 Unchanged choices retain the normal exact cache. Changed passages invalidate the
 choice before execution. Missing history remains visible as missing coverage.
+
+The store scans current record names and metadata on each lookup, reusing only
+unchanged header classifications to skip unrelated receipts. Every selected
+record still goes through byte reading and content-hash verification. New and
+deleted records are discovered without restarting; no returned payload, guide,
+native state or modeling dependency is cached by this optimization.
 
 ## Reusable array preparation
 

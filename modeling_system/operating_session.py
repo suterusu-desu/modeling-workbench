@@ -814,16 +814,19 @@ class OperatingSession(WorkQueue):
                 raise ValueError('Supply one explicit retry lineage')
             if transient_retry_path is not None:
                 from .provider_recovery import transient_retry_packet
+                from .invalid_response import invalid_answer_retry_packet
                 authorization = read_json(transient_retry_path)
                 origin = Path(authorization['previous_call'])
                 prior_packet, prior_request, prior_dispatch = [read_json(origin/name) for name in
                     ('owner-packet.json', 'decision-1.request.json', 'dispatch-count.json')]
                 previous_response = origin/'decision-1.response.json'
                 failed_response = read_json(previous_response) if previous_response.exists() else None
-                derived = transient_retry_packet(prior_packet, prior_request, failed_response,
-                    prior_dispatch, authorization.get('error_type'), rebinding=authorization.get('authority_rebinding'))
+                invalid = authorization.get('status') == 'invalid_answer_retry_prepared'
+                derived = (invalid_answer_retry_packet(prior_packet, prior_request, failed_response, prior_dispatch)
+                    if invalid else transient_retry_packet(prior_packet, prior_request, failed_response,
+                        prior_dispatch, authorization.get('error_type'), rebinding=authorization.get('authority_rebinding')))
                 base = deepcopy(derived); base['local_binding'].pop('provider_retry')
-                if (authorization.get('status') != 'transient_retry_prepared' or base != original_packet
+                if (authorization.get('status') not in ('transient_retry_prepared', 'invalid_answer_retry_prepared') or base != original_packet
                         or authorization.get('root_packet_digest') != fingerprint(original_packet)
                         or authorization.get('retry_packet_digest') != fingerprint(packet) or derived != packet):
                     raise ValueError('Completed transient retry does not descend from this pending choice')
