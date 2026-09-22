@@ -70,6 +70,15 @@ polygon vertices pass. The required height is the lesser of the two branches.
 in the overlap. Existing penetration and absolute clearance are different goals;
 choose the policy from the actual modeling question.
 
+Declare required surface separation, an optional numerical buffer and solver
+residual tolerance separately. Record actual minimum separation alongside slack
+against the buffered inequality: a missed buffer can coexist with positive
+separation. Qualification follows the declared geometric requirement; a required
+guide or anatomical clearance remains required. Preserve proposed arrays,
+optimizer status and measured residuals even when a numerical target is missed.
+Computation completion and target qualification are separate outcomes. Review the
+retained result before deciding whether another solve would change the next edit.
+
 Optional `active_indices` scope the incident source triangles. With
 `build_constraints=True`, supply a unit `displacement_direction` parallel to the
 depth axis and finite `displacement_scale`. The projected baseline/candidate
