@@ -47,7 +47,9 @@ neighboring detail. Retain rejected branch alternatives and their reasons;
 nearest points, curve extrema and equal arclength fractions cannot supply missing
 correspondence. A failed trace does not reject the guide. See
 [ordered correspondence evidence](surface-correspondence.md) for the existing
-records, crop/endpoint limits and supported plane contract.
+records, crop/endpoint limits and supported plane contract. Smooth sections and
+held boundary points do not by themselves qualify inter-section correspondence
+or displacement continuity across the connected patch.
 
 Repairing a guide is its own intervention: preserve the rejected parent, create a separate asset identity, and retain the exact edit script, inputs/delta, affected topology and frame, hypothesis, preserved context and before/after evidence. Independent review and region/depth qualification apply to the derivative. Never relabel edited geometry as an untouched provider export or clear the parent's rejection. The core currently retains this as explicit evidence; a first-class derivative qualification lifecycle is still a design gap.
 

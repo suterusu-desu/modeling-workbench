@@ -25,6 +25,8 @@ bindings and native handlers; this is not another executor.
   Equal fractions do not pair anatomy: establish corresponding roles and
   landmarks first, retaining rejected branch alternatives as
   [correspondence evidence](surface-correspondence.md).
+  Review inter-section ordering and tangential displacement at held joins;
+  smooth profiles alone do not qualify the connected patch.
 - `prepare_section_fit(stations, baseline, targets, supported, provenance, weights,
   max_gap=..., max_missing=..., space=..., frames=..., object_matrix=...)` combines
   bounded interpolation, preservation weights and displacement encoding. Arrays

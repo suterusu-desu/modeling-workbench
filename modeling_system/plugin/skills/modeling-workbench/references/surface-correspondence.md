@@ -37,6 +37,28 @@ ambiguous trace means the proposed route is unresolved within its declared
 selection and query. Preserve crop bounds, excluded/coplanar segments and the
 producer's endpoint convention before interpreting why it stopped.
 
+## From sections to a connected patch
+
+Smooth individual sections do not establish a coherent surface between them.
+Arclength redistribution can make each profile look better while moving material
+tangentially into a ridge or indentation at held joins. Matching boundary
+positions and including every neighboring mesh cell do not establish matching
+displacement gradients or a valid interior correspondence.
+
+For that failure, inspect the inter-section material ordering and displacement
+across the complete connected patch, including free-to-held and side joins.
+Separate tangential movement from supported depth change in an explicit frame.
+Reuse the actual source topology and existing [bend comparison](construction-diagnostics.md)
+to locate changed folds where useful; numerical continuity still cannot approve
+appearance. Retain the early native rejection even if a section objective improved.
+
+When the posed material coordinates are already qualified and the original
+guide supports only exterior depth, preserve those tangential coordinates and
+fit the supported depth through the connected patch. This is conditional on
+that evidence, not a universal restriction to a particular global axis. A full
+XYZ remapping needs its own anatomical and inter-section correspondence; a
+first tagged parent or normalized arclength cannot supply the missing directions.
+
 ## Version-1 pinned case
 
 Supply `schema_version: 1`, `question`, and `state` matching all `expected_state` fields: `source_state_id`, `pose`, `frame`, `units`, `dependency_fingerprint`. This is a historical identity check. `source_topology`, `roles`, `selection` and `orientation` each need `meaning` and `evidence`. Owner-authored roles and support limits remain separate from measurements. Declare the winding and coordinate convention for normal evidence. Each evidence item may be an exact `{path, sha256}` file reference, which the existing store pins and retains.
