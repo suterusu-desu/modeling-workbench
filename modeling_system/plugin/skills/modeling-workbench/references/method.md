@@ -59,6 +59,13 @@ Form one testable mechanism hypothesis with a resource bound and discriminating 
 
 Use coupled response screening where supported. A local derivative or finite linear optimizer cannot prove nonlinear motion correctness or anatomical infeasibility. Distinguish numerical nonconvergence from conflicting constraints. Keep fit goals separate from preservation constraints and artistic choices. Unknown target coordinates must not be manufactured to make an optimization succeed.
 
+State whether smoothing acts on the displacement or the resulting surface.
+A smooth correction can leave an inherited crease intact, especially in
+interpolated spans. Preserve direct-sample provenance and assess the actual
+composed surface; coverage and orientation checks cannot approve its shape.
+See [fitting preparation](preparation-and-bootstrap.md) for objective and support
+evidence. A revised objective remains a hypothesis until matched appearance review.
+
 Give every exact-coordinate preservation constraint a reason and evidence.
 Accepted guide identity, protected user work and the current native implementation
 are different things. If the current rest pose already contains a rejected gap,

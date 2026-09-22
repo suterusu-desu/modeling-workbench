@@ -37,6 +37,23 @@ missing-data representation. Object arrays and pickle-dependent data are refused
 Compact reports omit whole optional metrics with an explicit omitted count,
 never sentence fragments or limits. The full evidence remains linked.
 
+For fitting results, record what the objective regularizes: displacement,
+final positions, or another declared quantity. If `final = baseline + delta`,
+small variation in `delta` does not remove variation already in `baseline`.
+A smooth displacement can preserve a source crease, including between direct
+guide samples. When that is the observed failure, a guide-constrained objective
+on the resulting surface is a different mechanism, not another smoothing
+strength. Preserve the guide's intended shape, qualified motion directions and
+boundary conditions; an objective change alone does not establish improvement.
+
+Keep direct guide samples and interpolated points distinct, with their parent
+identities and support limits. Record how the fitted quantity becomes the actual
+native surface through inherited motion, support blending and attachments.
+Coverage counts and zero opposed normals do not certify smooth shape: localize
+the visible residual using saved geometry and matched views, then assess the
+complete resulting patch. Return feasibility measurements and an appearance
+judgment as separate evidence.
+
 OperatingSession also converts numerical handler returns before journaling. If
 a valid report is too long, it retains the known execution disposition and the
 complete report, marks its checks unavailable for dependent use, and requests
