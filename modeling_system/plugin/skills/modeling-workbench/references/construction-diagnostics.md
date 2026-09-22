@@ -73,6 +73,31 @@ Inspect anchor movement under its own declared constraint, supporting-cell/frame
 
 The independent fixed-anchor fixture uses a known rotation and hand-specified observations. It detects raw displacement, accepts the independently predicted response, rejects an added unexplained displacement, and rejects a mismatched baseline binding. No native mutation or artistic acceptance is tested.
 
+## Qualify contact samples by their complete source face
+
+A triangle belongs wholly to a qualified material region only when every one of
+its vertex identities belongs to that region. A rounded mean station or pair ID
+can admit a triangle crossing into an unsupported guard. Preserve per-vertex
+membership and report central and transition faces separately. If only part of
+a face is qualified, explicitly clip that part and retain its barycentric source
+ancestry rather than qualifying the complete face.
+
+For a signed nearest-triangle distance, retain the closest point, barycentrics,
+triangle normal/orientation, actual pose topology and projection classification.
+A negative sign at a nearest edge or vertex does not by itself establish surface
+penetration: the offset can be lateral to a finite patch. An interior negative
+witness is a local oriented-surface result, not global inside/outside or swept
+collision certification. No interior projection means unknown contact for that
+patch, not clearance. Do not omit those unqualified samples from the report.
+
+Compare a candidate and its baseline at corresponding poses with the same
+qualification and sampling rule. Separate newly introduced, worsened, inherited
+and improved contact residuals. Vertices, edge midpoints and centroids are finite
+samples; absence of sampled failures does not certify the triangle interior,
+motion between poses or appearance. Endpoint clearance alone does not establish
+interior clearance. Use complete triangle contact for a supported projected
+question; it still does not provide anatomical or whole-motion acceptance.
+
 ## Retain the limited result
 
 Save exact originals, scripts, graph/source pins, diagnostic parameters and revised artifacts privately. Keep numerical observations, visual judgment, changed mechanisms and causal uncertainty distinct. Use existing `record_outcome` and the [method integration procedure](method-integration.md) to link the diagnostic lesson and any unresolved character result. An improved surface plus a corrected cap can support a bounded trial while full profile, actual native fit, joins and motion remain unresolved. Source regression success does not close those judgments. Coordinate native changes and installation/operator pickup with the sole owner; this procedure does not reopen a completed tools prerequisite.

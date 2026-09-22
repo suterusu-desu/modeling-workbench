@@ -77,6 +77,12 @@ and outcome-linked decision records keep choices connected to actual modeling
 evidence. Explicit decision budgets and provider retry timing use the existing
 workspace accounting and recovery path.
 
+Transport adapters can obtain the current decision binding and active lane from
+one fresh session observation, avoiding a duplicate input scan. Fresh request,
+release and native execution checks still apply. Compare recorded HTTP time with
+whole-selection time before attributing delays to Jev; local evidence preparation
+and validation can dominate.
+
 The response reader validates provider answers while preserving their original
 values. See the [reader compatibility limits](modeling_system/plugin/skills/modeling-workbench/references/judgments.md)
 for its narrow handling of rounded Choice and Score answers.

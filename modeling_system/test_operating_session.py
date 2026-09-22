@@ -11,6 +11,56 @@ from .work_queue import WorkQueue
 
 
 class OperatingTests(unittest.TestCase):
+    def test_judgment_context_uses_one_fresh_snapshot_per_read(self):
+        self.items = [self.item('first'), self.item('second')]
+        session = self.session()
+        state = session.observe()
+        binding = {'owner': state['owner'], 'authority_revision': state['authority_revision'],
+            'menu': fingerprint(state['actions']),
+            'dependencies': {'reads': {'source': 's1'}, 'writes': []}}
+        with patch.object(session, 'observe', wraps=session.observe) as observed, \
+                patch.object(session, '_context', wraps=session._context) as context:
+            first = session.judgment_context(binding)
+            self.assertEqual(observed.call_count, 1)
+            self.assertEqual(context.call_count, 1)
+            self.state['active_operations'] = [{'id': 'other', 'writes': ['other-region']}]
+            second = session.judgment_context(binding)
+            self.assertEqual(observed.call_count, 2)
+            self.assertEqual(context.call_count, 2)
+        self.assertEqual(first['active_operations'], [])
+        self.assertEqual(second['active_operations'], self.state['active_operations'])
+        second['binding']['dependencies']['reads']['source'] = 'caller mutation'
+        second['active_operations'].clear()
+        self.assertEqual(binding['dependencies']['reads']['source'], 's1')
+        self.assertEqual(len(self.state['active_operations']), 1)
+
+    def test_judgment_context_refuses_changed_dependency_or_menu(self):
+        self.items = [self.item('first'), self.item('second')]
+        session = self.session()
+        state = session.observe()
+        binding = {'owner': state['owner'], 'authority_revision': state['authority_revision'],
+            'menu': fingerprint(state['actions']),
+            'dependencies': {'reads': {'source': 's1'}, 'writes': []}}
+        self.state['values']['source'] = 'changed source'
+        with self.assertRaisesRegex(ValueError, 'menu changed'):
+            session.judgment_context(binding)
+        self.state['values']['source'] = 's1'
+        self.items[0]['description'] = 'Changed executable proposal'
+        with self.assertRaisesRegex(ValueError, 'menu changed'):
+            session.judgment_context(binding)
+
+    def test_judgment_context_refreshes_extra_bound_evidence(self):
+        self.items = [self.item('first'), self.item('second')]
+        session = self.session()
+        state = session.observe()
+        binding = {'owner': state['owner'], 'authority_revision': state['authority_revision'],
+            'menu': fingerprint(state['actions']),
+            'dependencies': {'reads': {'source': 's1', 'extra-evidence': 'old'}, 'writes': []}}
+        self.state['values']['extra-evidence'] = 'new'
+        actual = session.judgment_context(binding)
+        self.assertEqual(actual['binding']['dependencies']['reads']['extra-evidence'], 'new')
+        self.assertNotEqual(fingerprint(actual['binding']), fingerprint(binding))
+
     def test_authority_feedback_proof_reconstructs_retained_findings(self):
         session = OperatingSession.__new__(OperatingSession)
         from .decision_budget import DecisionBudget

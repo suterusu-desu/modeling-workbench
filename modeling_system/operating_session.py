@@ -242,6 +242,24 @@ class OperatingSession(WorkQueue):
             return None
         return review if review['basis'] == self._review_basis(task, state) else None
 
+    def judgment_context(self, binding):
+        """Fresh binding and active lane from one observation, never a cache.
+
+        Transport callbacks use this at each validation boundary instead of
+        observing the complete menu and then reading the same context again
+        solely for active_operations. Request/release and native execution
+        guards remain the caller's responsibility.
+        """
+        state = self.observe()
+        if fingerprint(state['actions']) != binding['menu']:
+            raise ValueError('Operating session menu changed during inference')
+        fresh = deepcopy(binding)
+        fresh['owner'] = state['owner']
+        fresh['authority_revision'] = state['authority_revision']
+        fresh['dependencies']['reads'] = {
+            key: state['values'].get(key) for key in binding['dependencies']['reads']}
+        return {'binding': fresh, 'active_operations': deepcopy(state['active_operations'])}
+
     def observe(self):
         state = super().observe()
         self.reviews = _reviews(self.service, self.directory)

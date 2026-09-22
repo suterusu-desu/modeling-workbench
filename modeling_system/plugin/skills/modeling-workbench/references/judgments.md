@@ -75,6 +75,21 @@ and finite numeric ranges. Native execution still checks its actual lane and
 expected geometry immediately before effects. A planning result cannot itself
 approve appearance, confer authority or prove a confidence value is correctness.
 
+For an operating-session transport, call `session.judgment_context(binding)` at
+each freshness boundary. It returns `binding` and `active_operations` from one
+fresh observation and refuses a changed action menu. Use both returned fields
+from that observation; a second context scan solely to read the lane repeats
+input hashing unnecessarily. This method does not cache state across requests,
+release a choice or replace the native execution guard. Compare the returned
+binding with the original packet before dispatch and when consuming the result.
+
+Successful dispatch and failure recovery are separate paths. A newly validated,
+durably accounted response needs fresh release, not a rewrite through completed
+response recovery. Interrupted or uncertain attempts still use their original
+recovery receipts and ledger. Measure whole selection, HTTP elapsed, fresh-context
+reads and local validation separately. HTTP elapsed includes client/network time;
+it is not a server-only inference measurement. Use ordinary work for timings.
+
 The reader has a narrow compatibility rule for observed Choice/Score responses whose
 complete probabilities are serialized in hundredths and total 0.99 or 1.01.
 It accepts at most 0.01 mass drift only when per-entry rounding intervals of
