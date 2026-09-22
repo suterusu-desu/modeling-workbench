@@ -170,6 +170,10 @@ instead of silently truncating relevant evidence. The full episode retains it.
 
 ## Astra feedback, recovery and learning
 
+Use [cooperative intervals](cooperation.md) to expose the exact review inbox and
+continue qualified unrelated work while reviewing. The ordinary session API also
+supports a finite supervised mailbox wait; no new controller or agent is needed.
+
 After examining actual matched views, bind the judgment to the current candidate:
 
 ```python

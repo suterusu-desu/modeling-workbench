@@ -7,6 +7,14 @@ Operate through the [Astra/Jev operating session](references/operating-session.m
 
 Use one active decision episode, the existing shared queue and the existing provider ledger. OperatingSession journals selected tasks through the common service, retains procedure context and typed evidence, and automatically supplies current findings and scoped visual feedback to the next Jev decision. Attach historical queue results without replay or retroactive qualification. Keep source, installed runtime, private adapter and actual use distinct. Python/CLI call the same service when an app MCP schema is stale. Use delivered verified capabilities immediately within current authorization.
 
+Use [cooperative intervals](references/cooperation.md) to keep qualified diagnosis,
+preparation, evidence selection and recovery available while Astra reviews. Compose
+existing catalogs in one session; read its exact review inbox and return findings
+at operation boundaries. Jev uses another applicable same-batch lane when one
+branch defers. Keep Astra for actual visual interpretation, conflicting evidence
+and missing mechanisms; useful independent work need not wait for every review.
+Any optional feedback wait stays finite and supervised within the authorized turn.
+
 Install the reusable package separately from the private character workspace. Start with [workspace setup](references/getting-started.md), [the retained method](references/method.md) and [native adapter qualification](references/native-adapters.md). Never infer anatomy, correspondence, guide admission or scene controls from another character. Fixed preservation and persistence run in code; cache exact applicable judgments and reuse unchanged evidence. The [controller](references/controller.md) keeps one native lane and reports actual progress in Blender.
 
 For repeated section/material-path fits and candidate follow-up work, use the [candidate pipeline](references/candidate-pipeline.md). It supplies reusable numerical fitting, explicit world/attachment displacement, bounded gap provenance, frozen stage catalogs, automatic verification/review preparation/retention and actual workload accounting. Keep native handlers and real image judgments in the existing OperatingSession.

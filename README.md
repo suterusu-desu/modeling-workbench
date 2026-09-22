@@ -42,6 +42,15 @@ Tools-only export is the default. Explicit workspace/evidence transfers remain p
 - **Jev** selects actions and recurring planning choices from qualified capabilities: priorities, methods, evidence collection, repair and recovery.
 - **The workbench** executes selected capabilities through one native Blender lane and retains dependencies, results and review feedback in a recoverable operating session.
 
+[Cooperative intervals](modeling_system/plugin/skills/modeling-workbench/references/cooperation.md)
+let Jev continue useful diagnosis, preparation and evidence work while Astra
+reviews a candidate. Compose existing catalogs into one session; its private
+review inbox links the exact question and evidence. Only dependent work waits.
+If one lane defers, another applicable Jev choice from the same batch can proceed
+with all its checks intact. Optional supervised waiting resumes on review arrival
+without repeated inference or Blender polling. Astra remains available for actual
+visual interpretation, conflicting evidence and new capabilities.
+
 The [persistent controller](modeling_system/plugin/skills/modeling-workbench/references/controller.md) supports sustained work with bounded budgets, asynchronous planning, compatible action batches and per-stage timings. The private adapter supplies native operations and the Blender status display. Saved findings and Astra's review feedback inform subsequent choices; visual acceptance remains separate from numerical checks.
 
 The [TypeSafe integration](modeling_system/plugin/skills/modeling-workbench/references/judgments.md) provides typed Jev judgments through the direct API. Your private workspace supplies credentials, usage accounting and the qualified action catalog. See the [operating-session contract](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) to connect the controller, queue, adapter and evidence records.

@@ -7,6 +7,15 @@ the workbench supplies truthful state, qualified action, recovery and accumulate
 methods. The unit of continuity is the existing **decision episode**, not a model
 conversation, isolated command, or second parallel planning ledger.
 
+Cooperation happens at evidence and operation boundaries, not a mandatory Astra
+turn after each action. Composed catalogs expose independent useful work beside
+candidate pipelines. Scoped deferral cannot starve another applicable Jev choice;
+explicit global deferral and exact operation checks still govern. The existing
+review journal feeds a private handoff index, with source-bound questions and
+evidence. Optional supervised mailbox waiting keeps the same owner controller
+available without inference or native polling. No scheduler or second writer is
+introduced. See the [operator procedure](modeling_system/plugin/skills/modeling-workbench/references/cooperation.md).
+
 Method relationships belong in that same work frontier: registered fitting,
 diagnostic and recovery operations resolve to currently eligible tasks. Jev can
 select a missing-condition remedy in the action batch, and ordinary execution

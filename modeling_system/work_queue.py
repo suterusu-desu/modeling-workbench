@@ -13,7 +13,7 @@ LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
 # Advance when selection question meanings or their composition change.
-SELECTION_POLICY = 'qualified-method-prerequisites-v9'
+SELECTION_POLICY = 'cooperative-lane-fallback-v10'
 LANE_QUESTIONS = {
     'diagnosis': 'Which offered observation best distinguishes the remaining plausible causes and changes the next edit?',
     'repair': 'Which offered qualified method best addresses the observed failure mechanism while preserving retained gains?',
@@ -181,13 +181,16 @@ class WorkQueue:
         write_json(self.path, self.record)
         return result
 
-    def run(self, *, max_steps, on_status=None):
+    def _controller(self, on_status=None):
         state = self._context()
         plan = {'objective': self.goal['objective'], 'authority_revision': state['authority_revision'],
                 'stage': state['stage'], 'reads': {'work_queue_scope': state['values']['work_queue_scope']}}
-        with PersistentController(self.directory / 'controller', owner=self.owner,
+        return PersistentController(self.directory / 'controller', owner=self.owner,
                 observe=self.observe, execute=self.execute, select=self.select,
-                initial_plan=plan, on_status=on_status) as controller:
+                initial_plan=plan, on_status=on_status)
+
+    def run(self, *, max_steps, on_status=None):
+        with self._controller(on_status) as controller:
             return controller.run(max_steps=max_steps)
 
 
@@ -288,7 +291,7 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
         fixed_lane = next(iter(grouped)) if len(grouped) == 1 else None
         if fixed_lane is None:
             decisions.append({'id': 'next_lane', 'type': 'choice',
-            'instructions': 'Which available work lane best advances the goal now? Prioritize dominant observed defects and resolving uncertainty that changes an edit; avoid unnecessary review or bookkeeping. Lane answers are independent; choose defer if the available work cannot usefully proceed.',
+            'instructions': 'Which available work lane best advances the goal now? Prioritize dominant observed defects and resolving uncertainty that changes an edit; avoid unnecessary review or bookkeeping. Lane answers are independent. If the preferred lane cannot proceed, code may use another applicable conditional lane choice from this batch, ordered by this priority distribution. Choose defer when none of the offered work should proceed without reasoning-owner input.',
             'options': [{'id': lane, 'description': {'lane': lane,
                 'facts': public.get('lane_facts', {}).get(lane, {}),
                 'available_operations': [public['descriptions'][a['id']] for a in offered]}}
@@ -383,13 +386,58 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                 resolved[lane] = answer
                 self.cache[lane_keys[lane]] = deepcopy(answer)
         lane = batch.get('fixed_lane') or answers['next_lane']['choice']
-        if lane == DEFER or lane in resolved and resolved[lane]['choice'] == DEFER:
-            choice = {'status': 'needs_review', 'reason': 'Jev found no applicable next operation',
-                    'evidence': [str(self.directory / 'last-batch.json')]}
-        elif lane not in resolved:
+        if lane != DEFER and lane not in resolved:
             raise ValueError('Priority selected an unavailable lane')
-        else:
-            choice = resolved[lane]['choice']
+        initial_lane = lane
+        probabilities = answers.get('next_lane', {}).get('probabilities', {})
+        ordered = [] if lane == DEFER else [lane] + sorted(
+            (other for other in resolved if other != lane),
+            key=lambda other: (-probabilities.get(other, 0), other))
+        choice = {'status': 'needs_review', 'reason': 'Jev found no applicable next operation',
+                  'evidence': [str(self.directory / 'last-batch.json')]}
+        call, checks, method_checks, method_route = None, {}, {}, None
+        deferred = []
+        for proposed_lane in ordered:
+            proposed = resolved[proposed_lane]['choice']
+            if proposed == DEFER:
+                deferred.append({'lane': proposed_lane, 'reason': 'No applicable operation in this lane'})
+                continue
+            candidate, details = self._resolve_action(batch, answers, grouped, proposed_lane, proposed)
+            method_checks.update(details['method_checks'])
+            call, checks, method_route = details['call'], details['checks'], details['method_route']
+            if not isinstance(candidate, str):
+                deferred.append({'lane': proposed_lane, 'task': proposed, **candidate})
+                choice = candidate
+                continue
+            choice, lane = candidate, details['lane']
+            break
+        if isinstance(choice, dict):
+            choice['deferred_lanes'] = deepcopy(deferred)
+        trace = {'binding': binding, 'judgments': answers,
+            'actions': [deepcopy(a) for offered in grouped.values() for a in offered],
+            'applicable_lane_choices': resolved, 'provider_receipt': result.get('provider_receipt'),
+            'question_count': len(batch['decisions']), 'selection_key': batch['selection_key'], 'choice': choice,
+            'policy': SELECTION_POLICY, 'packet': batch['packet'], 'decision_state': batch.get('decision_state'),
+            'question_revision': fingerprint(batch['decisions']), 'model': result.get('model'),
+            'usage': deepcopy(result.get('usage')),
+            'call': call, 'claim_checks': checks, 'method_checks': method_checks,
+            'method_route': method_route, 'retrieval': batch.get('retrieval'),
+            'cooperation': {'preferred_lane': initial_lane, 'selected_lane': lane if isinstance(choice, str) else None,
+                            'deferred_lanes': deferred, 'global_defer': initial_lane == DEFER},
+            'method_rankings': {lane: sorted(answer.get('probabilities', {}).items(), key=lambda row: (-row[1], row[0]))
+                                for lane, answer in resolved.items()},
+            'experience_rankings': sorted([{'index': int(key.rsplit('_', 1)[1]), 'judgment': value}
+                for key, value in answers.items() if key.startswith('experience_relevance_')],
+                key=lambda row: (-row['judgment']['score'], row['index']))}
+        write_json(self.directory / 'decisions' / (batch['selection_key'] + '.json'), trace)
+        write_json(self.directory / 'last-batch.json', trace)
+        # Exact choices, including scoped/global deferrals, survive restart.
+        self.cache = dict(list(self.cache.items())[-128:])
+        write_json(self.path, self.cache)
+        return choice
+
+    def _resolve_action(self, batch, answers, grouped, lane, choice):
+        """Validate one actual Jev choice, including a qualified scoped remedy."""
         call, checks, method_checks, method_route = None, {}, {}, None
         if isinstance(choice, str):
             from .method_reasoning import resolve_method, allowed_remedy
@@ -420,24 +468,5 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                 checks[name] = deepcopy(answers[key])
             if any(c['choice'] != 'supported' for c in checks.values()):
                 choice = {'status': 'needs_review', 'reason': 'A consequential claim lacks source support', 'claims': checks}
-        trace = {'binding': binding, 'judgments': answers,
-            'actions': [deepcopy(a) for offered in grouped.values() for a in offered],
-            'applicable_lane_choices': resolved, 'provider_receipt': result.get('provider_receipt'),
-            'question_count': len(batch['decisions']), 'selection_key': batch['selection_key'], 'choice': choice,
-            'policy': SELECTION_POLICY, 'packet': batch['packet'], 'decision_state': batch.get('decision_state'),
-            'question_revision': fingerprint(batch['decisions']), 'model': result.get('model'),
-            'usage': deepcopy(result.get('usage')),
-            'call': call, 'claim_checks': checks, 'method_checks': method_checks,
-            'method_route': method_route, 'retrieval': batch.get('retrieval'),
-            'method_rankings': {lane: sorted(answer.get('probabilities', {}).items(), key=lambda row: (-row[1], row[0]))
-                                for lane, answer in resolved.items()},
-            'experience_rankings': sorted([{'index': int(key.rsplit('_', 1)[1]), 'judgment': value}
-                for key, value in answers.items() if key.startswith('experience_relevance_')],
-                key=lambda row: (-row['judgment']['score'], row['index']))}
-        write_json(self.directory / 'decisions' / (batch['selection_key'] + '.json'), trace)
-        write_json(self.directory / 'last-batch.json', trace)
-        # Complete decisions (including deferrals) now survive restarts without
-        # another priority call. Different context still invalidates this result.
-        self.cache = dict(list(self.cache.items())[-128:])
-        write_json(self.path, self.cache)
-        return choice
+        return choice, {'lane': lane, 'call': call, 'checks': checks,
+                        'method_checks': method_checks, 'method_route': method_route}

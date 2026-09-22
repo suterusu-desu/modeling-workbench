@@ -1,4 +1,15 @@
-# Current operating integration: 0.2.36.1
+# Current operating integration: 0.2.37
+
+OperatingSession now composes useful work around review boundaries. Its private
+handoff index exposes exact candidate review bases and evidence; a supervised
+finite run can await review-file changes without repeated context, provider or
+native calls. Other eligible tasks continue first. Rejection, stale inputs,
+global deferral and uncertain effects keep their existing limits. Lane selection
+can consume another checked conditional Jev choice from the same batch when only
+the preferred branch defers. Existing queue/results, model checks, preservation,
+provider accounting and native ownership remain authoritative. Synthetic overlap,
+stop/resume, stale-input and refusal tests qualify the generic behavior; actual
+installed adoption and modeling benefit remain private evidence.
 
 Optional named prerequisites now accompany method applicability in the same
 request. Unexplained or inconsistent missing-condition judgments retain their

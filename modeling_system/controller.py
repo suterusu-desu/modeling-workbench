@@ -139,6 +139,10 @@ class PersistentController:
             'completed_operations': sum(a['status'] == 'completed' for a in self.record['attempts']),
             'inference_budget': (state or self.last_status).get('inference_budget'),
             'timings_ms': deepcopy(self.timings),
+            **({'cooperation': deepcopy(state['observations']['cooperation'])}
+               if state and 'cooperation' in state.get('observations', {}) else
+               {'cooperation': deepcopy(self.last_status['cooperation'])}
+               if 'cooperation' in self.last_status else {}),
             **details}
         self.last_status = deepcopy(current)
         write_json(self.directory / 'status.json', current)

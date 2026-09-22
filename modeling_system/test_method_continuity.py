@@ -134,12 +134,14 @@ class MethodReasoningTests(unittest.TestCase):
         self.selector()(self.snapshot,self.actions,self.plan)
         self.assertEqual(len(self.calls),2)
 
-    def test_ready_method_executes_and_unsupported_method_without_remedy_defers(self):
+    def test_ready_method_executes_and_unsupported_method_yields_to_other_chosen_lane(self):
         self.mode='ready';self.assertEqual(self.selector()(self.snapshot,self.actions,self.plan),'fit')
         self.actions[0]['decision']['method_checks']['remedies']=[];self.mode='unknown'
         result=self.selector()(self.snapshot,self.actions,self.plan)
-        self.assertEqual(result['status'],'needs_review')
-        self.assertEqual(result['method_checks']['fit']['status'],'unmet')
+        self.assertEqual(result,'inspect')
+        trace=read_json(self.root/'last-batch.json')
+        self.assertEqual(trace['method_checks']['fit']['status'],'unmet')
+        self.assertEqual(trace['cooperation']['deferred_lanes'][0]['task'],'fit')
 
     def test_method_remedy_resolves_actual_eligible_task_without_fixed_task_id(self):
         self.actions[0]['decision']['method_checks'].update(remedies=[], remedy_methods=['dependency_diagnosis'])
@@ -147,10 +149,11 @@ class MethodReasoningTests(unittest.TestCase):
         self.assertEqual(self.selector()(self.snapshot,self.actions,self.plan),'inspect')
         self.assertEqual(len(self.calls),1)
 
-    def test_unavailable_method_remedy_defers_without_fabricating_work(self):
+    def test_unavailable_method_remedy_keeps_other_real_lane_choice(self):
         self.actions[0]['decision']['method_checks'].update(remedies=[], remedy_methods=['unavailable'])
         result = self.selector()(self.snapshot,self.actions,self.plan)
-        self.assertEqual(result['status'],'needs_review')
+        self.assertEqual(result,'inspect')
+        self.assertIsNone(read_json(self.root/'last-batch.json')['method_route'])
         self.assertFalse(any(q['id'].endswith('_remedy') for q in self.calls[0]))
 
     def test_same_batch_names_the_missing_prerequisite_and_routes_its_remedy(self):

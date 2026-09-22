@@ -100,6 +100,7 @@ def inspect_session(service, directory):
             'recovery': 'Reconcile original operation handle; never replay uncertain effects'}
             for key, row in queue['results'].items()},
         'reviews': reviews,
+        'cooperation': read_json(Path(directory) / 'handoff.json') if (Path(directory) / 'handoff.json').exists() else None,
         'metrics': session_metrics(directory),
         'decision_outcomes': decision_outcomes(directory, reviews),
         'detail': {'episode': binding['episode'], 'operation': 'decision_workspace'}}
@@ -164,6 +165,11 @@ class OperatingSession(WorkQueue):
                 or episode['intent']['owner'] != owner):
             raise ValueError('An active decision episode owned by the native owner is required')
         return episode
+
+    def run(self, *, max_steps, on_status=None, feedback_timeout=0, on_handoff=None, cancelled=None):
+        from .cooperation import run_cooperatively
+        return run_cooperatively(self, max_steps=max_steps, on_status=on_status,
+            feedback_timeout=feedback_timeout, on_handoff=on_handoff, cancelled=cancelled)
 
     def _context(self):
         state = super()._context()
@@ -347,6 +353,8 @@ class OperatingSession(WorkQueue):
         if not ready and blocked:
             state['attention'] = {'reason': 'Resolve the scoped input, evidence or appearance question; saved work remains available',
                                   'tasks': deepcopy(blocked)}
+        from .cooperation import review_inbox
+        state['observations']['cooperation'] = review_inbox(self, state)
         return state
 
     def _feedback(self, state):
