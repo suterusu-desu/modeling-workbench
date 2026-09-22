@@ -41,17 +41,21 @@ class CandidatePipeline:
     before expensive verification (default) and before retention.
     """
     def __init__(self, directory, *, revision, candidates, verify, retain,
-                 prepare=None, review=None, early_review=True):
+                 prepare=None, review=None, early_review=True, preservation=None, preservation_adapter=None):
         if (not revision or type(early_review) is not bool
                 or not all(callable(f) for f in (candidates, verify, retain))):
             raise ValueError('Pipeline revision and explicit early-review policy required')
         self.path = Path(directory) / 'candidate-pipeline.json'
         self.revision, self.early_review = revision, early_review
+        self.preservation, self.preservation_adapter = preservation, preservation_adapter
         self.factories = {k: v for k, v in [('prepare', prepare), ('candidate', candidates),
             ('verify', verify), ('review', review), ('retain', retain)] if v is not None}
         if any(not callable(v) for v in self.factories.values()):
             raise ValueError('Executable stage factories required')
         self.binding = {'revision': revision, 'stages': list(self.factories), 'early_review': early_review}
+        if preservation:
+            if preservation_adapter not in preservation.adapters: raise ValueError('Qualified pipeline preservation adapter required')
+            self.binding['preservation'] = {'policy': preservation.revision, 'adapter': preservation_adapter}
 
     def adopt_completed_candidate(self, task, outcome):
         """Attach original settled evidence, without rewriting a task or replaying it."""
@@ -88,6 +92,10 @@ class CandidatePipeline:
                 fixed = stage in ('verify', 'review', 'retain')
                 if fixed and len(supplied) != 1:
                     raise ValueError('Fixed follow-up stages require exactly one operation')
+                if self.preservation:
+                    supplied = [self.preservation.bind_task(item,
+                        stage={'candidate': 'apply'}.get(stage, stage), adapter=self.preservation_adapter,
+                        previous=previous) for item in supplied]
                 for item in supplied:
                     contract = item['workbench']
                     if stage == 'candidate' and contract['profile'] != 'appearance_edit':
@@ -104,6 +112,12 @@ class CandidatePipeline:
                         item['requires'][parent['id']] = ['completed']
                         contract.setdefault('consumes', {})[parent['id']] = list(
                             PROFILES[parent['workbench']['profile']]['outputs'])
+                        if self.preservation:
+                            consumed = contract['consumes'][parent['id']]
+                            if stage in ('verify', 'review') and 'preservation' in consumed:
+                                consumed.remove('preservation')  # This operation can acquire the missing evidence.
+                            if stage in ('candidate', 'retain') and 'preservation' not in consumed:
+                                consumed.append('preservation')
                         if stage == 'retain' or stage == 'verify' and self.early_review:
                             contract['visual_review'] = parent['id']
                 prior_ids = {item['id'] for rows in record['stages'].values() for item in rows}

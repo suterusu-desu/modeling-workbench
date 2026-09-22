@@ -114,12 +114,15 @@ class OperatingSession(WorkQueue):
     Provider transport/budget remain workspace callbacks supplied to judge.
     """
     def __init__(self, directory, *, service, episode, owner, goal, observe_context,
-                 catalog, handlers, judge, public_projection, report=None, experience=None, budget=None):
+                 catalog, handlers, judge, public_projection, report=None, experience=None, budget=None,
+                 preservation=None, require_preservation=False):
         self.service, self.episode = service, episode
         self.report_adapter = report
         self.private_handlers = dict(handlers)
         self.private_handlers.setdefault('service', self._service)
         self.projection = public_projection
+        self.preservation = preservation
+        self.require_preservation = require_preservation
         from .decision_budget import decision_budget
         self.decision_budget = decision_budget(budget)
         from .retained_context import RetainedContext
@@ -132,6 +135,9 @@ class OperatingSession(WorkQueue):
             select=self.selector, budget=self.decision_budget)
         binding = {'schema_version': 1, 'workspace': str(service.workspace),
             'episode': episode, 'owner': owner, 'goal': fingerprint(goal)}
+        if preservation or require_preservation:
+            binding['preservation'] = {'required': bool(require_preservation),
+                'policy': preservation.revision if preservation else None}
         path = _binding_path(directory)
         if path.exists():
             retained = read_json(path)
@@ -169,6 +175,8 @@ class OperatingSession(WorkQueue):
             'episode': self.episode, 'scope': episode['intent']['scope'],
             'requirements': context.get('requirements', []),
             'next_question': context.get('next_question'), 'profiles': PROFILES})
+        if self.preservation:
+            state['values'].update(self.preservation.context_values())
         return state
 
     def _catalog(self, state, outcomes):
@@ -268,6 +276,16 @@ class OperatingSession(WorkQueue):
         for action in state['actions']:
             item = self.items[action['id']]
             contract = item['workbench']
+            if (self.require_preservation and self.preservation is None
+                    and (contract['profile'] in ('appearance_edit', 'retention') or contract.get('preservation'))):
+                blocked[action['id']] = {'preservation': 'Bind the required established outcomes for this affected operation'}
+                continue
+            if self.preservation:
+                try:
+                    self.preservation.preflight(item, self.record['results'])
+                except (ValueError, KeyError, OSError) as error:
+                    blocked[action['id']] = {'preservation': str(error)}
+                    continue
             preflight = getattr(self.private_handlers[item['handler']], 'preflight', None)
             if preflight is not None:
                 try:
@@ -305,11 +323,16 @@ class OperatingSession(WorkQueue):
         state['actions'] = ready
         feedback = self._feedback(state)
         state['observations']['workbench'] = feedback
+        if self.preservation:
+            state['observations']['required_preservation'] = self.preservation.public()
+            state['values']['operating_preservation'] = fingerprint(state['observations']['required_preservation'])
         state['values']['operating_feedback'] = fingerprint(feedback)
         state['values']['operating_observation'] = fingerprint(state.get('public_state', {}))
         for action in ready:
             action['reads'].update({k: state['values'][k]
                 for k in ('operating_intent', 'operating_feedback', 'operating_observation')})
+            if self.preservation:
+                action['reads']['operating_preservation'] = state['values']['operating_preservation']
         if (self.experience and ready and not any(action.get('required') for action in ready)
                 and (len(ready) > 1 or ready[0].get('select_with_jev'))):
             from .retained_context import RetainedContext
@@ -370,6 +393,8 @@ class OperatingSession(WorkQueue):
     def _project(self, snapshot, actions, plan):
         projected = deepcopy(self.projection(snapshot, actions, plan))
         projected['state']['workbench'] = deepcopy(snapshot['observations']['workbench'])
+        if 'required_preservation' in snapshot['observations']:
+            projected['state']['required_preservation'] = deepcopy(snapshot['observations']['required_preservation'])
         if 'experience' in snapshot['observations']:
             experience = deepcopy(snapshot['observations']['experience'])
             projected['state']['retained_experience'] = experience
@@ -427,7 +452,14 @@ class OperatingSession(WorkQueue):
                 check['evidence'].append(detail)
             findings = [{'kind': 'failure', 'scope': 'report projection',
                 'summary': 'The operation returned and its complete report is retained. The report exceeds the public context budget; review its full limitations and repair the compact projection before dependent use. Do not repeat the operation.'}]
-        required = PROFILES[item['workbench']['profile']]['outputs']
+        required = list(PROFILES[item['workbench']['profile']]['outputs'])
+        if self.preservation and self.preservation.relevant(item):
+            assessment = result.get('preservation')
+            evidence = assessment.get('evidence', []) if assessment else []
+            checks['preservation'] = {'status': assessment['status'] if assessment else 'unknown',
+                'evidence': [pin_link(self.service, {'kind': 'file', 'path': ref['path'],
+                    'role': 'Source-bound evaluated preservation measurement'}) for ref in evidence]}
+            if 'preservation' not in required: required.append('preservation')
         missing = [key for key in required if checks.get(key, {}).get('status') != 'pass']
         return {'checks': checks, 'findings': deepcopy(findings),
             'report_needs_repair': overflow,
@@ -462,11 +494,16 @@ class OperatingSession(WorkQueue):
             write_json(self.path, self.record)
 
         def run():
+            if (self.require_preservation and self.preservation is None
+                    and (contract['profile'] in ('appearance_edit', 'retention') or contract.get('preservation'))):
+                raise ValueError('Affected operation has no bound required preservation policy')
             # Existing procedure and policy lookup stays in the common service.
             decision_context = self.service.capture_operation_context(
                 contract.get('stage', item['lane']), {'mechanism': contract['method']})
             started = time.perf_counter()
-            result = self.private_handlers[item['handler']](item, context)
+            prepared, consumption = (self.preservation.prepare(item, self.record['results'])
+                if self.preservation else (item, None))
+            result = self.private_handlers[item['handler']](prepared, context)
             if not isinstance(result, dict) or result.get('status') not in SETTLED | {'needs_reconciliation'}:
                 raise ValueError('Capability must return an explicit execution disposition')
             # Persist the returned effect before report validation. A report/index
@@ -478,6 +515,15 @@ class OperatingSession(WorkQueue):
             if trace:
                 result['decision'] = {'selection_key': trace['selection_key'], 'call': trace.get('call')}
             write_json(self.service.store.root / 'calls' / handle / 'capability-result.json', result)
+            if consumption is not None:
+                try:
+                    result['preservation'] = self.preservation.assess(item, result, consumption)
+                except (ValueError, KeyError, OSError, TypeError) as error:
+                    # The original effect was saved. Missing or invalid evidence
+                    # blocks promotion, never repeats the native operation.
+                    result['preservation'] = {'policy': self.preservation.revision, 'status': 'unknown',
+                        'evidence': [], 'reason': str(error)}
+                write_json(self.service.store.root / 'calls' / handle / 'preservation-result.json', result['preservation'])
             result['workbench'] = self._report(item, result, context)
             result['workbench']['context_record'] = decision_context['context_record']
             result['workbench']['capability'] = contract['capability']
@@ -495,7 +541,7 @@ class OperatingSession(WorkQueue):
             raise ValueError('Review requires an actual completed result')
         return self._review_basis(task, state)
 
-    def record_review(self, task, *, expected_basis, judgment, evidence, lesson=None):
+    def record_review(self, task, *, expected_basis, judgment, evidence, lesson=None, experience=None):
         """Record actual scoped visual interpretation and optional conditional lesson.
 
         Judgment and lesson text are deliberately public, as in current feedback.
@@ -520,7 +566,17 @@ class OperatingSession(WorkQueue):
         write_json(self.directory / 'reviews' / (result['operation_handle'] + '.json'), result)
         retain_review(self.service, self.directory, result)
         self._account_review(result)
+        if experience is not None:
+            self.record_review_experience(result['operation_fact'], **experience)
         return result
+
+    def record_review_experience(self, review_fact, **experience):
+        """Source-linked close-out after the actual saved review; safe to resume."""
+        from .learning import record_method_experience
+        fact = self.service.store.get(review_fact, 'operation_fact')
+        if fact['intent']['episode'] != self.episode:
+            raise ValueError('Review belongs to another episode')
+        return record_method_experience(self.service, review_fact=review_fact, **experience)
 
     def begin_review(self, task):
         """Open actual evidence and its timing interval together; no native call.

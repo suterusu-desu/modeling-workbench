@@ -263,6 +263,7 @@ class RetainCheckpoint:
         _clean_source(live, owner, target_ref)
         write_json(folder/'visible-live.json', live)
         result = {'status': 'completed', 'file': str(target), 'sha256': target_ref['sha256'],
+            'subject': target_ref,
             'evidence': files+[str(folder/'visible-live.json')], 'native_stages_ms': timings, 'native_calls': counts,
             'checkpoint_open_reused': already, 'user_appearance_accepted': False,
             'retention_transaction': self.transaction,

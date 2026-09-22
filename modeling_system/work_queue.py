@@ -13,7 +13,7 @@ LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
 # Advance when selection question meanings or their composition change.
-SELECTION_POLICY = 'typed-capabilities-and-evidence-v6'
+SELECTION_POLICY = 'typed-capabilities-and-preserved-outcomes-v7'
 LANE_QUESTIONS = {
     'diagnosis': 'Which offered observation best distinguishes the remaining plausible causes and changes the next edit?',
     'repair': 'Which offered qualified method best addresses the observed failure mechanism while preserving retained gains?',
@@ -294,19 +294,22 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
         # Relevance is independently useful for subsequent context reuse. All
         # passages are already visible to action questions in this same batch;
         # no question assumes another question's answer.
-        call_mappings, claim_mappings = {}, {}
+        call_mappings, claim_mappings, method_mappings = {}, {}, {}
         from .capability_calls import argument_questions
         from .decision_evidence import claim_questions
+        from .method_reasoning import method_questions
         for ordinal, action in enumerate(actions):
             described = {**action, 'public_description': public['descriptions'][action['id']]}
             try:
                 arguments, argument_map = argument_questions(described, ordinal)
                 claims, claim_map = claim_questions(described, ordinal)
+                method, method_map = method_questions(described, ordinal, actions, public['descriptions'])
             except (ValueError, KeyError, TypeError) as error:
                 raise SelectionNotDispatched(str(error), completed_evidence=retrieval_dispatched) from error
-            decisions.extend(arguments + claims)
+            decisions.extend(arguments + claims + method)
             call_mappings[action['id']] = argument_map
             claim_mappings[action['id']] = claim_map
+            method_mappings[action['id']] = method_map
         ranked_passages = public.get('rank_experience', [])[:max(0, self.budget.max_questions - len(decisions))]
         for position, passage in enumerate(ranked_passages):
             decisions.append({'id': 'experience_relevance_' + str(passage['index']), 'type': 'score',
@@ -324,6 +327,7 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
             'binding': binding, 'grouped': grouped, 'resolved': resolved,
             'lane_keys': lane_keys, 'decisions': decisions, 'fixed_lane': fixed_lane,
             'call_mappings': call_mappings, 'claim_mappings': claim_mappings,
+            'method_mappings': method_mappings,
             'retrieval': retrieval, 'decision_state': public['state']}
         # Retain the exact fan-out and cached branches before any provider call.
         # Recovery never has to reconstruct questions from a later cache state.
@@ -384,7 +388,26 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
             raise ValueError('Priority selected an unavailable lane')
         else:
             choice = resolved[lane]['choice']
-        call, checks = None, {}
+        call, checks, method_checks, method_route = None, {}, {}, None
+        if isinstance(choice, str):
+            from .method_reasoning import resolve_method
+            initial = choice
+            evaluated = resolve_method(batch.get('method_mappings', {}).get(choice, {}), answers)
+            method_checks[choice] = evaluated
+            if evaluated['status'] == 'unmet':
+                remedy = evaluated['remedy']
+                offered = {a['id']: a for rows in grouped.values() for a in rows}
+                allowed = offered[initial].get('decision', {}).get('method_checks', {}).get('remedies', [])
+                if remedy in offered and remedy != initial and remedy in allowed:
+                    remedial = resolve_method(batch.get('method_mappings', {}).get(remedy, {}), answers)
+                    method_checks[remedy] = remedial
+                    if remedial['status'] == 'ready':
+                        choice = remedy; lane = offered[remedy]['lane']
+                        method_route = {'proposed': initial, 'selected': remedy, 'unmet': evaluated['unmet']}
+                    else:
+                        choice = {'status': 'needs_review', 'reason': 'The scoped remedy also lacks a required condition', 'method_checks': method_checks}
+                else:
+                    choice = {'status': 'needs_review', 'reason': 'Resolve only the selected method prerequisite', 'method_checks': method_checks}
         if isinstance(choice, str):
             action = next(a for a in grouped[lane] if a['id'] == choice)
             from .capability_calls import resolve_call
@@ -403,7 +426,8 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
             'policy': SELECTION_POLICY, 'packet': batch['packet'], 'decision_state': batch.get('decision_state'),
             'question_revision': fingerprint(batch['decisions']), 'model': result.get('model'),
             'usage': deepcopy(result.get('usage')),
-            'call': call, 'claim_checks': checks, 'retrieval': batch.get('retrieval'),
+            'call': call, 'claim_checks': checks, 'method_checks': method_checks,
+            'method_route': method_route, 'retrieval': batch.get('retrieval'),
             'method_rankings': {lane: sorted(answer.get('probabilities', {}).items(), key=lambda row: (-row[1], row[0]))
                                 for lane, answer in resolved.items()},
             'experience_rankings': sorted([{'index': int(key.rsplit('_', 1)[1]), 'judgment': value}

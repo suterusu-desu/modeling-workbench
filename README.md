@@ -18,6 +18,14 @@ Local gains or numerical checks cannot justify accumulating visible regressions.
 Failed candidates remain recoverable without becoming the next working baseline;
 visual interpretation and the user's judgment remain authoritative.
 
+[Required outcomes and retained methods](modeling_system/plugin/skills/modeling-workbench/references/preservation-and-lessons.md)
+carry achieved shape and motion through preparation, application and retention
+as source-bound requirements outside ranked history. Qualified adapters consume
+constraints and read evaluated measurements; missing or failed checks block
+promotion. Jev can route a relevant prerequisite in the same decision batch.
+Reviewed techniques and failures survive restart with sources, conditions,
+limits and explicit correction history.
+
 Reusable tools and an evidence-based workflow for character modeling: exact recorded geometry, matched observations, guide/depth qualification, coupled response analysis, recoverable trials and retained learning.
 
 [Start here](modeling_system/plugin/skills/modeling-workbench/references/getting-started.md) | [Retained method](modeling_system/plugin/skills/modeling-workbench/references/method.md) | [Native adapters](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md) | [Agent skill](modeling_system/plugin/skills/modeling-workbench/SKILL.md)

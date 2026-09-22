@@ -94,6 +94,64 @@ def record_lesson(service, *, lesson, evidence):
         'origin': 'authored lesson', 'claims': 'Scoped observation; no automatic method promotion'})
 
 
+def record_method_experience(service, *, lesson, evidence, knowledge_status, candidate_disposition,
+                             interpretation, protected_outcomes=(), supersedes=(), authority='reviewer',
+                             classification=None, review_fact=None):
+    """Idempotent reviewed import/close-out, with knowledge and candidate separate.
+
+    Demonstrated knowledge may concern a rejected candidate. Interpretations are
+    explicit source-backed reviewer input, never automatic aesthetic judgments.
+    Model classification is advisory until supplied by that reviewer. A known
+    fact can be recorded directly without another provider call.
+    """
+    lesson = validate_lesson(lesson)
+    if (knowledge_status not in ('demonstrated', 'conditional', 'unverified', 'superseded')
+            or candidate_disposition not in ('scoped_success', 'failed', 'rejected', 'unresolved')
+            or authority not in ('reviewer', 'user', 'historical_curator')
+            or not interpretation or not evidence
+            or classification not in (None, 'recurring_failure', 'supported_lesson', 'unresolved_hypothesis')):
+        raise ValueError('Explicit knowledge status, candidate disposition and source-backed interpretation required')
+    if classification == 'supported_lesson' and knowledge_status != 'demonstrated':
+        raise ValueError('A supported classification requires demonstrated scoped evidence')
+    if review_fact is not None:
+        fact = service.store.get(review_fact, 'operation_fact')
+        if fact['intent']['operation'] != 'review_modeling_task':
+            raise ValueError('Post-review experience needs an actual completed visual review fact')
+        actual = fact['outcome']['result']['judgment']['disposition']
+        if actual == 'rejected' and candidate_disposition == 'scoped_success':
+            raise ValueError('Lesson classification cannot reverse the actual rejected review')
+    pinned = [pin_link(service, link) for link in evidence]
+    protected = [pin_link(service, link) for link in protected_outcomes]
+    identity = fingerprint({'mechanism': lesson['mechanism'].strip().casefold(),
+        'evidence': sorted(pinned, key=canonical), 'protected_outcomes': sorted(protected, key=canonical)})
+    public = {'lesson': lesson, 'knowledge_status': knowledge_status,
+        'candidate_disposition': candidate_disposition, 'classification': classification,
+        'interpretation': interpretation}
+    prior = dict(service.store.records(('modeling_experience',)))
+    for key in supersedes:
+        old = prior.get(key)
+        if old is None: raise ValueError('Explicit correction must identify existing experience')
+        if old.get('authority') == 'user' and old['public'].get('candidate_disposition') == 'rejected' and authority != 'user':
+            raise ValueError('Only new user authority can supersede an explicit user rejection')
+    for key, old in prior.items():
+        if old.get('continuity_identity') == identity:
+            if old['public'] == public and old.get('authority') == authority and old.get('review_fact') == review_fact:
+                return key
+            if key not in supersedes and key not in {v for r in prior.values() for v in r.get('supersedes', [])}:
+                raise ValueError('Changed interpretation requires explicit correction provenance')
+    return service.store.put('modeling_experience', {'public': public, 'evidence': pinned,
+        'protected_outcomes': protected, 'continuity_identity': identity, 'authority': authority,
+        'supersedes': list(supersedes), 'review_fact': review_fact,
+        'origin': 'reviewed source-backed experience',
+        'claims': 'Knowledge status and candidate outcome are separate; no automatic appearance or method promotion'})
+
+
+def import_method_experiences(service, records):
+    """Import reviewed records once; raw historical prose is never auto-promoted."""
+    return {'records': [record_method_experience(service, **row) for row in records],
+            'native_calls': 0, 'provider_calls': 0}
+
+
 def retain_review(service, directory, review):
     """Index an existing immutable review, without reopening its scene or queue."""
     directory = Path(directory)
@@ -147,7 +205,10 @@ def experience_rows(store):
     Old immutable records stay available; a changed candidate is a different case.
     """
     latest, lessons = {}, []
-    for key, value in store.records(('modeling_experience',)):
+    records = list(store.records(('modeling_experience',)))
+    superseded = {key for _, value in records for key in value.get('supersedes', [])}
+    for key, value in records:
+        if key in superseded: continue  # Original immutable evidence remains readable.
         if 'identity' not in value:
             lessons.append((key, value))
             continue

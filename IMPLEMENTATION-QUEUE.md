@@ -1,4 +1,14 @@
-# Current operating integration: 0.2.34
+# Current operating integration: 0.2.35
+
+Established guide-fit outcomes are now source-bound requirements carried by
+OperatingSession/CandidatePipeline outside ranked history. Pinned private
+adapters bind real constraint inputs and re-read evaluated evidence; numeric
+rules override task pass flags. Relevant missing coverage blocks promotion,
+while diagnosis can acquire it. Workspace bridges can require the policy for
+affected edits without blocking unrelated analysis. Jev can judge method and
+coverage conditions and select the relevant offered remedy in the same batch.
+Reviewed method imports deduplicate exact provenance, separate demonstrated
+knowledge from candidate success and preserve explicit correction/user authority.
 
 Reviewed checkpoint retention has an opt-in synchronous native transaction.
 Qualified adapters preserve fresh boundary checks, restoration-content evidence,
@@ -53,6 +63,8 @@ targets are integrated below; installation and actual use remain separately evid
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Retrieved lessons did not enforce preservation of achieved regional outcomes | Required source-bound outcomes, pinned constraint adapters, actual-result measurements and pipeline inheritance | Synthetic motion/collateral/source/result/tamper tests; private geometric meaning and whole-region appearance still require qualification |
+| Conditional lessons depended on remembering old sessions | Durable reviewed imports and post-review close-out with independent knowledge/candidate status and explicit corrections | Idempotence, fresh-store retrieval and user-rejection precedence; unreviewed inventories are not promoted automatically |
 | Reviewed retention repeated full source scans and an unused bootstrap export across fixed housekeeping calls | Qualified synchronous retention with fresh boundary observations, runtime-only restoration and durable no-replay phases | Stale inputs/owners, partial effects, lost receipts, target conflicts and historical-state reuse tested; native speed gains remain unmeasured |
 | Index-space smoothing introduced an affine-plane defect on a nonuniform chart | Metric-aware planar FEM stiffness and lumped mass through ordinary ArrayPreparation | Analytic energy, affine interior, boundary flux, unit scaling, winding and invalid-domain checks; no appearance or intrinsic 3D claim |
 | Useful custom preparation measurements were retained but absent from compact findings | Explicit public_metrics projection, with collision and finite-value checks before output saving | Opt-in values reach findings; private raw detail stays out; malformed reports settle without native effects |

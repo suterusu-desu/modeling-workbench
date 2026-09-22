@@ -128,6 +128,23 @@ from evidence rather than replayed, and no guard crosses an asynchronous boundar
 
 ## Preserve the successful modeling process
 
+Required achieved outcomes belong to the operation contract, separately from
+ranked historical experience. A preservation policy pins baseline, guide, current
+construction, constraints and region/pose measurement cells. Qualified adapters
+put the constraints into real executable arguments and read final evaluated
+evidence. The session applies numeric rules and checks the actual result identity;
+neither task pass flags nor model confidence can waive an unmet requirement.
+Pipeline stages carry the same outcomes forward. Missing verification routes to
+evidence acquisition; promotion remains blocked until the relevant result passes.
+
+Jev's conditional method/coverage judgments share the existing decision batch
+and cache. They can select a qualified prerequisite or recovery operation, not
+invent measurements or judge unseen likeness. Known facts remain code checks.
+Reviewed learning separates knowledge status from candidate disposition: a
+rejected candidate can demonstrate a useful failure mechanism. Source-linked
+imports and post-review records survive fresh sessions with explicit correction
+provenance and user authority; old records remain available.
+
 The workbench loop remains current situation -> causal diagnosis -> qualified
 support -> recoverable guided correction -> early matched visual comparison ->
 relevant motion and independent reopen -> retained gain and method. These are

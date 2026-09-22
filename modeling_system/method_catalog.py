@@ -32,6 +32,8 @@ class MethodCatalog:
                                   'method': deepcopy(method['description'])}
             if choose:
                 row['select_with_jev'] = True
+                if method.get('method_checks'):
+                    row.setdefault('decision', {})['method_checks'] = deepcopy(method['method_checks'])
         return rows
 
     def __call__(self, state, previous=None):
@@ -103,6 +105,7 @@ class ParameterizedCatalog(MethodCatalog):
                 return build
             methods.append({'id': binding['id'], 'description': binding['description'],
                             'conditions': binding.get('conditions', {}),
+                            'method_checks': deepcopy(binding.get('method_checks', {})),
                             **{stage: bind_factory(fn) for stage, fn in factories.items()}})
         super().__init__(methods, context=context, budget=budget)
 
