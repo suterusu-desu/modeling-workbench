@@ -248,7 +248,15 @@ class OperatingSession(WorkQueue):
         ready = []
         blocked = state['observations']['blocked']
         for action in state['actions']:
-            contract = self.items[action['id']]['workbench']
+            item = self.items[action['id']]
+            contract = item['workbench']
+            preflight = getattr(self.private_handlers[item['handler']], 'preflight', None)
+            if preflight is not None:
+                try:
+                    preflight(deepcopy(item))
+                except ValueError as error:
+                    blocked[action['id']] = {'preflight': str(error)}
+                    continue
             missing = []
             for task, checks in contract.get('consumes', {}).items():
                 prior = self.record['results'].get(task, {}).get('result', {}).get('workbench', {})
@@ -296,7 +304,7 @@ class OperatingSession(WorkQueue):
             for action in ready:
                 action['reads']['operating_experience'] = record['revision']
         if not ready and blocked:
-            state['attention'] = {'reason': 'Resolve the scoped missing evidence or appearance question; saved work remains available',
+            state['attention'] = {'reason': 'Resolve the scoped input, evidence or appearance question; saved work remains available',
                                   'tasks': deepcopy(blocked)}
         return state
 

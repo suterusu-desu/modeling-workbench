@@ -257,6 +257,19 @@ class OperatingTests(unittest.TestCase):
         raw = read_json(self.service.store.root/'calls'/entry['operation_handle']/'capability-result.json')
         self.assertEqual(raw['count'], 3); self.assertEqual(raw['metrics'], [.1, .2])
 
+    def test_handler_preflight_blocks_invalid_task_before_inference_or_operation(self):
+        from .native_recipes import NativeJob
+        item = self.item('native', 'inspection', native=True); item['payload'] = {'job': {}}
+        item['workbench']['bindings']['adapter'] = ['adapter']
+        self.items = [item]
+        session = self.session(execute=NativeJob(self.service, self.root/'native'))
+        before = list((self.service.store.root/'calls').glob('*/intent.json'))
+        self.assertEqual(session.run(max_steps=2)['status'], 'needs_review')
+        self.assertEqual(self.batches, [])
+        self.assertEqual(list((self.service.store.root/'calls').glob('*/intent.json')), before)
+        self.assertIn('blender', session.observe()['observations']['blocked']['native']['preflight'])
+        self.assertFalse((self.root/'native').exists())
+
     def test_oversized_report_keeps_known_effect_and_repairs_without_replay(self):
         first = self.item('work')
         self.items = [first, self.item('use', requires={'work': ['completed']}, consumes={'work': ['analysis']})]

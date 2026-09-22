@@ -57,6 +57,8 @@ keep long reports recoverable without repeating completed work. Complete project
 triangle contact catches intersections missed by sparse samples. Qualified native
 jobs can replace broad scene exports with explicit feature checks and record
 setup, execution and evidence timings; actual savings depend on the workload.
+Native job configuration is checked before Jev selection, so missing runner
+fields can be corrected without spending a decision or opening Blender.
 
 [Typed capability control](modeling_system/plugin/skills/modeling-workbench/references/typed-control.md)
 lets Jev select qualified operation arguments alongside the operation itself.

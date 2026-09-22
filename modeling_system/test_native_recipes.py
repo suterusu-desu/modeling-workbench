@@ -7,7 +7,7 @@ import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
-from .native_recipes import RetainCheckpoint, NativeJob
+from .native_recipes import RetainCheckpoint, NativeJob, validate_native_job
 from .store import Store
 
 
@@ -102,9 +102,11 @@ class RetentionTests(unittest.TestCase):
             (output/'receipt.json').write_text(json.dumps({'status': 'completed', 'source_unchanged': True,
                 'source_sha256_before': self.refs['source']['sha256'], 'source_sha256_after': self.refs['source']['sha256']}))
             source = self.refs['source']
+            checkpoint = self.root/(suffix+'.blend'); checkpoint.write_bytes(Path(source['path']).read_bytes())
             item = {'id': suffix, 'reads': {'source': source['sha256']}, 'description': 'Qualified isolated job',
                 'workbench': {'native': True}, 'payload': {'runner': source, 'live_source': source,
-                    'job': {'input': source['path'], 'source_sha256': source['sha256'],
+                    'job': {'blender': 'qualified-blender', 'output_root': str(self.root/'output'),
+                            'input': str(checkpoint), 'source_sha256': source['sha256'],
                             'script': source['path'], 'dependency_hashes': {source['path']: source['sha256']}}}}
             def launch(*args, **kwargs):
                 kwargs['stdout'].write(json.dumps({'status': 'completed', 'output': str(output)})+'\n')
@@ -118,6 +120,24 @@ class RetentionTests(unittest.TestCase):
             else:
                 self.assertTrue(result['worker_timing_status'].startswith('invalid'))
                 self.assertEqual(set(result['native_stages_ms']), {'isolated_job'})
+
+    def test_missing_runner_field_refuses_before_live_access_or_output(self):
+        item = {'workbench': {'native': True}, 'payload': {'job': {'script': 'script.py'}}}
+        with self.assertRaisesRegex(ValueError, 'blender'):
+            NativeJob(self.service, self.root/'jobs')(item, self.context)
+        self.assertEqual(self.calls, []); self.assertFalse((self.root/'jobs').exists())
+
+    def test_runner_preflight_is_structural_and_has_no_file_or_native_effects(self):
+        ref = {'path': 'bound-file', 'sha256': 'a'*64}
+        item = {'workbench': {'native': True}, 'payload': {'runner': ref, 'live_source': ref,
+            'job': {'blender': 'blender', 'input': 'source.blend', 'script': 'worker.py', 'output_root': 'new-run',
+                    'source_sha256': 'a'*64, 'dependency_hashes': {'worker.py': 'b'*64}}}}
+        with patch('modeling_system.native_recipes.checked_file', side_effect=AssertionError('No I/O')):
+            validate_native_job(item)
+            for key, value in [('input', 'not-a-checkpoint.json'), ('timeout_seconds', float('inf')),
+                               ('threads', -1), ('dependency_hashes', {})]:
+                bad = deepcopy(item); bad['payload']['job'][key] = value
+                with self.assertRaises(ValueError): validate_native_job(bad)
 
 
 if __name__ == '__main__': unittest.main()

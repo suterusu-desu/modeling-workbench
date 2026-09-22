@@ -90,6 +90,18 @@ executing any, avoiding stale bytecode or accidental historical construction.
 Restore required drivers and inventory callbacks, relocate mutable diagnostics
 into the isolated output, and preserve required support files.
 
+Register `NativeJob` directly as the handler to use its read-only `preflight`
+automatically during task observation, before inference or operation reservation.
+It requires the runner executable, source checkpoint, script, output root, exact
+source/dependency hashes and runner/live-source references; malformed fixed inputs
+stay blocked with an actionable reason. Real source hashes and live ownership
+are still checked at execution. For an existing wrapper, expose
+`wrapper.preflight = validate_native_job` from `native_recipes`, or call that
+validator while building the catalog. Other qualified handlers may expose the
+same read-only `preflight(item)` hook and raise a public `ValueError` for an
+invalid fixed configuration. A preflight must never call Blender, a provider or
+an output writer. Meaningful operation/argument choices remain Jev's decisions.
+
 `begin_scoped_feature(feature_api, feature, mismatch, mechanism, evidence_dir,
 scope_check=..., protected=..., repair_invalid_bindings=False)` uses the existing
 feature API. It refreshes the actual feature fingerprint without a broad depth

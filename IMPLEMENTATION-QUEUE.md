@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.28
+# Current operating integration: 0.2.29
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -11,6 +11,7 @@ targets are integrated below; installation and actual use remain separately evid
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| A missing isolated-runner field consumed selection and reached a failed dispatch | NativeJob exposes structural preflight; OperatingSession excludes malformed fixed inputs before inference or operation reservation | No provider, native call, output folder or operation receipt is created for a missing runner executable |
 | Complete Choice probabilities can arrive rounded with a small total discrepancy | Strict hundredth-grid compatibility preserves every raw value and selected maximum; other invalid distributions still fail | Synthetic reader/recovery cases; upstream documentation does not guarantee rounding |
 | Missing preparation dependencies, wrong array shapes and numerical JSON values interrupted useful work | PreparationOperation contracts, strict numerical conversion, immutable full results and compact metrics | Dependency-before-load, frame-shape, NumPy scalar and nonfinite/object rejection tests |
 | Oversized findings obscured an already known operation result | Retain full report, keep execution disposition, withhold dependent checks and repair only its public projection | Completed output cannot replay; failed or unknown native effects remain distinct |

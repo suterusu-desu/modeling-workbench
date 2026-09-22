@@ -6,7 +6,9 @@ OperatingSession; the private adapter still enforces owner and expected state.
 from copy import deepcopy
 import hashlib
 import json
+import math
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -57,6 +59,41 @@ def _evidence(path, role):
     return {'kind': 'file', 'path': str(path), 'role': role}
 
 
+def validate_native_job(item):
+    """Read-only runner contract, usable before offering a job to Jev.
+
+    This checks fixed configuration only. Actual file hashes, live owner and
+    expected state remain checked at execution; no Blender call or output occurs.
+    """
+    payload = item.get('payload', {})
+    job = payload.get('job')
+    if not item.get('workbench', {}).get('native') or not isinstance(job, dict):
+        raise ValueError('Native job needs its explicit native contract and job dictionary')
+    for name in ('blender', 'input', 'script', 'output_root'):
+        if not isinstance(job.get(name), str) or not job[name].strip():
+            raise ValueError('Native runner requires a nonempty ' + name + ' path')
+    if Path(job['input']).suffix.lower() != '.blend':
+        raise ValueError('Native runner input must be a Blender checkpoint')
+    if not re.fullmatch(r'[0-9a-f]{64}', str(job.get('source_sha256', ''))):
+        raise ValueError('Native runner requires its exact source_sha256')
+    dependencies = job.get('dependency_hashes')
+    if (not isinstance(dependencies, dict) or job['script'] not in dependencies
+            or any(not isinstance(p, str) or not p or not re.fullmatch(r'[0-9a-f]{64}', str(h))
+                   for p, h in dependencies.items())):
+        raise ValueError('Native script and dependency_hashes must be explicitly pinned')
+    for name in ('runner', 'live_source'):
+        ref = payload.get(name)
+        if (not isinstance(ref, dict) or not isinstance(ref.get('path'), str) or not ref['path']
+                or not re.fullmatch(r'[0-9a-f]{64}', str(ref.get('sha256', '')))):
+            raise ValueError('Native job requires an exact ' + name + ' file reference')
+    timeout = job.get('timeout_seconds', 240)
+    if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError('Native timeout_seconds must be finite and positive')
+    threads = job.get('threads', 2)
+    if type(threads) is not int or threads < 0:
+        raise ValueError('Native threads must be a nonnegative integer')
+
+
 class NativeJob:
     """Run a pinned isolated job with data parameters, without copied wrapper code.
 
@@ -68,7 +105,10 @@ class NativeJob:
         self.service, self.directory = service, Path(directory)
         self.python = str(python or sys.executable)
 
+    preflight = staticmethod(validate_native_job)
+
     def __call__(self, item, context):
+        self.preflight(item)
         payload = item['payload']; job = deepcopy(payload['job'])
         if not item['workbench'].get('native'):
             raise ValueError('Native job requires an explicit native capability')
