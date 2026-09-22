@@ -59,6 +59,9 @@ jobs can replace broad scene exports with explicit feature checks and record
 setup, execution and evidence timings; actual savings depend on the workload.
 Native job configuration is checked before Jev selection, so missing runner
 fields can be corrected without spending a decision or opening Blender.
+Adapters can separate fresh native-state checks from costly numerical exports
+and use nested call timings to locate slow checkpoint handovers. Immutable
+preparation results stay reusable when task inputs exclude their own output logs.
 
 [Typed capability control](modeling_system/plugin/skills/modeling-workbench/references/typed-control.md)
 lets Jev select qualified operation arguments alongside the operation itself.

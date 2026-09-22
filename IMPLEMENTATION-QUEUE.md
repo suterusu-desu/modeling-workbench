@@ -1,4 +1,13 @@
-# Current operating integration: 0.2.29
+# Current operating integration: 0.2.30
+
+Native adapter guidance separates fresh source verification from explicit
+numerical-cache export. Nested call timing identifies guard, rollback, open and
+bootstrap cost without changing known operation outcomes. A qualified private
+adapter can reuse one immediately preceding guard snapshot for rollback
+preparation; it must still observe fresh state after effects. Implementation and
+actual adoption remain separate, with timings retained in the private workspace.
+Queue guidance now distinguishes immutable preparation artifacts from shared
+state writes so completion does not create a different task definition.
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools

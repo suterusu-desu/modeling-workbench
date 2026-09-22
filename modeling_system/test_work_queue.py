@@ -44,6 +44,21 @@ class WorkQueueTests(unittest.TestCase):
         self.queue().run(max_steps=8)
         self.assertEqual(self.ran, ['inspect', 'recover'])
 
+    def test_immutable_outputs_do_not_redefine_two_independent_preparations(self):
+        self.items = [work('first', 'preparation'), work('second', 'preparation')]
+        self.state['values']['output_directory'] = 'empty'
+        def prepare(item, context):
+            self.ran.append(item['id'])
+            artifact = self.root/(item['id'] + '.json')
+            with artifact.open('x') as handle: handle.write('{"prepared": true}')
+            self.state['values']['output_directory'] = 'changed-' + item['id']
+            return {'status': 'completed', 'evidence': [str(artifact)]}
+        queue = self.queue(run=prepare)
+        self.assertEqual(queue.run(max_steps=3)['status'], 'completed')
+        self.assertEqual(self.ran, ['first', 'second'])
+        self.assertEqual(queue.run(max_steps=3)['status'], 'completed')
+        self.assertEqual(self.ran, ['first', 'second'])
+
     def test_stale_source_blocks_all_dependent_work(self):
         self.state['values']['source'] = 'changed'
         result = self.queue().run(max_steps=8)

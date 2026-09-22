@@ -21,6 +21,30 @@ An adapter must implement and independently verify these invariants before adver
 
 A private adapter may compose existing verified native code behind a small entrypoint. Keep the parent project and its evidence local. The source package deliberately does not advertise successful native behavior for a merely configured adapter. Use contract tests, a disposable synthetic Blender scene, then a bounded owner-controlled real-workspace trial to establish adoption. Never switch an active project's runtime solely because the generic package was updated.
 
+## Native observations and export cost
+
+Keep source verification separate from numerical scene export. Check actual
+native content, external dependencies, controls, views and saved-file identity
+on each guarded operation. Opening, posing, displaying and saving a reviewed
+checkpoint need not rebuild a whole-scene array record. An adapter may defer
+that export if its expected-state token still covers fresh native dependencies;
+report the numerical cache as dirty/unavailable and omit a current geometry ID.
+Numerical queries and explicit synchronization must rebuild and verify that cache
+before use. Keep requested depth/section refreshes, binding checks and recovery.
+
+Within one synchronous guarded call, rollback preparation may reuse the guard's
+content manifest only when no intervening native effect or asynchronous yield
+occurred. Consume that snapshot before effects; never reuse it for the returned
+post-effect state, a later request or a different operation. A dirty bit or an
+unchanged file hash alone does not establish live content freshness.
+
+`native_timing.NativeTimings` records nested adapter phases without importing or
+calling Blender. Wrap the guard, rollback save, file open, bootstrap and returned
+observation separately; keep parent and child durations distinct. An optional
+`sink` persists progress through the adapter's existing receipt writer. Failed
+telemetry does not change the operation outcome or authorize replay. Measure the
+next useful operation; do not rerun a retained edit solely for a timing sample.
+
 ## Operator wrappers and worker completion
 
 Read the selected adapter's actual result contract before asserting success. Transport success, operation disposition, saved-artifact verification and review acceptance are separate facts. Do not require a universal `status == "completed"`: an adapter may return an operation-specific status such as `applied_trial` or `saved`. Compact results can point to a durable receipt instead of embedding candidate details. Expand the returned receipt and verify the linked file bytes and operation identity before continuing. An unexpected wrapper assertion after dispatch does not establish that the native action failed; reconcile the original operation before considering any retry.

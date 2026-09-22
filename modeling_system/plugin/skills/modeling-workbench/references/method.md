@@ -12,6 +12,14 @@ Bind intended variation as well as the default pose. Describe what each feature 
 
 Capture the actual inspected view and a wider context image at the same recorded native state. Preserve camera/projection/crop/pose and geometry identity. Observe at close-up and whole-character scale, in several informative angles. Use registered guide surfaces, aligned depth and corresponding sections to constrain adjustments themselves, including local cleanup. A screenshot, wire overlay or small set of front-ray samples does not replace measured three-dimensional support. Projected points may be occluded; visibility must be established.
 
+Exact original triangle ancestry and visibility at triangle centroids do not
+establish the cause of every visible hole. Before adding topology to a remaining
+gap, attribute the actual observed pixels using the recorded camera and current
+pose triangles: retain first and deeper intersections and their surface roles.
+An apparent hole can be another surface in front. This is diagnosis, not a fitting
+target. Two successive ray hits do not establish anatomical inner/outer thickness;
+qualify orientation, connectivity and corresponding roles before imposing clearance.
+
 ## Acquire missing form deliberately
 
 Distinguish a missing artistic target from missing correspondence, uncertain alignment, insufficient control authority and conflicting preservation requirements. Reuse useful existing captures and qualified guides before acquiring new ones. Nominate the smallest view or section that answers the particular observed uncertainty, preserving stationary context and identity evidence.

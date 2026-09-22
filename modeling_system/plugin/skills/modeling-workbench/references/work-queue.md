@@ -44,12 +44,21 @@ the catalog, including completed ones. Freeze their original read revisions; do
 not rebase completed definitions on every observation. Source changes invalidate
 dependent use. A new candidate number does not justify repeating a failed mechanism.
 
-Generated outputs are prerequisite writes, not hypothetical input files. Bind a
-dependent task to the actual completed output revision. For example, preparation
-reads a guide and writes a target artifact; fitting consumes that saved target.
-A directory write does not implicitly cover separately named file dependencies.
-The conflict diagnostic identifies the key and prerequisite to correct; preserve
-completed work rather than replaying it with rebased input revisions.
+Declare writes when an operation changes a named shared dependency. A generated
+target that replaces a shared target slot is such a write; bind dependent work
+to the actual completed output revision. A directory write does not implicitly
+cover separately named file dependencies. The conflict diagnostic identifies
+the key and prerequisite to correct.
+
+Pure `ArrayPreparation` jobs that create new immutable result artifacts can use
+`writes=[]`. Read only their real inputs and intent/authority dependencies, not
+the growing output directory or every key in the observed state. Otherwise the
+job changes its own definition after completion and can be selected repeatedly.
+Two independent preparations must not share an output-directory read merely
+because their artifacts live under the same parent. Keep each task definition
+stable for its input scope; downstream tasks use `requires` and the exact
+returned artifact hashes. Real input or authority changes still invalidate use.
+Preserve completed results rather than rerunning them to repair catalog metadata.
 
 Every item addresses a named uncertainty or improvement; catalogs are executable,
 not wish lists. Unsupported repairs remain blocked while other useful work proceeds.
