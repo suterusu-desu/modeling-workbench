@@ -17,6 +17,7 @@ NATIVE_DESCRIPTIONS={
     'bootstrap':'Bind this verified Blender file to the modeling adapter and acquire its editing owner.',
     'owner_release':'Release editing ownership only against the expected live state.',
     'open_checkpoint':'Open a hash-verified native checkpoint after preserving the current session for recovery.',
+    'retain_checkpoint':'Retain a reviewed checkpoint through a qualified synchronous open, restore, pose, wireframe and save transaction; refuses replay.',
     'inspect_feature':'Inspect or refresh actual feature, binding validity and registered guide/depth dependencies.',
     'prepare_state':'Export complete recorded geometry, references and coverage from the expected native state.',
     'capture_view':'Capture the actual selected viewport perspective, zoom and optional crop with matching state, depth/sections and wider context.',

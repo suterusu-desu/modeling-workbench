@@ -12,6 +12,12 @@ automatically. Their exact evidence stays in the private workspace; compact
 context keeps relevant successes, failures and changed prerequisites together,
 with omitted evidence reported explicitly. See [retained learning](modeling_system/plugin/skills/modeling-workbench/references/retained-learning.md).
 
+Retention requires an overall visible improvement across the affected region
+and motion, compared with the applicable guide and an earlier useful baseline.
+Local gains or numerical checks cannot justify accumulating visible regressions.
+Failed candidates remain recoverable without becoming the next working baseline;
+visual interpretation and the user's judgment remain authoritative.
+
 Reusable tools and an evidence-based workflow for character modeling: exact recorded geometry, matched observations, guide/depth qualification, coupled response analysis, recoverable trials and retained learning.
 
 [Start here](modeling_system/plugin/skills/modeling-workbench/references/getting-started.md) | [Retained method](modeling_system/plugin/skills/modeling-workbench/references/method.md) | [Native adapters](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md) | [Agent skill](modeling_system/plugin/skills/modeling-workbench/SKILL.md)
@@ -50,6 +56,12 @@ Jev chooses among applicable data-bound methods; standalone native operations
 retain an action/defer choice. Retention uses returned fresh state to avoid
 duplicate scene inspections and skips reopening an already loaded exact candidate,
 while preserving native guards, independent reopen evidence and actual visual review.
+Qualified adapters can opt into one synchronous retention transaction for fixed
+open, runtime restoration, pose, wireframe display and save. It checks fresh native
+state at both ends, preserves rollback and restoration-content evidence, and
+records phases before effects. Interrupted transactions refuse replay. This
+avoids intermediate scene scans and diagnostic exports during display setup;
+actual native adoption and speed gains require ordinary-use evidence.
 
 [Preparation and scoped setup](modeling_system/plugin/skills/modeling-workbench/references/preparation-and-bootstrap.md)
 check declared dependencies and array shapes, preserve numerical results, and

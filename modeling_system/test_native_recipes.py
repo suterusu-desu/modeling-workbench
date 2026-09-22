@@ -38,8 +38,8 @@ class RetentionTests(unittest.TestCase):
         elif operation == 'native_set_controls': self.live['dirty'] = True
         elif operation == 'native_set_display' and self.reject_display:
             return {'status':'conflicting','reason':'Later user edit'}
-        elif operation == 'native_save_checkpoint':
-            path=Path(args['path']); path.write_bytes(b'saved')
+        elif operation in ('native_save_checkpoint', 'native_retain_checkpoint'):
+            path=Path(args.get('path', args.get('target'))); path.write_bytes(b'saved')
             self.live.update(file=str(path),dirty=False,saved_file={'path':str(path),'sha256':hashlib.sha256(b'saved').hexdigest()})
         self.live['expected_state'] = 'state'+str(len(self.calls))
         result = {'status':'saved' if operation == 'native_save_checkpoint' else 'completed','live':deepcopy(self.live)}
@@ -57,6 +57,22 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(self.calls,['native_inspect_live','native_open_checkpoint','native_set_controls','native_set_display','native_save_checkpoint'])
         self.assertFalse(result['checkpoint_open_reused'])
         self.assertEqual(result['native_calls']['native_inspect_live'],1)
+
+    def test_transaction_opt_in_uses_one_guarded_native_transaction_after_preflight(self):
+        handler = RetainCheckpoint(self.service, self.root/'run', verify_reopen=lambda r,c: True, transaction=True)
+        result = handler(self.item, self.context)
+        self.assertEqual(self.calls, ['native_inspect_live', 'native_retain_checkpoint'])
+        self.assertTrue(result['retention_transaction'])
+
+    def test_transaction_refuses_refresh_and_cancellation_before_effects(self):
+        handler = RetainCheckpoint(self.service, self.root/'run', verify_reopen=lambda r,c: True, transaction=True)
+        self.item['payload']['pose']['refresh'] = True
+        with self.assertRaises(RuntimeError): handler(self.item, self.context)
+        self.assertEqual(self.calls, [])
+        self.item['payload']['pose']['refresh'] = False
+        self.context['cancelled'].set()
+        with self.assertRaises(RuntimeError): handler(self.item, self.context)
+        self.assertEqual(self.calls, [])
 
     def test_exact_already_loaded_candidate_avoids_reopen_and_still_saves(self):
         self.live.update(file=self.refs['candidate']['path'],saved_file=self.refs['candidate'])

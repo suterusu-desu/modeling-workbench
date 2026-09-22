@@ -111,8 +111,20 @@ or appearance is unresolved. Saving and recovery remain available. Scoped
 retention consumes explicit candidate/reopen evidence and a current actual-image
 judgment. User acceptance and general method benefit are never inferred. A worse
 numerical metric does not veto a visual gain; a no-op on one side does not erase a
-gain on the other. Failed mechanisms retain their cause and applicability so the
+gain on the other. Retention still requires overall visible progress in the
+affected region and motion, compared with the applicable guide and an earlier
+useful baseline. Local wins and exact endpoints cannot justify accumulating
+visible regressions. Rejected candidates remain evidence without becoming the
+working baseline; user rejection overrides earlier operator optimism.
+Failed mechanisms retain their cause and applicability so the
 next repair changes a justified mechanism rather than only a candidate label.
+
+Fixed housekeeping can execute within one qualified synchronous native retention
+transaction after that review. It preserves fresh initial/final observations,
+restoration-content checks and durable phase records, while omitting intermediate
+scans and unnecessary display-time exports. It neither chooses a new modeling
+method nor replaces appearance judgment. Interrupted transactions are reconciled
+from evidence rather than replayed, and no guard crosses an asynchronous boundary.
 
 ## Preserve the successful modeling process
 

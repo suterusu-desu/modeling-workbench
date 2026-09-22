@@ -15,7 +15,7 @@ from .native_bridge import NativeBridge, NativeBridgeError, operation_schemas, v
 class SchemaTests(unittest.TestCase):
     def test_all_operations_have_closed_argument_contracts(self):
         schemas = operation_schemas()
-        self.assertEqual(len(schemas), 16)
+        self.assertEqual(len(schemas), 17)
         self.assertTrue(all(s['additionalProperties'] is False for s in schemas.values()))
         schemas['inspect_live']['properties']['bad'] = {}
         self.assertNotIn('bad', operation_schemas()['inspect_live']['properties'])

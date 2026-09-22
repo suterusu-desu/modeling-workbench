@@ -102,6 +102,49 @@ evidence is still mandatory. New candidates still open normally. The final save
 must return the correct clean path and file hash. Every step and its duration is
 retained, including partial failure, without automatic replay.
 
+### Fixed retention transaction
+
+Use `RetainCheckpoint(..., transaction=True)` only when the pinned private adapter
+advertises `retain_checkpoint` and implements its synchronous main-thread
+contract. It performs one preflight inspection and one native transaction, with
+the same bound inputs, independent-reopen verifier and actual visual review.
+Supply `display.mode="GUIDE_WIRE"`; pose refresh must be false. Diagnostic modes,
+arbitrary scripts and geometry changes are outside this operation. There is no
+silent fallback to another route or second native writer.
+
+The reusable `native_retention.run_retention` orchestrator invokes adapter hooks
+for fresh owner/expected-state verification, one rollback plus registry backup,
+candidate open, runtime-only restoration with full content comparison, declared
+controls/display, and a new clean save. It verifies source, candidate, reopen,
+registry and implementation dependencies again before save and final completion.
+The final observation must contain the real saved path/hash and clean state;
+stale numerical arrays never become current merely because display succeeded.
+Adapters must keep the entire operation synchronous without modal operators,
+asynchronous jobs or yielding to another writer. If a route can yield, it needs
+fresh guards at those boundaries and does not qualify for this shortcut.
+
+Phase intent is persisted before effects. The transaction identity comes from
+the controller attempt and handler location; an existing identity refuses even
+after success. `native_retention.inspect_receipt(root, owner, transaction_id)`
+reads historical evidence without observing Blender or replaying work. Reconcile
+an interrupted or lost response using that receipt, the exact files and a fresh
+observation through the existing controller. Never automatically restore an old
+rollback over later user work. Target absence checks protect the cooperative
+single-writer workflow; they are not an OS filesystem lock against other programs.
+
+Adapter hooks are trusted, qualified code. `restore_runtime` returns
+`character_content_unchanged=True` only after comparing real native content;
+`verify_presentation` returns `declared_pose_guide_display_verified=True` only
+after inspecting actual controls, guide and display. Their phase timings and
+nested adapter timings support diagnosis, not a prediction of seconds saved.
+
+Retention review compares the overall affected region and motion with both the
+applicable guide and an earlier useful baseline. Technical exactness, endpoint
+preservation and immediate-predecessor gains do not establish overall progress.
+Keep rejected experiments for evidence without ratcheting the working baseline.
+Preservation constraints must distinguish active output dependencies from legacy
+stored attributes; confirm the actual native outputs before relaxing a hold.
+
 ## Effort and overhead
 
 Call `review = session.begin_review(task)` before opening its actual evidence.

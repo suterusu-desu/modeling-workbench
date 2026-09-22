@@ -72,11 +72,20 @@ _QUALIFICATION = _object({'target_id': _S, 'object_name': _S, 'label': _S,
     ('target_id', 'registered_npz', 'source_state_id', 'feature', 'pose', 'region_support',
      'target_role', 'reviewed', 'review_record', 'provenance'))
 _EXPECTED = {'expected_state': _S}
+_RETENTION_VIEW = _object({'rotation': {'type': 'array', 'items': _N, 'minItems': 4, 'maxItems': 4},
+    'location': _V, 'distance': {'type': 'number', 'exclusiveMinimum': 0},
+    'perspective': {'enum': ['PERSP', 'ORTHO', 'CAMERA']}, 'lens': {'type': 'number', 'exclusiveMinimum': 0}})
 _SCHEMAS = {
  'inspect_live': _object({'refresh_scene': _B}),
  'bootstrap': _object({**_EXPECTED, 'expected_file': _PATHREF}, ('expected_state', 'expected_file')),
  'owner_release': _object(_EXPECTED, ('expected_state',)),
  'open_checkpoint': _object({**_EXPECTED, 'source': _PATHREF, 'load_ui': _B}, ('expected_state', 'source')),
+ 'retain_checkpoint': _object({**_EXPECTED, 'transaction_id': _S, 'source': _PATHREF,
+    'candidate': _PATHREF, 'reopen': _PATHREF, 'target': _S, 'label': _S,
+    'pose': _object({'controls': _CONTROLS, 'guide': _S, 'refresh': {'type': 'boolean', 'const': False}}),
+    'display': _object({'mode': {'const': 'GUIDE_WIRE'}, 'through': _B, 'parts': _B,
+        'viewport': _VIEWPORT, 'view': _RETENTION_VIEW}, ('mode',))},
+    ('expected_state', 'transaction_id', 'source', 'candidate', 'reopen', 'target', 'label', 'display')),
  'inspect_feature': _object({'feature': {'enum': ['eyes', 'mouth']}, 'refresh': _B, **_EXPECTED}),
  'prepare_state': _object({'feature': {'enum': ['eyes', 'mouth']}, 'output_dir': _S, **_EXPECTED}, ('expected_state',)),
  'capture_view': _object({**_EXPECTED, 'output_dir': _S, 'feature': {'enum': ['eyes', 'mouth']},

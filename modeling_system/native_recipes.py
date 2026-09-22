@@ -188,10 +188,11 @@ class RetainCheckpoint:
     independent-reopen verdict; OperatingSession requires actual visual review.
     This handler cannot substitute its own technical or appearance acceptance.
     """
-    def __init__(self, service, directory, *, verify_reopen):
+    def __init__(self, service, directory, *, verify_reopen, transaction=False):
         if not callable(verify_reopen):
             raise ValueError('The workspace must interpret its actual independent reopen evidence')
         self.service, self.directory, self.verify_reopen = service, Path(directory), verify_reopen
+        self.transaction = transaction
 
     def __call__(self, item, context):
         payload = item['payload']; contract = item['workbench']
@@ -209,6 +210,14 @@ class RetainCheckpoint:
         for key in ('pose', 'display'):
             if {'owner', 'expected_state'} & payload.get(key, {}).keys():
                 raise ValueError('The handler supplies actual owner and current state')
+        transaction_args = None
+        if self.transaction:
+            from .native_bridge import validate_arguments
+            identity = [str(self.directory.resolve()), item['id'], context['attempt_key']]
+            transaction_args = {key: deepcopy(payload[key]) for key in ('source', 'candidate', 'reopen', 'target', 'label', 'display')}
+            if payload.get('pose'): transaction_args['pose'] = deepcopy(payload['pose'])
+            transaction_args['transaction_id'] = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+            validate_arguments('retain_checkpoint', {**transaction_args, 'expected_state': 'preflight-pending'})
         if Path(item['id']).name != item['id']:
             raise ValueError('A single local task name required')
         folder = self.directory/item['id']; folder.mkdir(parents=True, exist_ok=False)
@@ -229,19 +238,26 @@ class RetainCheckpoint:
         live = returned_live(self.service, call('preflight', 'native_inspect_live', {'owner': owner, 'refresh_scene': False}))
         already = Path(live['file']).resolve() == checked_file(payload['candidate'])
         _clean_source(live, owner, payload['candidate'] if already else payload['source'])
-        if not already:
+        if self.transaction:
+            saved = call('transaction', 'native_retain_checkpoint', {**transaction_args,
+                'owner': owner, 'expected_state': live['expected_state']})
+            live = returned_live(self.service, saved)
+            native_receipt = expanded_result(self.service, saved)
+            if native_receipt.get('receipt_path'): files.append(native_receipt['receipt_path'])
+        elif not already:
             opened = call('open', 'native_open_checkpoint', {'owner': owner, 'expected_state': live['expected_state'],
                 'source': payload['candidate'], 'load_ui': False})
             live = returned_live(self.service, opened)
             if Path(live['file']).resolve() != checked_file(payload['candidate']):
                 raise ValueError('Native open returned a different candidate')
-        for key, operation in (('pose', 'native_set_controls'), ('display', 'native_set_display')):
+        for key, operation in (() if self.transaction else (('pose', 'native_set_controls'), ('display', 'native_set_display'))):
             if payload.get(key):
                 result = call(key, operation, {**payload[key], 'owner': owner, 'expected_state': live['expected_state']})
                 live = returned_live(self.service, result)
-        saved = call('save', 'native_save_checkpoint', {'owner': owner, 'expected_state': live['expected_state'],
-            'label': payload['label'], 'path': str(target), 'copy': False})
-        live = returned_live(self.service, saved)
+        if not self.transaction:
+            saved = call('save', 'native_save_checkpoint', {'owner': owner, 'expected_state': live['expected_state'],
+                'label': payload['label'], 'path': str(target), 'copy': False})
+            live = returned_live(self.service, saved)
         with target.open('rb') as stream:
             target_ref = {'path': str(target), 'sha256': hashlib.file_digest(stream, 'sha256').hexdigest()}
         _clean_source(live, owner, target_ref)
@@ -249,9 +265,11 @@ class RetainCheckpoint:
         result = {'status': 'completed', 'file': str(target), 'sha256': target_ref['sha256'],
             'evidence': files+[str(folder/'visible-live.json')], 'native_stages_ms': timings, 'native_calls': counts,
             'checkpoint_open_reused': already, 'user_appearance_accepted': False,
+            'retention_transaction': self.transaction,
+            'retention_phases_ms': native_receipt.get('native_stages_ms', {}) if self.transaction else {},
             'workbench': {'checks': {'checkpoint': {'status': 'pass', 'evidence': [_evidence(target, 'Saved clean retained checkpoint'),
                 _evidence(folder/'visible-live.json', 'Native save returned current visible state')]}},
                 'findings': [{'kind': 'measured', 'scope': 'reviewed checkpoint',
-                    'summary': 'Reviewed candidate saved clean. Every mutation retained the native expected-state guard; repeated external inspections were omitted.'}]}}
+                    'summary': 'Reviewed candidate saved clean under native owner and freshness checks. Technical retention does not establish appearance acceptance.'}]}}
         write_json(folder/'receipt.json', result)
         return result

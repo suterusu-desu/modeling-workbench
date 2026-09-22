@@ -143,7 +143,7 @@
     },
     {
       "name": "Checkpoint preservation and independent native reopen",
-      "route": "native_save_checkpoint / native_prepare_reopen / retain_candidate / reject_trial",
+      "route": "native_retain_checkpoint / native_save_checkpoint / native_prepare_reopen / retain_candidate / reject_trial",
       "implementation": "native + core",
       "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
       "control": {

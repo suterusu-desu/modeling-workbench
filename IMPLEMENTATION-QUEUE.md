@@ -1,4 +1,12 @@
-# Current operating integration: 0.2.33
+# Current operating integration: 0.2.34
+
+Reviewed checkpoint retention has an opt-in synchronous native transaction.
+Qualified adapters preserve fresh boundary checks, restoration-content evidence,
+rollback, real final saved state and durable phase receipts while omitting
+intermediate whole-scene scans and wireframe diagnostic exports. Existing
+transaction identities refuse replay, including completed attempts. Synthetic
+source/installed and private-hook checks establish the contract; ordinary native
+adoption and actual latency changes remain separate workspace evidence.
 
 Nonuniform planar charts now have reusable FEM stiffness/mass assembly with
 explicit units, boundary/interior identities and affine reproduction diagnostics.
@@ -45,6 +53,7 @@ targets are integrated below; installation and actual use remain separately evid
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Reviewed retention repeated full source scans and an unused bootstrap export across fixed housekeeping calls | Qualified synchronous retention with fresh boundary observations, runtime-only restoration and durable no-replay phases | Stale inputs/owners, partial effects, lost receipts, target conflicts and historical-state reuse tested; native speed gains remain unmeasured |
 | Index-space smoothing introduced an affine-plane defect on a nonuniform chart | Metric-aware planar FEM stiffness and lumped mass through ordinary ArrayPreparation | Analytic energy, affine interior, boundary flux, unit scaling, winding and invalid-domain checks; no appearance or intrinsic 3D claim |
 | Useful custom preparation measurements were retained but absent from compact findings | Explicit public_metrics projection, with collision and finite-value checks before output saving | Opt-in values reach findings; private raw detail stays out; malformed reports settle without native effects |
 | A failure archive crowded out a successful matching method despite its higher Jev relevance score | Relevance-ordered relationship coverage, then relevance fill; explicit omissions and versioned caches | Both evidence directions, tight bytes/slots, complete caveats, unrelated sources, action deferral and cache invalidation tested; packing alone does not establish a better action or appearance |
