@@ -24,8 +24,8 @@ def status_lines(status, *, now=None, stale_after=30):
     timings = status.get('timings_ms')
     if timings:
         lines.append('Time ms: ' + ', '.join(str(k) + '=' + str(v) for k, v in timings.items()))
-    budget = status.get('inference_budget')
-    lines.append('Inference budget: ' + ('unknown' if budget is None else json.dumps(budget, sort_keys=True)))
+    budget = status.get('work_limits')
+    lines.append('Work limits: ' + ('unknown' if budget is None else json.dumps(budget, sort_keys=True)))
     if status.get('planner_pending'):
         lines.append('Planner: update pending')
     if status.get('reason'):

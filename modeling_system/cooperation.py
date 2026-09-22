@@ -1,7 +1,7 @@
-"""Supervised Astra/Jev cooperation over the existing owner and task queue.
+"""Supervised Owner/reviewer cooperation over the existing owner and task queue.
 
 Reviews arrive as immutable episode facts. Waiting watches only that mailbox;
-it never polls Blender or asks Jev to reconsider identical evidence.
+it never polls Blender or repeats a request for identical evidence.
 """
 from copy import deepcopy
 import math
@@ -14,7 +14,7 @@ from .controller import fingerprint, read_json, write_json
 
 
 def compose_catalogs(*catalogs):
-    """Share independent pipelines and useful supporting work in one Jev menu.
+    """Share independent pipelines and useful supporting work in one owner catalog.
 
     Dependencies, profile contracts and task definitions remain unchanged.
     Catalogs must qualify their own inputs and omit redundant work. This grants

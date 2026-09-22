@@ -1,6 +1,6 @@
 # Preparation and scoped native setup
 
-These are capabilities inside the existing OperatingSession. Jev still selects
+These are capabilities inside the existing OperatingSession. The owner selects
 useful operations; the same episode retains results, failures and actual reviews.
 No helper grants target authority, native ownership or appearance acceptance.
 
@@ -142,7 +142,7 @@ are still checked at execution. For an existing wrapper, expose
 validator while building the catalog. Other qualified handlers may expose the
 same read-only `preflight(item)` hook and raise a public `ValueError` for an
 invalid fixed configuration. A preflight must never call Blender, a provider or
-an output writer. Meaningful operation/argument choices remain Jev's decisions.
+an output writer. Meaningful operation/argument choices remain explicit owner decisions.
 
 `begin_scoped_feature(feature_api, feature, mismatch, mechanism, evidence_dir,
 scope_check=..., protected=..., repair_invalid_bindings=False)` uses the existing
@@ -192,7 +192,7 @@ A known source defect at rest may need repair alongside moving geometry. Keep
 the accepted design and justified invariants, not an accidental current gap.
 
 When a small fixed set of views is all required to resolve one question, keep that
-capture bundle in code inside the selected operation. Jev chooses discretionary
+capture bundle in code inside the selected operation. The owner chooses discretionary
 work and meaningful alternatives; an underdetermined choice between equivalent
 camera bundles should not block that operation. Actual image interpretation still
 belongs to Astra, and a successful diagnostic is not a retained visual gain.

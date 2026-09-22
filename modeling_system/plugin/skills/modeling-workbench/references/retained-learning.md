@@ -4,7 +4,7 @@ OperatingSession retains each actual visual review in the workspace's existing
 content-addressed store. Later scopes retrieve relevant reviews automatically;
 they need no copied history file or custom projector. Exact receipt identity,
 candidate basis and evidence stay private. Only the deliberately public judgment
-text already used in session feedback enters Jev's decision context.
+text already used in session feedback enters the owner's observed context.
 
 Begin actual review with `session.begin_review(task)`. Submit the usual scoped
 judgment and evidence with `session.record_review`. Its `useful` disposition

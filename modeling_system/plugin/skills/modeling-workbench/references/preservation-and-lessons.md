@@ -88,7 +88,7 @@ support or solver failure. Offer a coupled correction over the smallest
 qualified connected transition, retaining the same guide targets and bounds.
 The local correction and surrounding repair form one recoverable candidate;
 do not promote an intermediate broken surround and promise to fix it later.
-Jev can select this registered remedy from actual feasibility evidence. Changing
+The owner can select this registered remedy from actual feasibility evidence. Changing
 the target, relaxing an authority-defined bound, or widening into unsupported
 anatomy requires new qualification; it is not an automatic fallback.
 
@@ -113,19 +113,13 @@ requirements, followed by whole-region comparison to the guide and earlier
 useful appearance. A scoped improvement is retained only when the overall
 candidate improves without unacceptable collateral loss.
 
-## Jev and durable learning
+## Direct control and durable learning
 
-Required outcomes/current construction enter decision state outside
-`RetainedContext` ranking. Actual source, coverage, consumed constraints and
-evaluated output checks stay in code. Binding preservation does not add a second
-abstract approval question over an eligible Jev-selected operation. Author
-semantic method/coverage questions only for specific unresolved conditions.
-Optional `decision.method_checks.remedies` names currently qualified operations;
-Jev can choose the relevant prerequisite in the same batch. Only the selected
-branch is consumed, preserving exact cached-answer reuse and existing accounting.
-MethodCatalog/ParameterizedCatalog also accept deliberate `method_checks` with
-`method` and/or `coverage` question text. Do not ask Jev to rediscover known facts,
-judge unseen geometry, waive a failed condition or score likeness.
+Required outcomes and current construction enter the owner observation separately
+from retrieved history. Source, coverage, consumed constraints and evaluated
+output checks remain in code. Known prerequisites become task dependencies;
+unknown support stays blocked for explicit owner interpretation. Preservation
+does not add a second abstract approval gate over an already qualified operation.
 
 Ordinary visual reviews continue entering the existing learning store.
 `learning.record_method_experience` and `import_method_experiences` retain reviewed
@@ -137,8 +131,7 @@ Keep `knowledge_status` (demonstrated, conditional, unverified, superseded)
 separate from `candidate_disposition` (scoped_success, failed, rejected,
 unresolved). Demonstrated knowledge can concern a rejected candidate. Optional
 classification is recurring_failure, supported_lesson or unresolved_hypothesis.
-Use a known classification directly; any Jev interpretation needs reviewer
-confirmation and the same sources/limits, not another automatic promotion.
+Use a supported classification and retain the same evidence and limits; no automatic promotion is implied.
 
 Reviewed historical imports deduplicate by mechanism and evidence. Preserve
 unreviewed inventories without promoting their claims. Changed interpretations

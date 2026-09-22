@@ -28,7 +28,7 @@ def session_metrics(directory):
                     actions[row['action']] += row['timings_ms'].get('execute', 0)
             elif row.get('event') == 'action_route':
                 routes[row['route']] += 1
-                if row['route'] == 'jev':
+                if row['route'] == 'owner_selection':
                     lanes[row.get('lane', 'unspecified')] += 1
                     choices.append({k: row.get(k) for k in ('action', 'lane', 'offered')})
     interventions = [read_json(p) for p in (directory / 'interventions').glob('*.json')]
@@ -64,11 +64,11 @@ def session_metrics(directory):
         'interventions_without_duration': sum(row.get('seconds') is None for row in interventions),
         'visual_review_submissions': len(reviews), 'incomplete_event_lines': incomplete,
         'visual_reviews_without_timing': sum(row.get('operation_handle') not in timed_reviews for row in reviews),
-        'action_routes': dict(routes), 'jev_choices_by_lane': dict(lanes), 'jev_choices': choices,
+        'action_routes': dict(routes), 'owner_choices_by_lane': dict(lanes), 'owner_choices': choices,
         'open_intervention_timers': [row['token'] for row in timers if row['status'] == 'running'],
         'timed_interventions': sum(row.get('seconds') is not None for row in interventions),
         'avoided_astra_turns': None,
-        'coverage': 'Controller times, routes, parameterized implementation use, native recipe stages and review submissions are automatic. Jev routes include cached decisions, not provider request counts. begin_review measures evidence opening through submission; missing timers are counted explicitly. Other explicit timers measure elapsed work, not model tokens. Unreported effort remains unknown. Native and cycle totals overlap components. Retention is not user acceptance; no speedup is inferred.'}
+        'coverage': 'Controller times, routes, parameterized implementation use, native recipe stages and review submissions are automatic. Routes record explicit owner selections and fixed continuations. Historical route names remain unchanged in action_routes. begin_review measures evidence opening through submission; missing timers are counted explicitly. Other explicit timers measure elapsed work, not model tokens. Unreported effort remains unknown. Native and cycle totals overlap components. Retention is not user acceptance; no speedup is inferred.'}
 
 
 def compare_sessions(baseline, current, *, comparison_scope):

@@ -1,118 +1,76 @@
-# Portable installation
+# Portable setup
 
-The wheel and tools-only archive contain the core, controller, direct TypeSafe
-transport, shared provider accounting/recovery, both agent skills and their
-references. No private project or previous conversation is needed to load them.
-External inputs are Python, Blender and its verified local bridge, your accounts,
-and the character's references, scene bindings and qualified adapter.
-Tool portability does not establish native qualification on a new rig.
+The wheel and tools archive contain the core, direct owner session, complete
+workbench skill and references, numerical operations and isolated Blender runner.
+No external inference service, credentials or second skill installation is needed.
 
 ## Install and check
 
 Use Python 3.12 or newer on Windows, macOS or Linux. Create and activate a virtual
-environment, then run `python -m pip install .` from the source checkout or
-extracted tools archive. Alternatively install the built wheel. Recreate virtual
-environments and generated MCP configuration on each machine; do not copy their
-absolute paths. Dependencies resolve platform-appropriate packages.
+environment and run `python -m pip install .` from the source checkout or extracted
+tools archive, or install the built wheel. Recreate virtual environments on each
+machine; do not transfer their absolute executable paths.
 
 ```sh
 python -m modeling_system.init_workspace /path/to/character --character "My character"
-python -m modeling_system.setup_check --workspace /path/to/character
 python -m modeling_system.prepare_plugin /path/to/modeling-workbench --workspace /path/to/character
 python -m modeling_system.setup_check --workspace /path/to/character --plugin /path/to/modeling-workbench
 ```
 
-Quote paths containing spaces. The initializer preserves existing files and
-creates a private workspace with `AGENTS.md` and complete skills under
-`.agents/skills/`. The generated plugin also contains both skills. Clients that
-do not discover project-local skills should read those two `SKILL.md` files
-explicitly. Use one discovery route per client to avoid duplicate registration.
-No second npm or Claude plugin installation is needed.
+Quote paths containing spaces. The initializer creates private material folders,
+authority records and complete `.agents/skills/modeling-workbench` guidance. The
+generated plugin includes the same skill. If a client does not discover local
+skills, read that `SKILL.md` explicitly. Use one discovery route to avoid duplicate
+registration. Existing files and customized skills are never overwritten.
 
-The official TypeSafe skill is bundled unmodified with its MIT license and
-commit/file hashes in `skill-dependencies.json`. Its targeted live-docs guidance
-still applies. The doctor checks those bytes without downloading anything.
-Core readiness, provider configuration and native readiness are separate:
-the doctor never reads credential files or contacts Blender or TypeSafe.
+The doctor checks core imports, bundled guidance, plugin launch and pinned native
+configuration. It never contacts Blender or an inference service and does not
+read credential files. Configured native dependencies are not live verification.
 
-## Jev credentials and accounting
+## Operate
 
-Set `TYPESAFE_API_KEY_FILE` in the launch environment to your external credential
-file, or set `TYPESAFE_API_KEY` directly. File configuration takes precedence.
-The file accepts a single key or `TYPESAFE_API_KEY=...`. There is no default user
-path. Restart the client/launch process as needed to inherit the variable. Never
-put a key in a prompt, command argument, workspace binding or archive.
+Use [direct sessions](operating-session.md), `ModelingService`, or the installed
+CLI/MCP service. `direct_session.create_session` requires preservation policies
+for affected appearance edits and retention; the owner supplies explicit qualified
+operations and choices. No provider ledger or public prompt projection is needed.
+Session creation does not start a goal or automation.
 
-Reuse existing provider accounting. For a **new** workspace with actual user
-authorization, initialize its ledger once:
-
-```sh
-python -m modeling_system.provider_dispatch --init-ledger /path/to/character/runtime/jev-ledger --authority "User-authorized modeling with existing account credits"
-python -m modeling_system.setup_check --workspace /path/to/character --ledger /path/to/character/runtime/jev-ledger
-```
-
-The text records an existing instruction; it does not obtain permission. Normal
-use adds no invented lifetime request or monetary cap. Optional `--max-requests`
-and `--max-cost-usd` record actual user limits. No purchase/topup occurs. Original
-responses, reservations, reported usage estimates, bounded retries and uncertain
-attempts stay in the same ledger. Initialization refuses to overwrite it.
-
-Use the packaged integration instead of a private transport script:
-
-```python
-from modeling_system.jev_session import create_session
-
-session = create_session(
-    queue_directory,
-    service=service, episode=active_episode, owner=sole_owner,
-    goal={"objective": authorized_goal},
-    observe_context=read_actual_revisions,
-    catalog=qualified_catalog, handlers=qualified_handlers,
-    public_projection=reviewed_public_projection,
-    ledger_directory=existing_ledger,
-)
-session.run(max_steps=authorized_step_bound)
-```
-
-Callbacks follow the [operating-session contract](operating-session.md). They
-describe this character and qualified capabilities. `planning_batch.decide`
-uses the same transport for recurring judgments outside the action loop.
-`jev_session` includes completed-response recovery, transient recovery and
-explicit authority rebinding. Keep original receipts; never replay uncertain
-native effects. Session creation does not start a goal or automation.
-
-For composed saved-array scopes, `python -m modeling_system.cooperative_scopes MANIFEST` uses the same session and ledger. Its manifest binds `runtime_revision` from `runtime.source_manifest()`, workspace, queue directory, owner, episode, objective, exact source-scope hashes, ledger directory and the authorized step bound. Workspace is relative to the manifest; other data paths are relative to the workspace. Optional `authority_file`/`state_file` default to `AGENTS.md`/`PROJECT.md`. Completed tasks stay frozen, input changes block stale work, and this runner advertises no native handlers.
+For composed saved-array work, run
+`python -m modeling_system.cooperative_scopes MANIFEST`. The manifest binds exact
+runtime and scope hashes, workspace, directory, owner, episode, objective and a
+finite `max_steps`. Add `task_order` when independent choices need ordering.
+Workspace is relative to the manifest; data paths are relative to the workspace.
+`authority_file` and `state_file` default to `AGENTS.md` and `PROJECT.md`.
+Completed tasks remain frozen; changed inputs block stale work. This runner has
+no native handlers.
 
 ## Native and optional integrations
 
-[Native adapter qualification](native-adapters.md) defines the scene entrypoint
-and pinned dependencies. The current socket transport expects a local Blender
-bridge accepting an `execute_code` JSON envelope on loopback (default port 9876).
-Its successful response contains captured stdout in `result.result`; the workbench
-extracts its framed operation result. A connection using another wire protocol
-is insufficient. Supply and qualify that bridge and the scene-specific adapter. The packaged
-[isolated Blender runner](isolated-blender.md) handles copied inputs, isolated
-profiles and job receipts; qualify its use on the selected Blender runtime.
-No universal rig adapter is bundled.
+Supply Blender and a [qualified scene adapter](native-adapters.md). The socket
+transport expects a local bridge accepting `execute_code` JSON on loopback
+(default port 9876), returning captured stdout in `result.result`. The workbench
+extracts its framed operation result. Another bridge protocol is insufficient.
+Pin the entrypoint and dependencies and qualify the actual local rig; no
+universal adapter is bundled.
 
-Blender's Python stays separate from the offline environment. Keep SciPy fitting
-offline and pass pinned arrays to native operations. Do not insert an offline
-environment's `site-packages` into Blender. Bind actual executable/runner paths
-on each machine. Astra develops capabilities; Jev selects their native use.
+The [isolated runner](isolated-blender.md) copies inputs, isolates profiles and
+records jobs. Blender's embedded Python is separate from offline preparation:
+never add the offline environment's entire `site-packages` to a native worker.
+Keep heavy fitting offline and pass pinned arrays to native operations.
 
-Image, mesh and video generation are optional external transports. Existing art
-needs none of those accounts. Each route retains its actual authorization, source
-review and recovery semantics; no credentials or credits are bundled.
+Image, mesh and video generation are optional external integrations with separate
+authorization, sources and recoverable job accounting. Credentials and credits
+are never bundled. Existing art requires none of those accounts.
 
-## Transfer and upgrades
+## Transfer and upgrade
 
-Share tools-only exports. Character workspaces and explicit evidence transfers
-remain private. Recreate the environment/plugin, restore private evidence through
-the existing transfer mechanism, rebind external files, verify hashes, and qualify
-the local native adapter. Saved absolute paths are not portable configuration.
+Share tools-only exports. Restore character assets/evidence separately, recreate
+the environment and plugin, rebind local external files, verify hashes and qualify
+the native adapter. Moving files does not establish current live state or transfer
+a running native lane. Reconcile uncertain effects on the original host.
 
-Completed evidence remains historical. In-flight native/provider effects need
-reconciliation on the original host; moving files does not grant a new owner or
-permit replay. An existing live project keeps its pinned runtime until its owner
-deliberately verifies and adopts a replacement. Upgrading tools does not overwrite
-local skill customizations or silently switch a running character session.
+Old evidence, provider ledgers and checkpoints remain readable history. They are
+not executable plans. Start direct work in a new session directory and explicitly
+bind current operations, arguments, conditions and preservation; old inferred task
+definitions are rejected instead of silently executed. Keep installed runtime,
+native adapter and actual operator adoption receipts distinct.

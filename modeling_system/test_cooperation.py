@@ -1,4 +1,4 @@
-"""Review overlap and scoped Jev fallback without native or provider effects."""
+"""Review overlap and direct queue continuation without native effects."""
 from copy import deepcopy
 import threading
 import unittest
@@ -7,7 +7,6 @@ from .cooperation import compose_catalogs, request_stop
 from .controller import read_json
 from . import test_operating_session as operating_fixtures
 from . import test_work_queue as queue_fixtures
-from .work_queue import DEFER
 
 
 class CooperativeTests(unittest.TestCase):
@@ -130,64 +129,6 @@ class CooperativeTests(unittest.TestCase):
             compose_catalogs(lambda *args: first, lambda *args: first)({}, {})
 
 
-class ScopedFallbackTests(unittest.TestCase):
-    def setUp(self):
-        self.f = queue_fixtures.LaneSelectorTests(); self.f.setUp()
-        self.addCleanup(self.f.doCleanups)
-
-    def choose(self, *, global_defer=False, all_defer=False):
-        f = self.f; selector = f.selector()
-        def judge(state, questions, binding):
-            f.calls.append(questions)
-            return {'binding': binding, 'judgments': {q['id']: {
-                'choice': (DEFER if global_defer else 'diagnosis') if q['id'] == 'next_lane' else
-                          DEFER if q['id'] == 'diagnosis' or all_defer else q['options'][0]['id']}
-                for q in questions}}
-        selector.judge = judge
-        return selector(f.snapshot, f.actions, f.plan)
-
-    def test_scoped_deferral_uses_other_real_jev_choice_from_same_batch(self):
-        self.assertEqual(self.choose(), 'retrieve')
-        self.assertEqual(len(self.f.calls), 1)
-        trace = read_json(self.f.root/'last-batch.json')
-        self.assertEqual(trace['cooperation']['preferred_lane'], 'diagnosis')
-        self.assertEqual(trace['cooperation']['selected_lane'], 'experience')
-        self.assertEqual(trace['cooperation']['deferred_lanes'][0]['lane'], 'diagnosis')
-        self.assertEqual(self.f.selector()(self.f.snapshot, self.f.actions, self.f.plan), 'retrieve')
-        self.assertEqual(len(self.f.calls), 1)
-
-    def test_explicit_global_deferral_is_never_overridden(self):
-        self.assertEqual(self.choose(global_defer=True)['status'], 'needs_review')
-
-    def test_no_applicable_choices_yield_one_scoped_handoff(self):
-        result = self.choose(all_defer=True)
-        self.assertEqual(result['status'], 'needs_review')
-        self.assertEqual(len(result['deferred_lanes']), 2)
-
-    def test_fallback_must_pass_its_own_method_and_claim_checks(self):
-        from .decision_evidence import grounded_claim
-        f = self.f
-        f.actions[1]['decision'] = {'method_checks': {'method': 'Is current support sufficient?'},
-            'claims': {'support': grounded_claim('Support is complete.',
-                source_text='Support is incomplete.', public_excerpt='Support is incomplete.')}}
-        for condition in ('method', 'claim'):
-            selector = f.selector()
-            def judge(state, questions, binding):
-                answers = {}
-                for q in questions:
-                    key = q['id']
-                    value = q['options'][0]['id']
-                    if key == 'diagnosis': value = DEFER
-                    if key == 'next_lane': value = 'diagnosis'
-                    if key.endswith('_method'): value = 'missing' if condition == 'method' else 'ready'
-                    if '_claim_' in key: value = 'contradicted'
-                    answers[key] = {'choice': value}
-                return {'binding': binding, 'judgments': answers}
-            selector.judge = judge
-            f.actions[1]['reads']['support'] = condition
-            result = selector(f.snapshot, f.actions, f.plan)
-            self.assertEqual(result['status'], 'needs_review')
-            self.assertEqual(len(result['deferred_lanes']), 2)
 
 
 if __name__ == '__main__': unittest.main()

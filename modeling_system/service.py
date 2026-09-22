@@ -98,7 +98,7 @@ class ModelingService:
         return runtime_report(self)
 
     def operating_protocol(self) -> dict:
-        """Read Astra/Jev responsibilities, task contracts and complete capability routing; no native/provider access."""
+        """Read owner/reviewer responsibilities, task contracts and complete capability routing; no native/provider access."""
         from .operating_session import protocol
         return protocol()
 

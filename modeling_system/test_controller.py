@@ -153,7 +153,7 @@ class ControllerTests(unittest.TestCase):
             self.controller()
         self.assertEqual(self.executed, [])
 
-    def test_invalid_selection_never_retries_provider(self):
+    def test_invalid_selection_never_retries_selection(self):
         self.state['actions'] = [self.action('a'), self.action('b')]
         calls = []
         controller = self.controller(select=lambda *_: calls.append(1) or 'not-an-action')
@@ -162,7 +162,7 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
     def test_status_reports_real_progress_budget_and_stop(self):
-        self.state['inference_budget'] = {'remaining_calls': 0, 'remaining_usd': 0}
+        self.state['work_limits'] = {'max_steps': 1}
         self.state['actions'] = [self.action()]
         statuses = []
         def execute(action, context):
@@ -172,7 +172,7 @@ class ControllerTests(unittest.TestCase):
         controller.tick()
         self.assertEqual([s['status'] for s in statuses], ['running', 'running', 'completed'])
         self.assertEqual(statuses[1]['progress']['completed_samples'], 3)
-        self.assertEqual(read_json(self.root / 'status.json')['inference_budget']['remaining_calls'], 0)
+        self.assertEqual(read_json(self.root / 'status.json')['work_limits']['max_steps'], 1)
         controller.cancelled.set()
         self.assertEqual(controller.tick()['status'], 'stopped')
 

@@ -11,7 +11,6 @@ from . import cooperative_scopes as runner
 from .runtime import source_manifest
 from modeling_system import test_operating_session as fixtures
 from modeling_system.controller import write_json, read_json
-from modeling_system.test_decision_control import answer_batch
 
 
 class ScopeTests(unittest.TestCase):
@@ -37,12 +36,11 @@ class ScopeTests(unittest.TestCase):
         write_json(self.manifest,{'workspace':str(self.root),'directory':str(self.root/'combined'),
             'runtime_revision':source_manifest()['revision'], 'state_file':'MODELING.md','owner':'native owner',
             'episode':self.f.episode,'objective':'Compare qualified saved effects','scopes':scopes,
-            'ledger_directory':str(self.root/'unused-ledger'),'max_steps':4})
+            'task_order':['measure0','measure1'],'max_steps':4})
 
     def create(self):
         with patch.object(runner,'ModelingService',return_value=self.f.service):
             session,manifest=runner.create(self.manifest)
-        session.selector.judge=answer_batch
         return session
 
     def test_composed_tasks_execute_once_and_share_fresh_reads(self):

@@ -85,20 +85,7 @@ The full observation and atomic native guard remain the default. These changes
 remove avoidable orchestration where supported; no Blender speedup is inferred
 from browser or game demos. Use current modeling receipts to identify bottlenecks.
 
-## Recurring planning judgments (0.2.19)
 
-Jev can take recurring planning decisions in addition to choosing native actions.
-The reusable `judgments` compiler supports Choice, Score and Noul batches, structured
-criteria, private identifier maps, complete answer validation and evidence-bound
-resolution. Built-in planning questions cover priority, method, evidence, recovery
-and handler routing with an explicit return-to-reasoning outcome. See the
-[planning contract](judgments.md).
-The workspace supplies transport/budget and qualified candidate catalogs; generic
-judgments do not invent native capabilities or certify appearance. Expand useful
-retained procedures from actual work rather than requiring candidate-specific
-controller/menu code. Provider/native adoption and saved reasoning effort are
-separate from implementation.
+## Direct operation
 
-## Shared Jev work queue (0.2.20)
-
-WorkQueue and LaneSelector compose qualified operations across diagnosis, repair, verification, review preparation, recovery, experience and preparation. Durable prerequisites and receipts replace per-candidate controller restarts; conditional lane choices are batched and reused under exact evidence bindings. Explicit needs_review is separate from uncertain dispatch. Direct TypeSafe transport retains token-based cost estimates with workspace-owned credential and budget. Native execution stays serial; visual acceptance and new mechanisms remain reasoning-owner work. See the packaged work-queue procedure. Source tests, installation identity and actual workspace adoption are reported separately.
+The current [operating session](operating-session.md) retains these abstractions with explicit owner-controlled execution and no inference dependency.

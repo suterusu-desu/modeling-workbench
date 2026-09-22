@@ -6,12 +6,11 @@ from pathlib import Path
 import sys
 
 from .bindings import load_binding
-from .credentials import credential_status
 from .skill_bundle import verify_dependencies
 from .store import digest
 
 
-def inspect_setup(workspace=None, *, plugin=None, ledger=None):
+def inspect_setup(workspace=None, *, plugin=None):
     checks = []
     def check(name, ok, detail):
         checks.append({'name': name, 'ok': bool(ok), 'detail': detail})
@@ -55,30 +54,17 @@ def inspect_setup(workspace=None, *, plugin=None, ledger=None):
                   and report['probe']['runtime']['workspace'] == str(Path(workspace).resolve()), report['status'])
         except (OSError, ValueError, KeyError, RuntimeError):
             check('plugin', False, 'Regenerate plugin configuration using this interpreter and workspace')
-    provider = {'credentials': credential_status(), 'ledger': 'unconfigured', 'network_verified': False}
-    if ledger:
-        from .provider_recovery import budget_limits
-        path = Path(ledger)/'budget.json'
-        try:
-            record = json.loads(path.read_text(encoding='utf-8'))
-            if record.get('policy', {}).get('mode') != 'normal_use':
-                raise ValueError('Explicit normal-use authorization required')
-            budget_limits(record)
-            provider['ledger'] = record['status']
-        except (OSError, ValueError, KeyError):
-            provider['ledger'] = 'invalid'
     return {'core_ready': all(row['ok'] for row in checks), 'checks': checks,
-            'jev': provider, 'native': native,
-            'limits': 'Offline checks do not verify account credits, a running Blender adapter, rig bindings or appearance.'}
+            'execution': 'direct_owner', 'inference_dependencies': [], 'native': native,
+            'limits': 'Offline checks do not verify a running Blender adapter, rig bindings or appearance.'}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace')
     parser.add_argument('--plugin')
-    parser.add_argument('--ledger')
     args = parser.parse_args()
-    report = inspect_setup(args.workspace, plugin=args.plugin, ledger=args.ledger)
+    report = inspect_setup(args.workspace, plugin=args.plugin)
     print(json.dumps(report, indent=2))
     raise SystemExit(0 if report['core_ready'] else 1)
 

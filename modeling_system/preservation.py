@@ -2,7 +2,7 @@
 
 Adapters are trusted, source-pinned geometric code, not a sandbox or an anatomy
 solver. Their coverage/bind/measure functions must be qualified against actual
-construction. Task-supplied pass flags and Jev confidence have no authority here.
+construction. Task-supplied pass flags and confidence claims have no authority here.
 """
 from copy import deepcopy
 import hashlib
@@ -144,7 +144,7 @@ class PreservationPolicy:
         row['reads'].update({_key(ref): ref['sha256'] for ref in self.references})
         # Required source/coverage/consumption/output checks are enforced here
         # by code. Preserve authored semantic questions, but do not invent an
-        # abstract approval gate over an already-qualified Jev operation choice.
+        # abstract approval gate over an already-qualified owner operation choice.
         return row
 
     def relevant(self, item):

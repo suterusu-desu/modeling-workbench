@@ -1,4 +1,4 @@
-"""Astra/Jev operation composed over existing episodes, services and queues.
+"""Owner-controlled operation composed over existing episodes, services and queues.
 
 The session is an execution index, not a new character or evidence authority.
 Private adapters qualify native capabilities; this layer makes their contracts,
@@ -19,7 +19,7 @@ from .episodes import pin_link
 from .journal import EPISODE, ACTIVE_CALL, invoke
 from .leases import LEASE
 from .store import canonical, digest
-from .work_queue import WorkQueue, LaneSelector
+from .work_queue import WorkQueue
 from .session_metrics import session_metrics
 
 
@@ -49,8 +49,7 @@ def protocol():
     inventory = json.loads(Path(__file__).with_name('capabilities.json').read_bytes())
     return {'schema_version': 1,
         'roles': {
-            'astra': 'Own intent, likeness criteria, new mechanisms and actual image judgments; refine the bounded task frontier without operating Blender directly.',
-            'jev': 'Choose priorities, methods, scopes, evidence and recovery from qualified executable options using current facts and retained findings.',
+            'owner': 'Choose and execute qualified operations directly, preserve intent and likeness criteria, and review actual images.',
             'workbench': 'Compile dependencies and contracts, execute chosen capabilities, retain exact facts, reconcile effects and expose the next useful work.',
             'native_adapter': 'One owner; atomic expected-state checks, real guide-constrained construction, protection, save/reopen and visible state.',
         },
@@ -59,7 +58,7 @@ def protocol():
         'capabilities': [{k: row[k] for k in ('name', 'route', 'control')}
                          for row in inventory['capabilities']],
         'claims': 'Execution, measured realization, saved/reopened state, appearance judgment, user acceptance and method benefit stay separate.',
-        'parallelism': 'Independent Jev questions share one batch; immutable preparation may overlap through a qualified adapter. Native effects remain serial. Persistence grants no new budget or unattended work.'}
+        'parallelism': 'Explicitly ordered useful work shares one queue; immutable preparation may overlap through a qualified adapter. Native effects remain serial. Persistence grants no new budget or unattended work.'}
 
 
 def _binding_path(directory):
@@ -112,28 +111,26 @@ class OperatingSession(WorkQueue):
     Handlers return status plus a workbench report. report(item, result) can adapt
     an existing qualified handler without rewriting its native implementation.
     Reports contain checks with exact evidence and deliberately public findings.
-    Provider transport/budget remain workspace callbacks supplied to judge.
+    The owner supplies explicit priorities; reports and historical evidence remain local.
     """
     def __init__(self, directory, *, service, episode, owner, goal, observe_context,
-                 catalog, handlers, judge, public_projection, report=None, experience=None, budget=None,
+                 catalog, handlers, select=None, task_order=None, report=None, experience=None, budget=None,
                  preservation=None, require_preservation=False):
         self.service, self.episode = service, episode
         self.report_adapter = report
         self.private_handlers = dict(handlers)
         self.private_handlers.setdefault('service', self._service)
-        self.projection = public_projection
         self.preservation = preservation
         self.require_preservation = require_preservation
-        from .decision_budget import decision_budget
-        self.decision_budget = decision_budget(budget)
+        from .work_limits import work_limits
+        self.limits = work_limits(budget)
         from .retained_context import RetainedContext
-        self.experience = experience if experience is not None else RetainedContext(service, sources=[], budget=self.decision_budget)
+        self.experience = experience if experience is not None else RetainedContext(service, sources=[], budget=self.limits)
         self.user_catalog = catalog
-        self.selector = LaneSelector(Path(directory) / 'advice', judge=judge, project=self._project, budget=self.decision_budget)
         self._validate_episode(owner)
         super().__init__(directory, owner=owner, goal=goal, observe_context=observe_context,
             catalog=self._catalog, handlers={key: self._handle for key in self.private_handlers},
-            select=self.selector, budget=self.decision_budget)
+            select=select, task_order=task_order, budget=self.limits)
         binding = {'schema_version': 1, 'workspace': str(service.workspace),
             'episode': episode, 'owner': owner, 'goal': fingerprint(goal)}
         if preservation or require_preservation:
@@ -217,10 +214,19 @@ class OperatingSession(WorkQueue):
         for dependency, checks in contract.get('consumes', {}).items():
             if dependency not in item.get('requires', {}) or not checks:
                 raise ValueError('Consumed evidence must name a declared prerequisite and its checks')
-        if item.get('decision', {}).get('arguments'):
-            from .capability_calls import validate_call
-            validate_call(item)
-        if item['handler'] == 'service' and (not item.get('decision', {}).get('arguments') or contract.get('invocation')):
+        if item.get('decision') or item.get('select_with_jev'):
+            raise ValueError('Legacy inferred tasks require explicit owner-bound arguments and conditions')
+        if item.get('parameters', {}).get('arguments'):
+            from .capability_calls import bind_call
+            invocation = contract.get('invocation', {})
+            if (invocation.get('status') != 'bound' or invocation.get('task') != item['id']
+                    or invocation.get('specification') != fingerprint(item['parameters'])):
+                raise ValueError('Typed arguments require an explicit owner-bound invocation')
+            expected = bind_call(item, invocation.get('selected'))
+            if (expected['payload'] != item.get('payload')
+                    or expected['workbench']['invocation']['arguments'] != invocation.get('arguments')):
+                raise ValueError('Task payload differs from its explicit qualified argument choices')
+        if item['handler'] == 'service':
             payload = item['payload']
             operation, arguments = payload['operation'], payload.get('arguments', {})
             if operation.startswith('native_'):
@@ -256,23 +262,6 @@ class OperatingSession(WorkQueue):
             return None
         return review if review['basis'] == self._review_basis(task, state) else None
 
-    def judgment_context(self, binding):
-        """Fresh binding and active lane from one observation, never a cache.
-
-        Transport callbacks use this at each validation boundary instead of
-        observing the complete menu and then reading the same context again
-        solely for active_operations. Request/release and native execution
-        guards remain the caller's responsibility.
-        """
-        state = self.observe()
-        if fingerprint(state['actions']) != binding['menu']:
-            raise ValueError('Operating session menu changed during inference')
-        fresh = deepcopy(binding)
-        fresh['owner'] = state['owner']
-        fresh['authority_revision'] = state['authority_revision']
-        fresh['dependencies']['reads'] = {
-            key: state['values'].get(key) for key in binding['dependencies']['reads']}
-        return {'binding': fresh, 'active_operations': deepcopy(state['active_operations'])}
 
     def observe(self):
         state = super().observe()
@@ -312,19 +301,6 @@ class OperatingSession(WorkQueue):
             if missing:
                 blocked[action['id']] = {'missing_evidence': missing}
             else:
-                if contract.get('native') and not action.get('required'):
-                    parent = contract.get('selected_method_from')
-                    prior = self.items.get(parent, {})
-                    continuation = (parent in self.items[action['id']].get('requires', {})
-                        and self.record['results'].get(parent, {}).get('status') == 'completed'
-                        and prior.get('select_with_jev') is True
-                        and contract.get('method_choice') is not None
-                        and prior.get('workbench', {}).get('method_choice') == contract['method_choice'])
-                    # Standalone native diagnostics, captures and singleton edits
-                    # retain a real action/defer choice. Only an actual selected
-                    # method's declared continuation avoids duplicate inference.
-                    if not continuation:
-                        action['select_with_jev'] = True
                 ready.append(action)
         state['actions'] = ready
         feedback = self._feedback(state)
@@ -339,8 +315,7 @@ class OperatingSession(WorkQueue):
                 for k in ('operating_intent', 'operating_feedback', 'operating_observation')})
             if self.preservation:
                 action['reads']['operating_preservation'] = state['values']['operating_preservation']
-        if (self.experience and ready and not any(action.get('required') for action in ready)
-                and (len(ready) > 1 or ready[0].get('select_with_jev'))):
+        if self.experience and ready and not any(action.get('required') for action in ready):
             from .retained_context import RetainedContext
             record = self.experience(deepcopy(state),
                 [deepcopy(self.items[action['id']]) for action in ready], deepcopy(self.record['results']))
@@ -360,7 +335,7 @@ class OperatingSession(WorkQueue):
     def _feedback(self, state):
         # Facts are compiled after every actual operation, never frozen in a
         # startup prompt. IDs/locators remain private; only authored public text
-        # and explicit coverage enter Jev state.
+        # and explicit coverage enter the compact owner view.
         facts = []
         for task, entry in self.record['results'].items():
             report = entry.get('result', {}).get('workbench')
@@ -375,41 +350,11 @@ class OperatingSession(WorkQueue):
                    if (row := self._review(task, state))]
         feedback = {'findings': facts, 'visual_feedback': reviews,
             'limits': 'Technical execution and metrics do not approve appearance. Scope_noop excludes only its stated scope; retain useful gains elsewhere.'}
-        if len(canonical(feedback)) > self.decision_budget.context_bytes:
-            raise ValueError('Modeling feedback exceeds the decision budget; narrow the active catalog, retaining old facts in the episode')
+        if len(canonical(feedback)) > self.limits.context_bytes:
+            raise ValueError('Modeling feedback exceeds the context limit; narrow the active catalog, retaining old facts in the episode')
         return feedback
 
-    def authority_feedback_rebinding(self, previous, current, authority_keys):
-        """Prove a feedback refresh follows only the explicitly changed authority.
 
-        Recompute the old view from current retained reports with only authority
-        values restored. Changed findings, reviews or other report dependencies
-        cannot pass by merely labelling a new feedback hash as authority-derived.
-        """
-        from .provider_recovery import validate_feedback_rebinding
-        restored = deepcopy(current)
-        restored['authority_revision'] = previous['authority_revision']
-        for key in set(authority_keys) | {'work_queue_scope'}:
-            restored['values'][key] = previous['values'][key]
-        proof = {'before': previous['observations']['workbench'],
-                 'after': current['observations']['workbench']}
-        if self._feedback(restored) != proof['before'] or self._feedback(current) != proof['after']:
-            raise ValueError('Retained feedback changed beyond the authority correction')
-        validate_feedback_rebinding(proof, previous['values'], current['values'])
-        return deepcopy(proof)
-
-    def _project(self, snapshot, actions, plan):
-        projected = deepcopy(self.projection(snapshot, actions, plan))
-        projected['state']['workbench'] = deepcopy(snapshot['observations']['workbench'])
-        if 'required_preservation' in snapshot['observations']:
-            projected['state']['required_preservation'] = deepcopy(snapshot['observations']['required_preservation'])
-        if 'experience' in snapshot['observations']:
-            experience = deepcopy(snapshot['observations']['experience'])
-            projected['state']['retained_experience'] = experience
-            projected['rank_experience'] = experience['passages']
-            record = self._experience_record
-            projected['experience_candidates'] = deepcopy(record.get('candidates', []))
-        return projected
 
     def _service(self, item, context):
         payload = item['payload']
@@ -479,16 +424,6 @@ class OperatingSession(WorkQueue):
 
     def _handle(self, item, context):
         original_item = deepcopy(item)
-        trace_path = self.selector.directory / 'last-batch.json'
-        trace = read_json(trace_path) if trace_path.exists() else {}
-        chosen = next((a for a in trace.get('actions', []) if a['id'] == item['id']), {})
-        if (trace.get('choice') != item['id'] or chosen.get('revision') != fingerprint(item)
-                or chosen.get('reads') != context['expected_values']
-                or trace.get('binding', {}).get('authority_revision') != context['authority_revision']):
-            trace = {}
-        if item.get('decision', {}).get('arguments'):
-            from .capability_calls import compile_call
-            item = compile_call(item, trace.get('call', {}))
         contract = self._contract(item)
         arguments = {'task': original_item, 'compiled_task': item, 'expected_values': context['expected_values'],
                      'attempt_key': context['attempt_key']}
@@ -496,9 +431,6 @@ class OperatingSession(WorkQueue):
         def reserve(lease):
             entry = self.record['results'][item['id']]
             entry.update(operation_handle=lease['operation_handle'], episode=self.episode, task=original_item)
-            if trace:
-                entry['decision'] = {'selection_key': trace['selection_key'],
-                                     'trace_revision': fingerprint(trace)}
             write_json(self.path, self.record)
 
         def run():
@@ -520,8 +452,6 @@ class OperatingSession(WorkQueue):
             result = json_data(result)
             result['handler_elapsed_ms'] = round((time.perf_counter() - started) * 1000, 3)
             result['operation_context_record'] = decision_context['context_record']
-            if trace:
-                result['decision'] = {'selection_key': trace['selection_key'], 'call': trace.get('call')}
             write_json(self.service.store.root / 'calls' / handle / 'capability-result.json', result)
             if consumption is not None:
                 try:
@@ -553,7 +483,7 @@ class OperatingSession(WorkQueue):
         """Record actual scoped visual interpretation and optional conditional lesson.
 
         Judgment and lesson text are deliberately public, as in current feedback.
-        Evidence, task identity and locators stay private. Jev never calls this.
+        Evidence, task identity and locators stay private. Only actual review supplies a judgment.
         """
         from .learning import validate_lesson, retain_review
         if lesson is not None:
@@ -745,8 +675,8 @@ class OperatingSession(WorkQueue):
     def recover_selection(self, *, expected_selection, observed, evidence):
         """Reconcile an old selection refusal from explicit no-dispatch evidence.
 
-        New typed preflight refusals clear themselves. Other provider failures
-        keep their original ledger/request identity and cannot use this route.
+        This route only clears a proven undispatched selection. Historical requests
+        and uncertain native effects retain their original receipts.
         """
         if (self.directory / 'controller' / 'controller.lock').exists():
             raise ValueError('Stop or reconcile the active controller before selection recovery')
@@ -772,114 +702,3 @@ class OperatingSession(WorkQueue):
         current.setdefault('selection_recoveries', []).append(result)
         write_json(path, current)
         return result
-
-    def recover_completed_selection(self, *, expected_selection, packet_path,
-                                    request_path, response_path, reconciliation_path,
-                                    terminal_retry_path=None, transient_retry_path=None):
-        """Release an exact validated provider return, with no inference or effects.
-
-        Reconcile its original ledger using provider_recovery first. Retained
-        pre-call questions, cached branches, current menu and reviewed public
-        facts must all agree. Resume via run(); the normal native guard remains.
-        """
-        from .typesafe_transport import validate_response_receipt
-        if len({Path(p).resolve().parent for p in
-                (packet_path, request_path, response_path, reconciliation_path)}) != 1:
-            raise ValueError('Selection recovery receipts must belong to the same original call')
-        directory = self.directory / 'controller'
-        lock = directory / 'controller.lock'
-        with lock.open('x', encoding='utf-8') as stream:
-            stream.write('completed selection reconciliation')
-        try:
-            path = directory / 'controller.json'
-            controller = read_json(path)
-            selection = controller.get('selection')
-            if (controller['owner'] != self.owner or selection is None or
-                    fingerprint(selection) != expected_selection or any(
-                    a['status'] in ('running', 'needs_reconciliation') for a in controller['attempts'])):
-                raise ValueError('Exact pending selection with no uncertain native effects required')
-            packet, request, response, recovery = [read_json(p) for p in
-                (packet_path, request_path, response_path, reconciliation_path)]
-            verified = validate_response_receipt(packet, request, response)
-            if (recovery.get('status') != 'reconciled_completed_response' or
-                    recovery.get('packet_digest') != fingerprint(packet) or
-                    recovery.get('response_digest') != fingerprint(response) or
-                    recovery.get('choices') != verified['choices'] or
-                    recovery.get('provider_calls_added') != 0 or recovery.get('native_dispatch') is not False):
-                raise ValueError('Matching completed-response ledger reconciliation required')
-            state = self.observe()
-            if (state['active_operations'] or state['owner'] != selection['state']['owner'] or
-                    state['authority_revision'] != selection['state']['authority_revision'] or
-                    state['stage'] != selection['state']['stage'] or
-                    state['actions'] != selection['actions'] or not applicable(selection['plan'], state)):
-                raise ValueError('Selection context changed; preserve the response without releasing it')
-            batch_path = self.selector.directory / 'batches' / (expected_selection + '.json')
-            batch = read_json(batch_path)
-            public = self.selector.project(deepcopy(state), deepcopy(state['actions']), deepcopy(selection['plan']))
-            original_packet = batch['packet']
-            retry_evidence, retry_lineage = [], None
-            if terminal_retry_path is not None and transient_retry_path is not None:
-                raise ValueError('Supply one explicit retry lineage')
-            if transient_retry_path is not None:
-                from .provider_recovery import transient_retry_packet
-                from .invalid_response import invalid_answer_retry_packet
-                authorization = read_json(transient_retry_path)
-                origin = Path(authorization['previous_call'])
-                prior_packet, prior_request, prior_dispatch = [read_json(origin/name) for name in
-                    ('owner-packet.json', 'decision-1.request.json', 'dispatch-count.json')]
-                previous_response = origin/'decision-1.response.json'
-                failed_response = read_json(previous_response) if previous_response.exists() else None
-                invalid = authorization.get('status') == 'invalid_answer_retry_prepared'
-                derived = (invalid_answer_retry_packet(prior_packet, prior_request, failed_response, prior_dispatch)
-                    if invalid else transient_retry_packet(prior_packet, prior_request, failed_response,
-                        prior_dispatch, authorization.get('error_type'), rebinding=authorization.get('authority_rebinding')))
-                base = deepcopy(derived); base['local_binding'].pop('provider_retry')
-                if (authorization.get('status') not in ('transient_retry_prepared', 'invalid_answer_retry_prepared') or base != original_packet
-                        or authorization.get('root_packet_digest') != fingerprint(original_packet)
-                        or authorization.get('retry_packet_digest') != fingerprint(packet) or derived != packet):
-                    raise ValueError('Completed transient retry does not descend from this pending choice')
-                retry_lineage = {**packet['local_binding']['provider_retry'],
-                    'retry_packet': fingerprint(packet), 'original_outcome_preserved': True}
-                retry_evidence = [transient_retry_path, origin/'owner-packet.json',
-                    origin/'decision-1.request.json', origin/'dispatch-count.json',
-                    authorization['original_ledger_evidence']]
-                if previous_response.exists(): retry_evidence.append(previous_response)
-            elif terminal_retry_path is not None:
-                from .provider_recovery import terminal_retry_packet
-                authorization = read_json(terminal_retry_path)
-                origin = Path(authorization['original_call'])
-                failed_packet, failed_request, failed_response, failed_dispatch = [read_json(origin / name)
-                    for name in ('owner-packet.json', 'decision-1.request.json', 'decision-1.response.json', 'dispatch-count.json')]
-                derived = terminal_retry_packet(failed_packet, failed_request, failed_response, failed_dispatch)
-                if (authorization.get('status') != 'terminal_retry_prepared' or failed_packet != original_packet
-                        or authorization.get('original_packet_digest') != fingerprint(original_packet)
-                        or authorization.get('retry_packet_digest') != fingerprint(packet)
-                        or authorization.get('retry_limit') != 1 or derived != packet):
-                    raise ValueError('Completed retry must descend from this exact failed terminal request')
-                retry_lineage = {'original_packet': fingerprint(original_packet),
-                    'retry_packet': fingerprint(packet), 'original_http': 503, 'ordinal': 1}
-                retry_evidence = [terminal_retry_path, origin/'owner-packet.json', origin/'decision-1.request.json',
-                    origin/'decision-1.response.json', origin/'dispatch-count.json']
-            elif packet != original_packet:
-                raise ValueError('Completed response belongs to a different pending selection')
-            if public != batch['public']:
-                raise ValueError('Original questions or current public decision context changed')
-            pinned = [pin_link(self.service, {'kind': 'file', 'path': str(p), 'role': 'completed selection evidence'})
-                for p in (packet_path, request_path, response_path, reconciliation_path, batch_path, *retry_evidence)]
-            def restore():
-                choice = self.selector.recover_completed(selection, original_packet, response['response'], str(response_path))
-                return {'status': 'completed', 'selection': expected_selection, 'choice': choice,
-                    'evidence': pinned, 'provider_calls_added': 0, 'effects_replayed': False,
-                    'provider_retry_lineage': retry_lineage,
-                    'terminal_retry_lineage': retry_lineage if terminal_retry_path is not None else None}
-            result = self.service._run_episode_callback(self.episode, 'recover_completed_modeling_selection',
-                {'selection': selection, 'evidence': pinned}, restore)
-            current = read_json(path)
-            if fingerprint(current.get('selection')) != expected_selection:
-                raise ValueError('Selection changed during recovery')
-            current['selection'] = None
-            current.setdefault('selection_recoveries', []).append(result)
-            write_json(path, current)
-            return result
-        finally:
-            lock.unlink()

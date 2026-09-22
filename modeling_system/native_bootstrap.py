@@ -1,4 +1,4 @@
-"""Scoped setup and phase receipts inside a Jev-selected isolated native job.
+"""Scoped setup and phase receipts inside a owner-selected isolated native job.
 
 Importing this module never imports Blender or opens a scene. Workspace code
 supplies the qualified feature API, dependencies and actual scoped checks.

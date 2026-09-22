@@ -30,10 +30,7 @@ methods = ParameterizedCatalog({"arrays": bind_array_method}, qualified_bindings
 
 Offer alternatives that answer different live questions, such as explicit
 attachment-pair motion versus a guide-material fit where both are qualified.
-Use applicability conditions to exclude missing correspondence. A single
-substantive native operation always keeps Jev's action/defer choice, even outside
-MethodCatalog. `MethodCatalog.followup(stage)` marks the declared continuation of
-the actual chosen method; that continuation needs no redundant inference.
+Use applicability conditions to exclude missing correspondence. A single qualified native operation runs directly under its owner. `MethodCatalog.followup(stage)` marks the declared continuation of the actual chosen method; multiple alternatives require explicit owner choice.
 
 ## Material fields and verification
 
@@ -157,4 +154,4 @@ uses the existing explicit intervention timer.
 Metrics include parameterized implementation use, tasks without recipe identity,
 native stage durations/call counts, skipped redundant opens and unmeasured review
 submissions. Elapsed intervals include interruptions; they are not token usage.
-Do not infer Astra savings from shorter Jev latency or incomplete work accounting.
+Do not infer Astra savings from shorter selection latency or incomplete work accounting.

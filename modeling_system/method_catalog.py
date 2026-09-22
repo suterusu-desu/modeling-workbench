@@ -1,16 +1,16 @@
-"""Reusable executable methods, with semantic choice left to Jev.
+"""Reusable executable methods, with explicit owner choice.
 
 Factories qualify actual inputs. This registry does not infer anatomy or turn a
 historical success into permission. Register mechanisms once, then bind a scope.
 """
 from copy import deepcopy
 from .experience import applicability
-from .decision_budget import decision_budget
+from .work_limits import work_limits
 
 
 class MethodCatalog:
     def __init__(self, methods, *, context=None, budget=None):
-        self.budget = decision_budget(budget)
+        self.budget = work_limits(budget)
         if (not isinstance(methods, list) or not methods or len(methods) > self.budget.max_methods
                 or any(not m.get('id') or not m.get('description')
                        or not callable(m.get('build')) for m in methods)
@@ -18,10 +18,8 @@ class MethodCatalog:
             raise ValueError('Unique described executable methods required')
         self.methods = {m['id']: dict(m) for m in methods}
         for method in self.methods.values():
-            remedies = method.get('remedy_methods', [])
-            if (not isinstance(remedies, list) or len(set(remedies)) != len(remedies)
-                    or not set(remedies) <= self.methods.keys() or method['id'] in remedies):
-                raise ValueError('Remedy methods must name distinct other registered methods')
+            if method.get('method_checks') or method.get('remedy_methods'):
+                raise ValueError('Bind method prerequisites to observed conditions or task dependencies; inference checks are unsupported')
         self.context = context or (lambda state: state.get('public_state', {}))
         self.excluded = {}
 
@@ -35,13 +33,6 @@ class MethodCatalog:
             row['workbench']['method_choice'] = method['id']
             row['description'] = {'operation': row['description'],
                                   'method': deepcopy(method['description'])}
-            if choose:
-                row['select_with_jev'] = True
-                if method.get('method_checks'):
-                    row.setdefault('decision', {})['method_checks'] = deepcopy(method['method_checks'])
-                if method.get('remedy_methods'):
-                    checks = row.setdefault('decision', {}).setdefault('method_checks', {})
-                    checks['remedy_methods'] = deepcopy(method['remedy_methods'])
         return rows
 
     def __call__(self, state, previous=None):
@@ -61,8 +52,8 @@ class MethodCatalog:
     def followup(self, stage):
         """Route a pipeline stage from the actual selected method and its result.
 
-        A fixed apply after selected preparation needs no duplicate inference.
-        Multiple offered follow-ups still use the queue's ordinary Jev choice.
+        A fixed apply follows qualified preparation directly. Multiple offered
+        follow-ups require the owner's explicit selection.
         """
         def build(state, previous):
             key = previous['task']['workbench']['method_choice']

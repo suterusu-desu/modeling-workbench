@@ -11,83 +11,9 @@ from .work_queue import WorkQueue
 
 
 class OperatingTests(unittest.TestCase):
-    def test_judgment_context_uses_one_fresh_snapshot_per_read(self):
-        self.items = [self.item('first'), self.item('second')]
-        session = self.session()
-        state = session.observe()
-        binding = {'owner': state['owner'], 'authority_revision': state['authority_revision'],
-            'menu': fingerprint(state['actions']),
-            'dependencies': {'reads': {'source': 's1'}, 'writes': []}}
-        with patch.object(session, 'observe', wraps=session.observe) as observed, \
-                patch.object(session, '_context', wraps=session._context) as context:
-            first = session.judgment_context(binding)
-            self.assertEqual(observed.call_count, 1)
-            self.assertEqual(context.call_count, 1)
-            self.state['active_operations'] = [{'id': 'other', 'writes': ['other-region']}]
-            second = session.judgment_context(binding)
-            self.assertEqual(observed.call_count, 2)
-            self.assertEqual(context.call_count, 2)
-        self.assertEqual(first['active_operations'], [])
-        self.assertEqual(second['active_operations'], self.state['active_operations'])
-        second['binding']['dependencies']['reads']['source'] = 'caller mutation'
-        second['active_operations'].clear()
-        self.assertEqual(binding['dependencies']['reads']['source'], 's1')
-        self.assertEqual(len(self.state['active_operations']), 1)
 
-    def test_judgment_context_refuses_changed_dependency_or_menu(self):
-        self.items = [self.item('first'), self.item('second')]
-        session = self.session()
-        state = session.observe()
-        binding = {'owner': state['owner'], 'authority_revision': state['authority_revision'],
-            'menu': fingerprint(state['actions']),
-            'dependencies': {'reads': {'source': 's1'}, 'writes': []}}
-        self.state['values']['source'] = 'changed source'
-        with self.assertRaisesRegex(ValueError, 'menu changed'):
-            session.judgment_context(binding)
-        self.state['values']['source'] = 's1'
-        self.items[0]['description'] = 'Changed executable proposal'
-        with self.assertRaisesRegex(ValueError, 'menu changed'):
-            session.judgment_context(binding)
 
-    def test_judgment_context_refreshes_extra_bound_evidence(self):
-        self.items = [self.item('first'), self.item('second')]
-        session = self.session()
-        state = session.observe()
-        binding = {'owner': state['owner'], 'authority_revision': state['authority_revision'],
-            'menu': fingerprint(state['actions']),
-            'dependencies': {'reads': {'source': 's1', 'extra-evidence': 'old'}, 'writes': []}}
-        self.state['values']['extra-evidence'] = 'new'
-        actual = session.judgment_context(binding)
-        self.assertEqual(actual['binding']['dependencies']['reads']['extra-evidence'], 'new')
-        self.assertNotEqual(fingerprint(actual['binding']), fingerprint(binding))
 
-    def test_authority_feedback_proof_reconstructs_retained_findings(self):
-        session = OperatingSession.__new__(OperatingSession)
-        from .decision_budget import DecisionBudget
-        session.decision_budget = DecisionBudget()
-        session.items = {'old': {'writes': []}}
-        session.reviews = {}
-        report = {'basis': {'source': 'v1', 'authority': 'old'},
-            'findings': ['retained fact'], 'checks': {'analysis': {'status': 'pass'}},
-            'qualification': 'technical only'}
-        session.record = {'results': {'old': {'result': {'workbench': report}}}}
-        before = {'authority_revision': 'old', 'values': {
-            'source': 'v1', 'authority': 'old', 'work_queue_scope': 'old-scope'}}
-        after = deepcopy(before)
-        after['authority_revision'] = 'new'
-        after['values'].update(authority='new', work_queue_scope='new-scope')
-        for state in (before, after):
-            feedback = session._feedback(state)
-            state['observations'] = {'workbench': feedback}
-            state['values']['operating_feedback'] = fingerprint(feedback)
-        proof = session.authority_feedback_rebinding(before, after, ['authority'])
-        self.assertEqual(proof['after']['findings'][0]['applicability'], 'historical; inputs changed')
-        altered = deepcopy(after); altered['values']['source'] = 'changed'
-        with self.assertRaises(ValueError):
-            session.authority_feedback_rebinding(before, altered, ['authority'])
-        report['findings'] = ['different fact']
-        with self.assertRaises(ValueError):
-            session.authority_feedback_rebinding(before, after, ['authority'])
 
     def setUp(self):
         self.base = fixtures.EpisodeTests(); self.base.setUp()
@@ -122,106 +48,21 @@ class OperatingTests(unittest.TestCase):
         return self.results.get(item['id'], {'status': 'completed',
             'workbench': self.reports.get(item['id'], self.report(item))})
 
-    def judge(self, state, questions, binding):
-        self.batches.append(deepcopy(state))
-        return {'binding': binding, 'judgments': {question['id']: {
-            'choice': question['options'][0]['id']} for question in questions}}
+    def select(self, state, actions, plan):
+        self.batches.append(deepcopy(state['observations']))
+        return actions[0]['id']
 
-    def session(self, execute=None, judge=None, report=None):
+    def session(self, execute=None, select=None, report=None):
         return OperatingSession(self.root/'queue', service=self.service, episode=self.episode,
             owner='native owner', goal={'objective': 'Useful form'},
             observe_context=lambda: deepcopy(self.state),
             catalog=lambda state, results: deepcopy(self.items), handlers={'run': execute or self.execute},
-            judge=judge or self.judge, report=report, public_projection=lambda snapshot, actions, plan: {
-                'state': deepcopy(snapshot['observations']['public']),
-                'descriptions': {action['id']: action['description'] for action in actions}})
+            select=select or self.select, report=report)
 
-    def completed_provider_failure(self):
-        from .judgments import prepare_judgments
-        from .test_provider_recovery import completed_call
-        self.items = [self.item('first'), self.item('second')]
-        captured = {}
-        def interrupted(state, decisions, binding):
-            self.batches.append(state)
-            packet = prepare_judgments(state, decisions, binding)
-            captured['ledger'], captured['call'] = completed_call(self.root, packet)
-            raise PermissionError('Completed response metadata interrupted')
-        session = self.session(judge=interrupted)
-        self.assertEqual(session.run(max_steps=1)['status'], 'needs_reconciliation')
-        from .provider_recovery import reconcile_completed_response
-        reconcile_completed_response(captured['call'], captured['ledger'], lambda: session.observe())
-        call = captured['call']
-        selection = read_json(self.root / 'queue/controller/controller.json')['selection']
-        args = {'expected_selection': fingerprint(selection), 'packet_path': call / 'owner-packet.json',
-            'request_path': call / 'decision-1.request.json', 'response_path': call / 'decision-1.response.json',
-            'reconciliation_path': call / 'completed-response-reconciliation.json'}
-        return session, args, captured
 
-    def test_completed_provider_recovery_resumes_once_without_new_inference(self):
-        session, args, captured = self.completed_provider_failure()
-        before = read_json(captured['ledger'] / 'budget.json')
-        result = session.recover_completed_selection(**args)
-        self.assertEqual(result['provider_calls_added'], 0)
-        self.assertEqual(self.ran, [])  # Recovery never performs native work.
-        self.assertEqual(session.run(max_steps=1)['status'], 'stopped')
-        self.assertEqual(self.ran, ['first'])
-        self.assertEqual(len(self.batches), 1)
-        self.assertEqual(read_json(captured['ledger'] / 'budget.json'), before)
-        self.assertEqual(read_json(self.root / 'queue/controller/controller.json')['selection_recoveries'][0]['selection'], args['expected_selection'])
 
-    def test_completed_provider_recovery_refuses_stale_context(self):
-        session, args, _ = self.completed_provider_failure()
-        self.state['values']['source'] = 'later edit'
-        with self.assertRaises(ValueError): session.recover_completed_selection(**args)
-        self.assertIsNotNone(read_json(self.root / 'queue/controller/controller.json')['selection'])
-        self.assertEqual(self.ran, [])
 
-    def test_completed_provider_recovery_requires_exact_pending_identity_and_idle_controller(self):
-        session, args, _ = self.completed_provider_failure()
-        with self.assertRaises(ValueError): session.recover_completed_selection(**{**args, 'expected_selection': 'wrong'})
-        write_json(self.root / 'queue/controller/controller.lock', {'active': True})
-        with self.assertRaises(FileExistsError): session.recover_completed_selection(**args)
-        self.assertEqual(self.ran, [])
 
-    def test_explicit_terminal_retry_keeps_both_calls_and_releases_only_new_answer(self):
-        from .judgments import prepare_judgments
-        from .provider_recovery import prepare_terminal_retry, reconcile_completed_response
-        from .test_provider_recovery import completed_call
-        self.items = [self.item('first'), self.item('second')]
-        captured = {}
-        def terminal(state, decisions, binding):
-            packet = prepare_judgments(state, decisions, binding)
-            ledger, call = completed_call(self.root, packet)
-            receipt = read_json(call/'decision-1.response.json'); receipt.pop('response'); receipt['http'] = 503
-            write_json(call/'decision-1.response.json', receipt)
-            budget = read_json(ledger/'budget.json'); budget['known_cost_usd'] = 0.
-            budget['attempts'][0]['estimated_cost_usd'] = 0.
-            write_json(ledger/'budget.json', budget)
-            captured.update(ledger=ledger, call=call)
-            raise RuntimeError('Terminal HTTP503')
-        session = self.session(judge=terminal)
-        self.assertEqual(session.run(max_steps=1)['status'], 'needs_reconciliation')
-        ledger, original = captured['ledger'], captured['call']
-        retry = prepare_terminal_retry(original, ledger, session.observe, reason='One explicit retry')
-        retry_root = self.root/'new-attempt'; retry_root.mkdir()
-        temporary_ledger, call = completed_call(retry_root, retry['retry_packet'])
-        budget = read_json(ledger/'budget.json'); additional = read_json(temporary_ledger/'budget.json')
-        budget['attempts'].extend(additional['attempts'])
-        budget['known_cost_usd'] += additional['known_cost_usd']
-        write_json(ledger/'budget.json', budget)
-        reconcile_completed_response(call, ledger, session.observe)
-        selection = read_json(self.root/'queue/controller/controller.json')['selection']
-        result = session.recover_completed_selection(expected_selection=fingerprint(selection),
-            packet_path=call/'owner-packet.json', request_path=call/'decision-1.request.json',
-            response_path=call/'decision-1.response.json',
-            reconciliation_path=call/'completed-response-reconciliation.json',
-            terminal_retry_path=original/'terminal-retry.json')
-        self.assertEqual(result['terminal_retry_lineage']['original_http'], 503)
-        self.assertEqual(result['terminal_retry_lineage']['ordinal'], 1)
-        self.assertEqual(self.ran, [])
-        self.assertEqual(read_json(original/'decision-1.response.json')['http'], 503)
-        session.run(max_steps=1)
-        self.assertEqual(self.ran, ['first'])
 
     def test_real_episode_receipts_and_fresh_results_enter_next_decision(self):
         first = self.item('diagnose')
@@ -369,13 +210,13 @@ class OperatingTests(unittest.TestCase):
         self.assertEqual(session.run(max_steps=2)['status'], 'completed')
         self.assertEqual(self.ran, ['next'])
 
-    def test_fresh_public_observation_during_inference_invalidates_selection(self):
+    def test_fresh_public_observation_during_selection_invalidates_selection(self):
         self.items = [self.item('one'), self.item('two')]
         def judge(*args):
-            result = self.judge(*args)
+            result = self.select(*args)
             self.state['public_state']['new'] = 'Scope was contradicted'
             return result
-        self.assertEqual(self.session(judge=judge).run(max_steps=2)['status'], 'invalidated')
+        self.assertEqual(self.session(select=judge).run(max_steps=2)['status'], 'invalidated')
         self.assertEqual(self.ran, [])
 
     def test_report_repair_preserves_original_failure_and_never_repeats_capability(self):
@@ -441,15 +282,6 @@ class OperatingTests(unittest.TestCase):
         self.service.execute('operating_protocol', {})
         self.assertEqual(len(calls(self.service.store)), count)
 
-    def test_projection_refusal_clears_only_known_undispatched_selection(self):
-        self.items = [self.item('first'), self.item('second')]
-        session = self.session()
-        session.projection = lambda *args: {'state': {}, 'operations': {}}
-        result = session.run(max_steps=2)
-        self.assertEqual(result['status'], 'invalidated')
-        self.assertFalse(result['provider_dispatched'])
-        self.assertEqual(self.batches, []); self.assertEqual(self.ran, [])
-        self.assertIsNone(read_json(session.directory/'controller/controller.json')['selection'])
 
     def test_legacy_selection_recovery_requires_exact_identity_and_evidence(self):
         self.items = [self.item('work')]

@@ -52,14 +52,14 @@ with tempfile.TemporaryDirectory(prefix='workbench-portability-') as temporary:
         report = json.loads(run([python, '-I', '-m', 'modeling_system.setup_check',
                                 '--workspace', workspace, '--plugin', plugin], stage, capture=True))
         assert report['core_ready'] and report['native']['status'] == 'unconfigured', report
-        assert not report['jev']['credentials']['available'], report
+        assert report['execution'] == 'direct_owner' and report['inference_dependencies'] == [], report
         # The public integration must import and execute from the installed
         # distribution, without the private project, inherited auth or sys.path.
-        run([python, '-I', '-m', 'unittest', 'modeling_system.test_jev_session',
+        run([python, '-I', '-m', 'unittest', 'modeling_system.test_direct_session',
              'modeling_system.test_cooperative_scopes', 'modeling_system.test_setup_portability',
              'modeling_system.test_isolated_blender', 'modeling_system.test_decisions.PackagedMethodTests'], stage)
         if mode == 'wheel':
             run([python, '-I', '-c',
                  'import sys; from modeling_system.distribution import export_tools; export_tools(sys.argv[1])',
                  stage/'tools.zip'], stage)
-        print(mode+': clean installed core, skills, Jev recovery tests and plugin launch passed', flush=True)
+        print(mode+': clean installed core, skills, direct execution/recovery tests and plugin launch passed', flush=True)

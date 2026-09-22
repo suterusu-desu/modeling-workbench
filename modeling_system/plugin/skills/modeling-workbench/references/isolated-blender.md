@@ -1,7 +1,7 @@
 # Isolated Blender jobs
 
 The package includes `isolated_blender.py` and its standalone `blender_worker.py`.
-Qualified Jev-selected native capabilities may use this runner for isolated
+Qualified owner-selected native capabilities may use this runner for isolated
 construction/reopen jobs. Installing it grants no modeling authority. Astra
 does not invoke Blender directly; source/guide/preservation qualification and
 the single native owner remain the controller's responsibility.

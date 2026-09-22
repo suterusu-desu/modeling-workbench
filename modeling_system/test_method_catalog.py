@@ -32,56 +32,16 @@ class MethodTests(unittest.TestCase):
             verify=lambda s, p: [self.base.item('verify', 'verification', lane='verification')],
             retain=lambda s, p: [self.base.item('retain', 'retention', lane='repair')])
         session = self.base.session(); session.user_catalog = pipeline
-        def choose(state, questions, binding):
-            return {'binding': binding, 'judgments': {q['id']: {'choice': next(o['id'] for o in q['options'] if o['id']=='section')}
-                    for q in questions}}
-        session.selector.judge = choose
+        session.select = lambda state, actions, plan: 'section'
         self.assertEqual(session.run(max_steps=5)['status'], 'needs_review')
         self.assertEqual(self.base.ran, ['section', 'apply-section'])
-        self.assertEqual(session.metrics()['jev_choices_by_lane'], {'preparation': 1})
+        self.assertEqual(session.metrics()['owner_choices_by_lane'], {'preparation': 1})
         self.assertEqual(session.metrics()['action_routes']['single_executable'], 1)
 
-    def test_single_method_can_defer_instead_of_being_forced(self):
-        session = self.base.session(); session.user_catalog = MethodCatalog([self.method('one')])
-        session.selector.judge = lambda state, questions, binding: {'binding': binding,
-            'judgments': {q['id']: {'choice': '__needs_review__'} for q in questions}}
-        self.assertEqual(session.run(max_steps=3)['status'], 'needs_review')
-        self.assertEqual(self.base.ran, [])
 
-    def test_registered_remedy_routes_cross_lane_then_continues_in_same_session(self):
-        fit = self.method('fit', remedy_methods=['inspect'],
-            method_checks={'method':'Does the current dependency observation support this fit?'})
-        inspect = self.method('inspect')
-        inspect['build'] = lambda s,p: self.base.item('diagnose-current', lane='diagnosis')
-        session = self.base.session(); session.user_catalog = MethodCatalog([fit, inspect])
-        batches = []
-        def choose(state, questions, binding):
-            batches.append(deepcopy(questions)); answers = {}
-            for q in questions:
-                ids = [o['id'] for o in q['options']]; value = ids[0]
-                if q['id'] == 'next_lane': value = 'preparation'
-                if q['id'].endswith('_method'): value = 'missing' if not self.base.ran else 'ready'
-                if q['id'].endswith('_remedy'): value = 'diagnose-current'
-                answers[q['id']] = {'choice': value}
-            return {'binding':binding, 'judgments':answers}
-        session.selector.judge = choose
-        session.run(max_steps=2)
-        self.assertEqual(self.base.ran, ['diagnose-current','fit'])
-        self.assertEqual(len(batches),2)
-        self.assertFalse(any(q['id'].endswith('_remedy') for q in batches[1]))
-        with self.assertRaises(ValueError): MethodCatalog([self.method('fit', remedy_methods=['invented'])])
 
-    def test_unwrapped_native_singleton_still_reaches_jev(self):
-        task = self.base.item('inspect', native=True)
-        task['workbench']['bindings']['adapter'] = ['adapter']
-        self.base.items = [task]
-        session = self.base.session()
-        session.selector.judge = lambda state, questions, binding: {'binding': binding,
-            'judgments': {q['id']: {'choice': '__needs_review__'} for q in questions}}
-        self.assertEqual(session.run(max_steps=1)['status'], 'needs_review')
-        self.assertEqual(self.base.ran, [])
 
-    def test_selected_method_native_continuation_does_not_repeat_inference(self):
+    def test_selected_method_native_continuation_runs_directly(self):
         def candidate(state, previous):
             row = self.base.item('apply', 'appearance_edit', lane='repair', native=True)
             return row
@@ -92,7 +52,7 @@ class MethodTests(unittest.TestCase):
         session = self.base.session(); session.user_catalog = pipeline
         self.assertEqual(session.run(max_steps=4)['status'], 'needs_review')
         self.assertEqual(self.base.ran,['prepare','apply'])
-        self.assertEqual(len(self.base.batches),1)
+        self.assertEqual(len(self.base.batches),0)
 
     def test_parameterized_binding_reuses_implementation_and_excludes_missing_support(self):
         def bind(state, previous, parameters):
@@ -106,7 +66,7 @@ class MethodTests(unittest.TestCase):
         self.base.state['public_state']['paired_motion']=True
         rows=catalog(self.base.state)
         self.assertEqual(len(rows),2)
-        self.assertTrue(all(r['select_with_jev'] for r in rows))
+        self.assertEqual({r['workbench']['method_choice'] for r in rows}, {'sections','motion'})
         self.assertEqual(rows[1]['workbench']['recipe']['implementation'],'inspect')
         duplicate=deepcopy(bindings[0]);duplicate['id']='another_name'
         with self.assertRaises(ValueError): ParameterizedCatalog({'inspect':bind},[bindings[0],duplicate])
@@ -169,19 +129,11 @@ class MethodTests(unittest.TestCase):
             sources=[{'path': str(path), 'role': 'experience'}],
             project=lambda row: {'lesson': row['excerpt']})
         batches = []
-        def choose(state, questions, binding):
-            batches.append(deepcopy((state, questions)))
-            return {'binding': binding, 'judgments': {q['id']: ({'score': 2.0} if q['type']=='score' else
-                {'choice': 'section', 'probabilities': {'section': .8, 'path': .15, '__needs_review__': .05}}) for q in questions}}
-        session.selector.judge = choose
         before = session.observe()
+        session.select = lambda state, actions, plan: 'section'
         session.run(max_steps=1)
-        self.assertEqual(len(batches), 1)
-        self.assertEqual([q['type'] for q in batches[0][1]], ['choice', 'score'])
-        self.assertNotIn(str(path), json.dumps(batches))
-        advice = read_json(session.selector.directory/'last-batch.json')
-        self.assertEqual(advice['experience_rankings'][0]['judgment']['score'], 2.)
-        self.assertEqual(advice['method_rankings']['preparation'][0][0], 'section')
+        self.assertTrue(before['observations']['experience']['passages'])
+        self.assertNotIn(str(path), json.dumps(before['observations']['experience']))
         path.write_text('A section fit changed; use the recorded world coordinate frame.', encoding='utf-8')
         after = session.observe()
         self.assertNotEqual(before['values']['operating_experience'], after['values']['operating_experience'])
@@ -200,7 +152,7 @@ class MethodTests(unittest.TestCase):
         session.user_catalog = catalog
         session.run(max_steps=1)
         self.assertEqual(self.base.ran, ['failed', 'repair_input'])
-        self.assertEqual(session.metrics()['jev_choices_by_lane'], {'recovery': 1})
+        self.assertEqual(session.metrics()['owner_choices_by_lane'], {'recovery': 1})
 
 
 class PreparationTests(unittest.TestCase):

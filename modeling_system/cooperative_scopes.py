@@ -1,4 +1,4 @@
-"""Compose private qualified saved-array scopes in one installed Jev session.
+"""Compose private qualified saved-array scopes in one installed owner-controlled session.
 
 No Blender imports or native handlers. Exact source scopes remain preserved;
 the manifest explicitly binds this runtime and its new shared run directory.
@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import sys
 
-from .jev_session import create_session
+from .direct_session import create_session
 from .runtime import source_manifest
 from modeling_system.candidate_pipeline import capability_task
 from modeling_system.controller import read_json, write_json, fingerprint
@@ -105,9 +105,7 @@ def create(manifest_path):
     session = create_session(directory, service=service, episode=manifest['episode'], owner=manifest['owner'],
         goal={'objective':manifest['objective']}, observe_context=observe,
         catalog=compose_catalogs(*catalogs), handlers=handlers,
-        public_projection=lambda state, actions, plan: {'state':state['observations']['public'],
-            'descriptions':{a['id']:a['description'] for a in actions}},
-        ledger_directory=(workspace/manifest['ledger_directory']).resolve())
+        task_order=manifest.get('task_order'))
     return session, manifest
 
 

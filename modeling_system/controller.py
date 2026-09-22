@@ -46,7 +46,7 @@ def read_json(path):
 
 
 class SelectionNotDispatched(ValueError):
-    """A selector's deterministic preparation refused before any inference call."""
+    """An owner selector's deterministic preparation refused before operation dispatch."""
     def __init__(self, message, *, completed_evidence=False):
         super().__init__(message)
         self.completed_evidence = completed_evidence
@@ -137,7 +137,7 @@ class PersistentController:
             'action': None if action is None else action['id'],
             'last_action': action['id'] if action is not None else self.last_status.get('last_action'),
             'completed_operations': sum(a['status'] == 'completed' for a in self.record['attempts']),
-            'inference_budget': (state or self.last_status).get('inference_budget'),
+            'work_limits': (state or self.last_status).get('work_limits'),
             'timings_ms': deepcopy(self.timings),
             **({'cooperation': deepcopy(state['observations']['cooperation'])}
                if state and 'cooperation' in state.get('observations', {}) else
@@ -196,7 +196,7 @@ class PersistentController:
                 or not set(reads) <= set(receipt['values'])):
             raise ValueError('Selected-action guard omitted required current dependencies')
         fresh = {k: receipt[k] for k in ('owner', 'authority_revision', 'stage', 'values', 'active_operations')}
-        fresh['inference_budget'] = receipt.get('inference_budget')
+        fresh['work_limits'] = receipt.get('work_limits')
         fresh['actions'] = [action] if receipt.get('action_fingerprint') == expected['action_fingerprint'] else []
         return self._validate_state(fresh)
 
@@ -240,7 +240,7 @@ class PersistentController:
     def _refresh_plan(self, state, reason):
         if self.planner is None or self.pending is not None:
             return
-        # Identical observations never cause endless periodic inference.
+        # Identical observations never repeatedly request the same owner plan.
         binding = {'authority_revision': state['authority_revision'],
                    'stage': state['stage'],
                    'reads': state.get('planner_reads', state['values'])}
@@ -318,18 +318,18 @@ class PersistentController:
         if required:
             action = required[0]
             route = 'fixed'
-        elif len(actions) == 1 and not actions[0].get('select_with_jev'):
+        elif len(actions) == 1:
             action = actions[0]
             route = 'single_executable'
         else:
-            route = 'jev'
+            route = 'owner_selection'
             if self.plan is None:
                 return self._status('waiting_plan', state)
             if self.select is None:
                 return self._status('needs_selection', state)
             self.record['selection'] = {'state': state, 'actions': actions, 'plan': self.plan}
             selected_plan = fingerprint(self.plan)
-            self._save()  # Interrupted inference is reconciled, never repeated.
+            self._save()  # Interrupted selection remains visible for explicit reconciliation.
             self._status('selecting', state)
             try:
                 choice = self._timed('select', self.select, deepcopy(state), deepcopy(actions), deepcopy(self.plan))
@@ -345,10 +345,10 @@ class PersistentController:
                 self._save()
                 self._event('selection_refused_after_evidence' if exc.completed_evidence else
                             'selection_refused_before_dispatch', reason=str(exc))
-                return self._status('invalidated', state, reason=str(exc), provider_dispatched=exc.completed_evidence)
+                return self._status('invalidated', state, reason=str(exc), selection_evidence=exc.completed_evidence)
             except Exception as exc:
                 self._event('selection_unresolved', error=type(exc).__name__)
-                return self._status('needs_reconciliation', state, reason='Selection failed; inspect provider ledger')
+                return self._status('needs_reconciliation', state, reason='Owner selection failed; inspect the retained selection before resuming')
             self.record['selection'] = None
             self._save()
             self._event('selected', action=action['id'])

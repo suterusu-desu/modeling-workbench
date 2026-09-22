@@ -41,18 +41,17 @@ class LearningTests(unittest.TestCase):
         self.base.items = [self.base.item('material_repair'), self.base.item('material_diagnosis')]
         session = self.base.session()
         captured = []
-        def choose(state, questions, binding):
-            captured.append((deepcopy(state), deepcopy(questions)))
-            return {'binding': binding, 'judgments': {q['id']: {'score': 2.} if q['type'] == 'score'
-                else {'choice': q['options'][0]['id']} for q in questions}}
-        session.selector.judge = choose
+        def choose(state, actions, plan):
+            captured.append(deepcopy(state['observations']['experience']))
+            return actions[0]['id']
+        session.select = choose
         session.run(max_steps=1)
         self.assertEqual(len(captured), 1)
         payload = json.dumps(captured)
         self.assertIn('visible ledge', payload)
         for private in (str(self.base.base.image), review['operation_handle'], review['operation_fact']):
             self.assertNotIn(private, payload)
-        self.assertTrue(any(q['type'] == 'score' for q in captured[0][1]))
+        self.assertTrue(captured[0]['passages'])
 
     def test_conditional_lesson_keeps_failure_and_changed_prerequisite(self):
         record_lesson(self.service, lesson=self.lesson(), evidence=self.evidence)
@@ -128,8 +127,8 @@ class LearningTests(unittest.TestCase):
     def test_bounded_context_reports_overflow_and_never_truncates_a_caveat(self):
         for i in range(22):
             record_lesson(self.service, lesson=self.lesson(observation=f'Material {i}. ' + 'Detail. '*75), evidence=self.evidence)
-        from .decision_budget import DecisionBudget
-        result = RetainedContext(self.service, query='material', sources=[], budget=DecisionBudget(
+        from .work_limits import WorkLimits
+        result = RetainedContext(self.service, query='material', sources=[], budget=WorkLimits(
             context_passages=4, context_bytes=2400, retrieval_candidates=20))({}, [], {})
         public = result['public']
         self.assertLessEqual(len(json.dumps(public['passages'], ensure_ascii=True).encode()), 2400)

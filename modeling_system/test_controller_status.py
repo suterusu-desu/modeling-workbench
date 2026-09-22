@@ -7,10 +7,10 @@ class StatusTests(unittest.TestCase):
         lines = status_lines({'status': 'running', 'updated_at': 10, 'action': 'measure'}, now=50)
         self.assertIn('disconnected / stale', lines[0])
         self.assertIn('Action: measure', lines)
-        self.assertIn('Inference budget: unknown', lines)
+        self.assertIn('Work limits: unknown', lines)
 
     def test_actual_budget_and_terminal_result_remain_visible(self):
         lines = status_lines({'status': 'completed', 'updated_at': 10,
-                              'inference_budget': {'remaining_calls': 0}}, now=50)
+                              'work_limits': {'max_steps': 0}}, now=50)
         self.assertEqual(lines[0], 'Workbench: completed')
-        self.assertIn('"remaining_calls": 0', lines[-1])
+        self.assertIn('"max_steps": 0', lines[-1])

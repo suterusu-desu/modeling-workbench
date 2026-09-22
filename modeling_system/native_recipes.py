@@ -60,7 +60,7 @@ def _evidence(path, role):
 
 
 def validate_native_job(item):
-    """Read-only runner contract, usable before offering a job to Jev.
+    """Read-only runner contract, usable before executing a job.
 
     This checks fixed configuration only. Actual file hashes, live owner and
     expected state remain checked at execution; no Blender call or output occurs.

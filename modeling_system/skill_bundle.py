@@ -1,23 +1,17 @@
-"""Ship agent guidance with the package, including pinned upstream dependencies."""
-import hashlib
-import json
+"""Ship agent guidance with the package, without external skill dependencies."""
 from pathlib import Path
 import shutil
 
 
 def verify_dependencies(root=None):
+    """Verify complete workbench guidance, without an external skill dependency."""
     root = Path(root or Path(__file__).parent)
-    lock = json.loads((root/'skill-dependencies.json').read_text(encoding='utf-8'))
-    checked, problems = [], []
-    for name, dependency in lock['skills'].items():
-        for relative, expected in dependency['files'].items():
-            path = (root/relative).resolve()
-            if not path.is_relative_to(root.resolve()):
-                raise ValueError('Skill dependency escapes package')
-            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected['sha256']:
-                problems.append(relative)
-            checked.append(relative)
-    return {'status': 'verified' if not problems else 'mismatch', 'files': checked, 'problems': problems}
+    files = ['plugin/skills/modeling-workbench/SKILL.md',
+             'plugin/skills/modeling-workbench/references/method.md',
+             'plugin/skills/modeling-workbench/references/operating-session.md']
+    problems = [name for name in files if not (root/name).is_file() or not (root/name).stat().st_size]
+    return {'status': 'verified' if not problems else 'mismatch', 'files': files, 'problems': problems,
+            'external_dependencies': []}
 
 
 def install_skills(destination):

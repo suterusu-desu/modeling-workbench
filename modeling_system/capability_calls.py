@@ -13,13 +13,13 @@ UNKNOWN = '__unknown__'
 
 
 def validate_call(item):
-    spec = item.get('decision', {}).get('arguments', {})
+    spec = item.get('parameters', {}).get('arguments', {})
     if not isinstance(spec, dict):
         raise ValueError('Named typed arguments required')
     paths = []
     for name, arg in spec.items():
         path, options = arg.get('path'), arg.get('options')
-        if (not isinstance(name, str) or not name or not arg.get('question')
+        if (not isinstance(name, str) or not name or not arg.get('description')
                 or not isinstance(path, list) or not path or any(not isinstance(k, str) or not k for k in path)
                 or not isinstance(options, list) or not options or len(options) > 253
                 or arg.get('type', 'choice') not in ('choice', 'set')):
@@ -38,87 +38,26 @@ def validate_call(item):
                 raise ValueError('Every argument option must bind its exact dependencies in the task')
         if 'default' in arg and arg.get('type', 'choice') == 'set':
             raise ValueError('Set arguments use explicit empty-set semantics, not implicit defaults')
-    for rule in item.get('decision', {}).get('incompatible', []):
+    for rule in item.get('parameters', {}).get('incompatible', []):
         if not isinstance(rule, dict) or not rule or not set(rule) <= set(spec):
             raise ValueError('Compatibility rules name existing argument choices')
         for name, value in rule.items():
             allowed = {o['id'] for o in spec[name]['options']} | {DEFAULT}
             if value not in allowed:
                 raise ValueError('Compatibility rule names an unavailable argument option')
-    json.dumps(item.get('decision', {}), allow_nan=False)
+    json.dumps(item.get('parameters', {}), allow_nan=False)
     return spec
 
 
-def argument_questions(action, ordinal):
-    """Batch conditional arguments; only the selected operation consumes them."""
-    rows, mapping = [], {}
-    for index, (name, arg) in enumerate(action.get('decision', {}).get('arguments', {}).items()):
-        key = f'call_{ordinal}_arg_{index}'
-        question = {'condition': 'Only if the described operation is selected.',
-                    'operation': action['public_description'], 'question': arg['question'],
-                    'rule': 'Use the supplied current facts and qualified options. Missing support stays unknown.'}
-        if arg.get('type', 'choice') == 'set':
-            for i, option in enumerate(arg['options']):
-                qid = key + '_' + str(i)
-                rows.append({'id': qid, 'type': 'noul', 'instructions': {
-                    **question, 'candidate': option['description'],
-                    'question': 'Should this candidate be included for the stated argument role?',
-                    'argument_role': arg['question']}})
-                mapping[qid] = {'argument': name, 'member': option['id']}
-        else:
-            options = [{'id': o['id'], 'description': o['description']} for o in arg['options']]
-            if 'default' in arg:
-                options.append({'id': DEFAULT, 'description': 'No override is supported or needed; use the declared default.'})
-            options.append({'id': UNKNOWN, 'description': 'Required support is missing or contradictory; no qualified binding.'})
-            rows.append({'id': key, 'type': 'choice', 'instructions': question, 'options': options})
-            mapping[key] = {'argument': name}
-    return rows, mapping
 
 
-def resolve_call(action, mapping, judgments):
-    spec = action.get('decision', {}).get('arguments', {})
-    selected, values, used = {}, {}, {}
-    for key, row in mapping.items():
-        answer = judgments[key]
-        name = row['argument']
-        used[key] = deepcopy(answer)
-        if 'member' in row:
-            probability = answer['noul']
-            if probability == .5:
-                return {'status': 'unresolved', 'reason': 'A selected set member has no supported yes/no preference'}
-            selected.setdefault(name, [])
-            if probability > .5:
-                selected[name].append(row['member'])
-        else:
-            selected[name] = answer['choice']
-    for name, arg in spec.items():
-        choice = selected[name]
-        options = {o['id']: o['value'] for o in arg['options']}
-        if choice == UNKNOWN:
-            return {'status': 'unresolved', 'reason': 'Selected operation has an unsupported required argument'}
-        if isinstance(choice, list):
-            if not choice and not arg.get('allow_empty', False):
-                return {'status': 'unresolved', 'reason': 'Selected operation requires a nonempty qualified set'}
-            values[name] = [deepcopy(options[k]) for k in choice]
-        elif choice == DEFAULT and 'default' in arg:
-            values[name] = deepcopy(arg['default'])
-        elif choice in options:
-            values[name] = deepcopy(options[choice])
-        else:
-            raise ValueError('Argument answer outside qualified options')
-    for rule in action.get('decision', {}).get('incompatible', []):
-        if all(v in selected[k] if isinstance(selected[k], list) else v == selected[k] for k, v in rule.items()):
-            return {'status': 'unresolved', 'reason': 'Selected arguments violate declared compatibility'}
-    return {'status': 'bound', 'task': action['id'], 'definition': action['revision'],
-            'specification': fingerprint(action.get('decision', {})), 'selected': selected,
-            'arguments': values, 'used_judgments': used}
 
 
 def compile_call(item, call):
     """Materialize an exact handler payload after current dependencies are checked."""
     if (call.get('status') != 'bound' or call['task'] != item['id']
             or call['definition'] != fingerprint(item)
-            or call['specification'] != fingerprint(item.get('decision', {}))):
+            or call['specification'] != fingerprint(item.get('parameters', {}))):
         raise ValueError('Selected call no longer matches the exact task specification')
     spec = validate_call(item)
     if set(spec) != set(call['arguments']):
@@ -146,17 +85,37 @@ def compile_call(item, call):
     return result
 
 
-class CapabilityCatalog:
-    """Decorate an ordinary catalog with typed operation argument specifications."""
-    def __init__(self, catalog):
-        self.catalog = catalog
 
-    def __call__(self, state, outcomes):
-        items = deepcopy(self.catalog(state, outcomes))
-        for item in items:
-            if item.get('decision', {}).get('arguments'):
-                validate_call(item)
-                if item.get('required'):
-                    raise ValueError('Typed modeling choices cannot be required housekeeping')
-                item['select_with_jev'] = True
-        return items
+
+def bind_call(item, selected):
+    """Bind explicit owner choices before offering a task for execution.
+
+    Selected values are closed-set option IDs (or a list for a set argument).
+    No question is sent to a provider, and omission never means approval.
+    """
+    spec = validate_call(item)
+    if not isinstance(selected, dict) or set(selected) != set(spec):
+        raise ValueError('Explicit choices for every argument are required')
+    values = {}
+    for name, arg in spec.items():
+        choice = selected[name]
+        options = {o['id']: o['value'] for o in arg['options']}
+        if arg.get('type', 'choice') == 'set':
+            if (not isinstance(choice, list) or any(not isinstance(k, str) for k in choice)
+                    or len(set(choice)) != len(choice) or not set(choice) <= set(options)
+                    or not choice and not arg.get('allow_empty', False)):
+                raise ValueError('A distinct qualified set is required')
+            values[name] = [deepcopy(options[k]) for k in choice]
+        elif isinstance(choice, str) and choice in options:
+            values[name] = deepcopy(options[choice])
+        elif choice == DEFAULT and 'default' in arg:
+            values[name] = deepcopy(arg['default'])
+        else:
+            raise ValueError('Owner choice is outside the qualified options')
+    for rule in item.get('parameters', {}).get('incompatible', []):
+        if all(v in selected[k] if isinstance(selected[k], list) else v == selected[k] for k,v in rule.items()):
+            raise ValueError('Owner choices violate declared compatibility')
+    call = {'status': 'bound', 'task': item['id'], 'definition': fingerprint(item),
+            'specification': fingerprint(item.get('parameters', {})),
+            'selected': deepcopy(selected), 'arguments': values}
+    return compile_call(item, call)

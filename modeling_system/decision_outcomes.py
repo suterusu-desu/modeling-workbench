@@ -1,45 +1,10 @@
-"""Join retained choices to actual results and reviews; reuse raw scores offline."""
+"""Join retained choices to actual results and reviews; preserve historical provenance."""
 from copy import deepcopy
 from pathlib import Path
-import math
 
 from .controller import read_json, fingerprint
 
 
-def composite_scores(judgments, weights, *, violations=None):
-    """Combine compensating ordinal preferences, preserving any material violation.
-
-    Weights and violation booleans are explicit policy, not inferred thresholds.
-    Missing dimensions remain unknown. No inference, calibration or native IO.
-    """
-    if (not weights or any(type(w) not in (int, float) or not math.isfinite(w) or w < 0
-                           for w in weights.values()) or sum(weights.values()) <= 0):
-        raise ValueError('Finite nonnegative weights with positive total required')
-    rows = []
-    for candidate, dimensions in judgments.items():
-        values, missing = {}, []
-        for name, weight in weights.items():
-            if weight == 0:
-                continue
-            answer = dimensions.get(name)
-            if not answer:
-                missing.append(name)
-                continue
-            legend = answer.get('legend', {})
-            from .judgments import validate_answers
-            if set(legend) != {str(i) for i in range(len(legend))}:
-                raise ValueError('Score rubric must have ordered ordinal levels')
-            validate_answers({'score': {'type': 'score', 'instructions': 'Retained score',
-                'criteria': [legend[str(i)] for i in range(len(legend))]}}, {'score': answer})
-            values[name] = answer['score'] / (len(legend) - 1)
-        violation = (violations or {}).get(candidate, False)
-        if type(violation) is not bool:
-            raise ValueError('Material violations require an explicit policy boolean')
-        total = None if missing else sum(values[n] * weights[n] for n in values) / sum(weights.values())
-        rows.append({'candidate': candidate, 'score': total, 'missing': missing, 'material_violation': violation,
-                     'normalized': values, 'raw_judgments': deepcopy(dimensions)})
-    return sorted(rows, key=lambda r: (r['material_violation'], r['score'] is None,
-                                      -(r['score'] or 0), r['candidate']))
 
 
 def decision_outcomes(directory, reviews=None):

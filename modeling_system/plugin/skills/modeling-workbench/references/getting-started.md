@@ -30,7 +30,7 @@ python -c "import numpy as np; from modeling_system.geometry import nearest_surf
 
 The result should be `[0.25, 0.25, 0.0]`: the closest point on a synthetic triangle. This verifies a basic numerical operation, not native Blender integration.
 
-The workspace includes `AGENTS.md` and complete `.agents/skills/modeling-workbench` and `.agents/skills/typesafe-ai` directories. Both skills and all their local references travel with it. For credentials, shared accounting, packaged Jev session creation and relocation, read [portable setup](portable-setup.md).
+The workspace includes `AGENTS.md` and complete `.agents/skills/modeling-workbench` directories. The skill and all its local references travel with it. For direct session creation, native qualification and relocation, read [portable setup](portable-setup.md).
 
 Keep the private project outside the tools checkout. The initializer creates current-state, decision, method and lesson records, a workspace binding and an unauthorized provider policy. Populate actual identity references, assets, object/control/semantic mappings, units and scopes there. No named character or native adapter is inherited.
 

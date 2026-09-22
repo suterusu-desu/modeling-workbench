@@ -159,17 +159,12 @@ class PreservationTests(unittest.TestCase):
             self.policy.preflight(retain,{'fit':{'task':task,'result':result}})
 
     def session(self,catalog,handler):
-        def judge(state,questions,binding):
-            self.batches.append(deepcopy(state))
-            return {'binding':binding,'judgments':{q['id']:{'choice':q['options'][0]['id']} for q in questions}}
         return OperatingSession(self.root/'queue',service=self.service,episode=self.episode,owner='native owner',
             goal={'objective':'Preserve supported form'},observe_context=lambda:deepcopy(self.state),catalog=catalog,
-            handlers={'run':handler},judge=judge,preservation=self.policy,
-            public_projection=lambda state,actions,plan:{'state':{},'descriptions':{a['id']:a['description'] for a in actions}})
+            handlers={'run':handler},preservation=self.policy)
 
     def test_session_overrides_self_reported_pass_and_keeps_completed_effect(self):
         task=self.policy.bind_task(self.item('edit','appearance_edit'),stage='apply',adapter='fit')
-        task['select_with_jev']=True
         def handler(item,context):
             self.ran.append(item)
             result=self.result(values={'open':0.,'half':0.3,'closed':0.})
@@ -177,18 +172,14 @@ class PreservationTests(unittest.TestCase):
             result['workbench']={'checks':{k:{'status':'pass','evidence':[link]} for k in PROFILES['appearance_edit']['outputs']},'findings':[]}
             return result
         session=self.session(lambda state,results:[task],handler)
-        normal_judge=session.selector.judge
-        def qualified_choice(state,questions,binding):
-            self.assertFalse(any(q['id'].startswith('method_') for q in questions))
-            return normal_judge(state,questions,binding)
-        session.selector.judge=qualified_choice
+        observed=session.observe()['observations']
         session.run(max_steps=1)
         entry=read_json(session.path)['results']['edit']
         self.assertEqual(entry['status'],'completed')
         self.assertEqual(entry['result']['workbench']['checks']['preservation']['status'],'fail')
         self.assertIn('constraint_inputs',self.ran[0]['payload'])
-        self.assertIn('required_preservation',self.batches[0])
-        self.assertNotIn(self.root.as_posix(),json.dumps(self.batches))
+        self.assertIn('required_preservation',observed)
+        self.assertNotIn(self.root.as_posix(),json.dumps(observed['required_preservation']))
 
     def test_pipeline_carries_outcomes_and_allows_verification_to_resolve_missing_measurements(self):
         pipeline=CandidatePipeline(self.root/'pipeline',revision='1',candidates=lambda s,p:[self.item('fit','appearance_edit')],
@@ -206,8 +197,7 @@ class PreservationTests(unittest.TestCase):
         tasks=[self.item('edit','appearance_edit'),self.item('read')]
         session=OperatingSession(self.root/'queue',service=self.service,episode=self.episode,owner='native owner',
             goal={'objective':'Scoped work'},observe_context=lambda:deepcopy(self.state),catalog=lambda s,r:tasks,
-            handlers={'run':lambda item,context:None},judge=lambda *args:None,
-            public_projection=lambda *args:{},require_preservation=True)
+            handlers={'run':lambda item,context:None},require_preservation=True)
         state=session.observe()
         self.assertEqual([a['id'] for a in state['actions']],['read'])
         self.assertIn('preservation',state['observations']['blocked']['edit'])

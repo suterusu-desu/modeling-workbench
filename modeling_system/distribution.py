@@ -20,7 +20,7 @@ def export_tools(output_path):
 Install with Python 3.12+ using `python -m pip install .` in a virtual environment.
 Read [getting started](modeling_system/plugin/skills/modeling-workbench/references/getting-started.md)
 and [portable setup](modeling_system/plugin/skills/modeling-workbench/references/portable-setup.md).
-The complete workbench and TypeSafe skills, references and upstream license are included.
+The complete workbench skill and references are included; no external skill is required.
 Character evidence and credentials are not included. Native Blender work requires a
 qualified workspace adapter; this tools archive does not qualify an arbitrary rig.
 '''

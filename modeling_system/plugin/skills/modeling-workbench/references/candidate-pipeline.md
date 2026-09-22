@@ -51,7 +51,7 @@ and matched images under the same atomic owner/state guard.
 from modeling_system.candidate_pipeline import CandidatePipeline, capability_task
 
 pipeline = CandidatePipeline(run_directory / "pipeline", revision="qualified-method-v1",
-    prepare=adapter.preparation_options,       # optional useful Jev choices
+    prepare=adapter.preparation_options,       # optional useful owner choices
     candidates=adapter.candidate_options,      # genuine qualified alternatives
     verify=adapter.verification_task,          # fixed independent verification
     review=adapter.review_preparation_task,    # optional fixed evidence packaging
@@ -66,7 +66,7 @@ item from explicit profile, semantic bindings, dependency keys, covered writes,
 handler and native flag. Use it inside a factory to freeze the first binding.
 It also supports diagnosis, experience and recovery lanes; offer only executable
 work addressing a named question, with applicability and prior failures in its
-public description. Each lane's Jev question addresses that actual purpose.
+public description. Explicit owner selection addresses that actual purpose.
 Factories describe work without native or provider effects. Put actual preparation
 inside a qualified queued handler, so its effects and evidence are retained.
 
@@ -81,11 +81,9 @@ judgment=..., evidence=...)`, then resume `session.run(max_steps=...)`. This is
 existing visual interpretation, not a new user approval. Use `early_review=False`
 only when the fixed verification is already necessary for that scope. Retention
 always consumes a useful actual review of the final verification or review task.
-Fixed follow-ups do not spend inference; candidate and preparation alternatives
-remain Jev choices. Single-lane choices retain action/defer without a redundant
-lane/defer question; multiple lanes share one independent conditional batch.
+Fixed follow-ups run directly; candidate and preparation alternatives require explicit owner choice. Missing prerequisites remain blocked, and native effects remain serial.
 
-Resume the same instance with the same owner, episode and ledger. Do not rebase
+Resume the same instance with the same owner and episode. Do not rebase
 frozen dependencies after edits. A new scope gets a new revision and directory.
 Include factory code and runtime revisions among the qualified task's read keys,
 alongside the real scene, guide, adapter and output dependencies.

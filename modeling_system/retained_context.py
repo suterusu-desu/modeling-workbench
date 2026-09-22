@@ -5,12 +5,12 @@ import json
 from .controller import fingerprint, write_json
 from .experience import retrieve
 from .learning import public_experience
-from .decision_budget import decision_budget
+from .work_limits import work_limits
 
 
 class RetainedContext:
     def __init__(self, service, *, query=None, project=None, sources=None, limit=None, context=None, budget=None):
-        self.budget = decision_budget(budget)
+        self.budget = work_limits(budget)
         limit = self.budget.context_passages if limit is None else limit
         if (project is not None and not callable(project)) or not 1 <= limit <= self.budget.context_passages:
             raise ValueError('Public projection and passage count within the explicit budget required')
@@ -40,8 +40,8 @@ class RetainedContext:
         seen, duplicates = set(), 0
         for kind in ('authority', 'matches'):
             for row in result[kind]:
-                # The workspace explicitly removes identities and locators. No
-                # retrieved prose, filename or record goes on wire by default.
+                # The workspace explicitly removes identities and locators. The
+                # compact owner view links back to the exact local evidence.
                 summary = projected[fingerprint(row)]
                 identity = fingerprint(summary)
                 if identity in seen:
@@ -49,7 +49,7 @@ class RetainedContext:
                     continue
                 seen.add(identity)
                 candidate = {'index': len(exact), 'role': kind, 'content': summary}
-                if (len(candidates) < min(self.budget.retrieval_candidates, self.budget.max_questions // 2)
+                if (len(candidates) < self.budget.retrieval_candidates
                         and len(json.dumps(candidates + [candidate]).encode()) <= self.budget.retrieval_bytes):
                     candidates.append(deepcopy(candidate))
                 size = len(json.dumps(public + [candidate], ensure_ascii=True).encode())
