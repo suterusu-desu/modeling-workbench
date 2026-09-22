@@ -57,6 +57,26 @@ class PreparationContractTests(unittest.TestCase):
         with np.load(files['arrays.npz']['path'], allow_pickle=False) as archive:
             np.testing.assert_array_equal(archive['array'], result['array'])
 
+    def test_explicit_public_metrics_reach_findings_without_implicit_field_export(self):
+        result = self.handler(PreparationOperation(lambda: {
+            'raw_private_detail': 'Keep this out of the decision projection.',
+            'public_metrics': {'normal_oppositions': np.int32(0), 'guide_samples': 12},
+            'limits': 'Numerical preparation only.'}))
+        self.assertEqual(result['summary'], {'normal_oppositions': 0, 'guide_samples': 12})
+        self.assertNotIn('raw_private_detail', result['workbench']['findings'][0]['summary'])
+        detail = json.loads(Path(result['prepared']['result.json']['path']).read_text())
+        self.assertIn('raw_private_detail', detail)
+
+    def test_invalid_public_metrics_settle_before_saving_a_successful_preparation(self):
+        for number, output in enumerate(({'maximum': 1, 'public_metrics': {'maximum': 2}},
+                                        {'public_metrics': []}, {'public_metrics': {'residual': float('nan')}})):
+            handler = ArrayPreparation(self.root/str(number),
+                operations={'qualified': PreparationOperation(lambda: output)})
+            result = handler({'reads': {}, 'workbench': {'profile': 'analysis'},
+                'payload': {'operation': 'qualified', 'inputs': {}}}, {'attempt_key': 'one'})
+            self.assertEqual(result['status'], 'failed')
+            self.assertEqual(list((self.root/str(number)).rglob('arrays.npz')), [])
+
     def test_nonfinite_json_or_object_arrays_are_explicit_failures_before_output(self):
         for value in ({'metric': np.float64(np.nan)}, {'object': np.array([{}], object)}):
             with self.assertRaises(ValueError): save_preparation(self.root/'invalid', value)

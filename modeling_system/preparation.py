@@ -8,6 +8,7 @@ from . import material_operations
 from .preparation_contracts import PreparationOperation
 from .result_reporting import json_data, compact_summary
 from .triangle_contact import projected_triangle_contact
+from .metric_fitting import planar_fem_metric
 
 
 def active_vertex_coverage(vertex_count, faces, driven):
@@ -84,7 +85,8 @@ def pose_correspondence(guide_points, pose_points, pose_values):
             'limits': 'Finite saved correspondences only; smallest residual does not establish pose identity or visual acceptance.'}
 
 
-ARRAY_OPERATIONS = {'section_fit': guide_fitting.prepare_section_fit,
+ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric,
+    'section_fit': guide_fitting.prepare_section_fit,
     'material_path': guide_fitting.remap_material_path, 'compose_correspondence': compose_correspondence,
     'prepared_effect': prepared_effect, 'active_vertex_coverage': active_vertex_coverage,
     'pose_correspondence': pose_correspondence,
@@ -172,6 +174,7 @@ class ArrayPreparation:
         try:
             result = prepare_arrays(payload['operation'], inputs=sources, parameters=payload.get('parameters'),
                                     operations=self.operations)
+            summary = preparation_metrics(result)
             artifacts = save_preparation(directory, result)
         except (ValueError, KeyError, OSError, ImportError, TypeError, IndexError) as error:
             # Qualified pure-array functions have no native or provider effects.
@@ -184,13 +187,6 @@ class ArrayPreparation:
                 'findings': [{'kind': 'failure', 'scope': 'qualified preparation',
                               'summary': 'Preparation failed before a usable output was published. Inspect the retained dependency, array-contract or serialization failure; no native operation occurred.'}]}}
         evidence = [{'kind': 'file', 'path': row['path'], 'role': name} for name, row in artifacts.items()]
-        summary = {k: v for k, v in result.items() if k in ('maximum', 'rms', 'changed_count',
-            'has_effect_above_tolerance', 'complete_active_coverage', 'active_count', 'driven_active_count',
-            'unused_vertex_count', 'best_sample_index', 'passed', 'landmark_maximum',
-            'orientation_determinant', 'maximum_by_pose', 'relative_motion_maximum',
-            'overlap_pairs', 'critical_vertices', 'branch_crossings', 'violating_vertices',
-            'minimum_slack', 'coverage_complete', 'fixed_infeasible_rows')}
-        summary = json_data(summary)
         no_progress = (payload.get('stop_on_no_effect') is True
                        and result.get('has_effect_above_tolerance') is False)
         limits = 'Saved-array preparation; appearance remains unjudged. ' + result.get('limits', '')
@@ -204,3 +200,20 @@ class ArrayPreparation:
             'workbench': {'checks': {'analysis': {'status': 'pass', 'evidence': evidence}},
                 'findings': [{'kind': 'measured', 'scope': 'qualified preparation',
                     'summary': finding}]}}
+
+
+def preparation_metrics(result):
+    """Legacy metrics plus an explicit, deliberately public operation projection."""
+    if not isinstance(result, dict):
+        raise ValueError('Preparation must return an array/metadata dictionary')
+    summary = {k: v for k, v in result.items() if k in ('maximum', 'rms', 'changed_count',
+        'has_effect_above_tolerance', 'complete_active_coverage', 'active_count', 'driven_active_count',
+        'unused_vertex_count', 'best_sample_index', 'passed', 'landmark_maximum',
+        'orientation_determinant', 'maximum_by_pose', 'relative_motion_maximum',
+        'overlap_pairs', 'critical_vertices', 'branch_crossings', 'violating_vertices',
+        'minimum_slack', 'coverage_complete', 'fixed_infeasible_rows')}
+    public = result.get('public_metrics', {})
+    if (not isinstance(public, dict) or any(not isinstance(k, str) or not k.strip() for k in public)
+            or set(public).intersection(summary)):
+        raise ValueError('public_metrics must be a named mapping without overriding built-in metrics')
+    return json_data({**summary, **public})

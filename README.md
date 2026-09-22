@@ -63,6 +63,11 @@ fields can be corrected without spending a decision or opening Blender.
 Adapters can separate fresh native-state checks from costly numerical exports
 and use nested call timings to locate slow checkpoint handovers. Immutable
 preparation results stay reusable when task inputs exclude their own output logs.
+For nonuniform meshes, the [planar FEM helper](modeling_system/plugin/skills/modeling-workbench/references/metric-fitting.md)
+assembles metric-aware stiffness and mass with explicit units, boundary identities
+and interior affine checks. Qualified fitting objectives and visual review remain
+separate. Preparation operations can publish their selected measurements through
+an explicit `public_metrics` mapping.
 
 [Typed capability control](modeling_system/plugin/skills/modeling-workbench/references/typed-control.md)
 lets Jev select qualified operation arguments alongside the operation itself.

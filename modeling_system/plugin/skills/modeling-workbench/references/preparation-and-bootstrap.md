@@ -7,7 +7,8 @@ No helper grants target authority, native ownership or appearance acceptance.
 ## Pure-array preparation
 
 `ArrayPreparation` accepts the built-in recipe names, including
-`projected_triangle_contact`. A private workspace can register additional pure
+`projected_triangle_contact` and the [planar FEM metric](metric-fitting.md).
+A private workspace can register additional pure
 math under unique names without writing another handler:
 
 ```python
@@ -36,6 +37,13 @@ and nested arrays serialize as numerical JSON; nonfinite JSON needs an explicit
 missing-data representation. Object arrays and pickle-dependent data are refused.
 Compact reports omit whole optional metrics with an explicit omitted count,
 never sentence fragments or limits. The full evidence remains linked.
+
+Use `public_metrics` for an explicit, deliberately public mapping of useful
+operation-specific measurements. Unlisted raw result fields stay private;
+adding a `metrics` object alone does not publish it. Keys cannot override existing
+built-in metrics. Nonfinite or malformed public values settle as a preparation
+failure before successful output is saved. Keep source paths, character details
+and unreviewed text outside this projection.
 
 For fitting results, record what the objective regularizes: displacement,
 final positions, or another declared quantity. If `final = baseline + delta`,

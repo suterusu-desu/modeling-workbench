@@ -1,4 +1,12 @@
-# Current operating integration: 0.2.32
+# Current operating integration: 0.2.33
+
+Nonuniform planar charts now have reusable FEM stiffness/mass assembly with
+explicit units, boundary/interior identities and affine reproduction diagnostics.
+The helper is available through the existing pure-array preparation route; it
+does not choose a fitting objective, regularization strength or guide support.
+Operation-specific `public_metrics` now reach compact reports explicitly, without
+implicitly exporting other result fields. Boundary flux, interpolation and
+actual visual outcomes remain separate evidence.
 
 Semantic context packing now keeps the best fitting support, counterexample and
 conditional passage in relevance order before filling remaining space by
@@ -37,6 +45,8 @@ targets are integrated below; installation and actual use remain separately evid
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Index-space smoothing introduced an affine-plane defect on a nonuniform chart | Metric-aware planar FEM stiffness and lumped mass through ordinary ArrayPreparation | Analytic energy, affine interior, boundary flux, unit scaling, winding and invalid-domain checks; no appearance or intrinsic 3D claim |
+| Useful custom preparation measurements were retained but absent from compact findings | Explicit public_metrics projection, with collision and finite-value checks before output saving | Opt-in values reach findings; private raw detail stays out; malformed reports settle without native effects |
 | A failure archive crowded out a successful matching method despite its higher Jev relevance score | Relevance-ordered relationship coverage, then relevance fill; explicit omissions and versioned caches | Both evidence directions, tight bytes/slots, complete caveats, unrelated sources, action deferral and cache invalidation tested; packing alone does not establish a better action or appearance |
 | A missing isolated-runner field consumed selection and reached a failed dispatch | NativeJob exposes structural preflight; OperatingSession excludes malformed fixed inputs before inference or operation reservation | No provider, native call, output folder or operation receipt is created for a missing runner executable |
 | Complete Choice probabilities can arrive rounded with a small total discrepancy | Strict hundredth-grid compatibility preserves every raw value and selected maximum; other invalid distributions still fail | Synthetic reader/recovery cases; upstream documentation does not guarantee rounding |
