@@ -14,6 +14,7 @@ import time
 import uuid
 
 from .controller import applicable, fingerprint, read_json, write_json
+from .result_reporting import json_data
 from .episodes import pin_link
 from .journal import EPISODE, ACTIVE_CALL, invoke
 from .leases import LEASE
@@ -374,23 +375,36 @@ class OperatingSession(WorkQueue):
                 **{key: result[key] for key in ('handle', 'job', 'experiment') if key in result}}
 
     def _report(self, item, result, context):
-        raw = self.report_adapter(item, result) if self.report_adapter else result.get('workbench', {})
+        raw = json_data(self.report_adapter(item, result) if self.report_adapter else result.get('workbench', {}))
         findings = raw.get('findings', [])
         if not isinstance(findings, list) or any(not isinstance(row, dict)
                 or set(row) != {'kind', 'scope', 'summary'} or row['kind'] not in FINDING_KINDS
                 or not row['scope'] or not row['summary'] for row in findings):
             raise ValueError('Findings require kind, public scope and public summary; keep private locators in evidence')
-        if len(canonical(findings)) > 2000:
-            raise ValueError('One task report exceeds its public findings budget')
+        overflow = len(canonical(findings)) > 2000
         checks = {}
         for name, check in raw.get('checks', {}).items():
             if check.get('status') not in ('pass', 'fail', 'unknown') or not check.get('evidence'):
                 raise ValueError('Checks require pass/fail/unknown and exact evidence')
             checks[name] = {**deepcopy(check),
                 'evidence': [pin_link(self.service, link) for link in check['evidence']]}
+        if overflow:
+            # The effect is known. Retain all qualifications, withhold dependent
+            # use and repair only its public projection, without native replay.
+            handle = self.record['results'][item['id']]['operation_handle']
+            path = self.service.store.root / 'calls' / handle / ('report-' + fingerprint(raw) + '.json')
+            write_json(path, raw)
+            detail = pin_link(self.service, {'kind': 'file', 'path': str(path), 'role': 'Complete report requiring compact projection'})
+            for check in checks.values():
+                if check['status'] == 'pass':
+                    check['status'] = 'unknown'
+                check['evidence'].append(detail)
+            findings = [{'kind': 'failure', 'scope': 'report projection',
+                'summary': 'The operation returned and its complete report is retained. The report exceeds the public context budget; review its full limitations and repair the compact projection before dependent use. Do not repeat the operation.'}]
         required = PROFILES[item['workbench']['profile']]['outputs']
         missing = [key for key in required if checks.get(key, {}).get('status') != 'pass']
         return {'checks': checks, 'findings': deepcopy(findings),
+            'report_needs_repair': overflow,
             'qualification': 'complete' if not missing else 'needs evidence',
             'missing': missing, 'basis': {key: context['expected_values'][key] for key in item['reads']},
             'context_record': result.get('operation_context_record'),
@@ -432,7 +446,7 @@ class OperatingSession(WorkQueue):
             # Persist the returned effect before report validation. A report/index
             # failure cannot erase successful work or make it safe to repeat.
             handle = self.record['results'][item['id']]['operation_handle']
-            result = deepcopy(result)
+            result = json_data(result)
             result['handler_elapsed_ms'] = round((time.perf_counter() - started) * 1000, 3)
             result['operation_context_record'] = decision_context['context_record']
             if trace:
@@ -591,7 +605,9 @@ class OperatingSession(WorkQueue):
         if (self.directory / 'controller' / 'controller.lock').exists():
             raise ValueError('Stop or reconcile the live controller before report repair')
         entry = self.record['results'][task]
-        if entry['status'] not in ('running', 'needs_reconciliation'):
+        projection_only = (entry['status'] in SETTLED and
+                           entry.get('result', {}).get('workbench', {}).get('report_needs_repair') is True)
+        if entry['status'] not in ('running', 'needs_reconciliation') and not projection_only:
             raise ValueError('Task does not need report reconciliation')
         handle = entry['operation_handle']
         folder = self.service.store.root / 'calls' / handle
@@ -606,14 +622,17 @@ class OperatingSession(WorkQueue):
         try:
             self.report_adapter = lambda item, result: report
             repaired = self._report(intent['arguments'].get('compiled_task', intent['arguments']['task']), raw, intent['arguments'])
+            if repaired['report_needs_repair']:
+                raise ValueError('Repaired report still exceeds the public findings budget')
         finally:
             self.report_adapter = adapter
         result = self.service._run_episode_callback(self.episode, 'repair_modeling_report',
             {'original_handle': handle, 'evidence': [str(source)], 'report': repaired},
             lambda: {**raw, 'workbench': repaired, 'original_operation_handle': handle})
-        self.service.reconcile_operation(handle, observed={
-            'effect_status': 'confirmed_returned', 'basis': 'Exact retained capability return; only later report validation/indexing failed',
-            'report_repair': result['operation_handle']}, evidence_paths=[str(source)])
+        if not projection_only:
+            self.service.reconcile_operation(handle, observed={
+                'effect_status': 'confirmed_returned', 'basis': 'Exact retained capability return; only later report validation/indexing failed',
+                'report_repair': result['operation_handle']}, evidence_paths=[str(source)])
         entry.update(status=raw['status'], result=result)
         write_json(self.path, self.record)
         self._recover_controller(entry)

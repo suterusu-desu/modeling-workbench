@@ -1,4 +1,4 @@
-# Current operating integration: 0.2.27
+# Current operating integration: 0.2.28
 
 Astra/Jev control is first class through OperatingSession over the existing
 episode, work queue, controller and service journal. The previous modeling tools
@@ -11,6 +11,11 @@ targets are integrated below; installation and actual use remain separately evid
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| Complete Choice probabilities can arrive rounded with a small total discrepancy | Strict hundredth-grid compatibility preserves every raw value and selected maximum; other invalid distributions still fail | Synthetic reader/recovery cases; upstream documentation does not guarantee rounding |
+| Missing preparation dependencies, wrong array shapes and numerical JSON values interrupted useful work | PreparationOperation contracts, strict numerical conversion, immutable full results and compact metrics | Dependency-before-load, frame-shape, NumPy scalar and nonfinite/object rejection tests |
+| Oversized findings obscured an already known operation result | Retain full report, keep execution disposition, withhold dependent checks and repair only its public projection | Completed output cannot replay; failed or unknown native effects remain distinct |
+| Broad historical bootstrap obscured repeated native setup cost | Pinned module loading, explicitly verified scoped feature entry and durable worker phase receipts | Full dependency roles, real freshness/bindings, partial failure and telemetry-is-not-success tests; native savings measured privately |
+| Sparse surface samples missed projected triangle contact | All triangle-overlap vertices plus bound-branch crossings, with optional sparse displacement constraints | Crossing-triangle, branch-extremum, winding, fixed-vertex, empty/degenerate and frame tests; no appearance or swept-motion proof |
 | Jev chose operations whose full arguments Astra had already assembled | Typed argument specifications compile selected qualified values into ordinary handler payloads; optional defaults, sets and incompatible tuples are explicit | Integrated selection/execution/review, unused-branch, stale-state, privacy and no-replay tests |
 | Compiler, projection and transport imposed unrelated small limits | One versioned DecisionBudget, also supported by retrieval and method catalogs | More than twelve questions and larger state pass through transport; explicit lower limits refuse before dispatch |
 | Observation descriptions lacked the reason an observation changes an edit | Observation contracts retain named uncertainty, competing hypotheses, existing evidence and outcome-to-next-action distinctions | The discriminating question reaches the ordinary operation choice without another mandatory inference |

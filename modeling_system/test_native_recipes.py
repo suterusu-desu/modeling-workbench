@@ -93,5 +93,31 @@ class RetentionTests(unittest.TestCase):
         with self.assertRaises(ValueError): NativeJob(self.service,self.root/'run')(item,self.context)
         self.assertEqual(self.calls,[])
 
+    def test_native_job_collects_phase_evidence_without_reclassifying_effect(self):
+        for suffix, phases in [('valid', {'schema_version': 1, 'status': 'completed', 'stages': [
+                {'name': 'driver_restore', 'elapsed_ms': 23., 'status': 'completed'}]}),
+                ('invalid', {'schema_version': 1, 'status': 'completed', 'stages': [{'name': 'bad'}]})]:
+            output = self.root/suffix; output.mkdir()
+            (output/'native-stages.json').write_text(json.dumps(phases))
+            (output/'receipt.json').write_text(json.dumps({'status': 'completed', 'source_unchanged': True,
+                'source_sha256_before': self.refs['source']['sha256'], 'source_sha256_after': self.refs['source']['sha256']}))
+            source = self.refs['source']
+            item = {'id': suffix, 'reads': {'source': source['sha256']}, 'description': 'Qualified isolated job',
+                'workbench': {'native': True}, 'payload': {'runner': source, 'live_source': source,
+                    'job': {'input': source['path'], 'source_sha256': source['sha256'],
+                            'script': source['path'], 'dependency_hashes': {source['path']: source['sha256']}}}}
+            def launch(*args, **kwargs):
+                kwargs['stdout'].write(json.dumps({'status': 'completed', 'output': str(output)})+'\n')
+                return SimpleNamespace(pid=1, returncode=0, poll=lambda: 0)
+            with patch('modeling_system.native_recipes.subprocess.Popen', side_effect=launch):
+                result = NativeJob(self.service, self.root/'jobs')(item, self.context)
+            self.assertEqual(result['status'], 'completed')
+            self.assertIn(str(output/'native-stages.json'), result['evidence'])
+            if suffix == 'valid':
+                self.assertEqual(result['native_stages_ms']['worker_driver_restore'], 23.)
+            else:
+                self.assertTrue(result['worker_timing_status'].startswith('invalid'))
+                self.assertEqual(set(result['native_stages_ms']), {'isolated_job'})
+
 
 if __name__ == '__main__': unittest.main()

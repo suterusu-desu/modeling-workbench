@@ -75,6 +75,17 @@ and finite numeric ranges. Native execution still checks its actual lane and
 expected geometry immediately before effects. A planning result cannot itself
 approve appearance, confer authority or prove a confidence value is correctness.
 
+The reader has a narrow compatibility rule for observed Choice responses whose
+complete probabilities are serialized in hundredths and total 0.99 or 1.01.
+It accepts at most 0.01 mass drift only when per-entry rounding intervals of
+0.005 admit a unit-mass distribution. Original probabilities, confidence and the
+selected maximum remain unchanged; missing options, invalid numbers, larger
+drift and inconsistent higher-precision values still fail. Score validation is
+unchanged. The upstream API documents a sum of one, not a rounding guarantee;
+this is an explicitly bounded reader accommodation, not upstream conformance.
+Recover an already saved response through the original completed-response path
+and ledger identity, without repeating inference or rewriting the raw response.
+
 Retain probability distributions and score levels alongside the selected value.
 An arbitrary .9 confidence gate is not a calibrated Blender criterion. A known
 missing prerequisite blocks in code regardless of the answer. A `needs_astra`

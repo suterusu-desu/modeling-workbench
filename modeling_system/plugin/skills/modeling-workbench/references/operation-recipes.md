@@ -1,5 +1,8 @@
 # Reusable modeling operations
 
+For array contracts, complete projected triangle contact, bounded reports and
+measured scoped native setup, see [preparation and bootstrap](preparation-and-bootstrap.md).
+
 Register a mechanism once, then bind character data and qualified alternatives.
 Use `ParameterizedCatalog` for scope-specific parameters without copying Python
 factories. Its implementation functions receive `(state, previous, parameters)`.

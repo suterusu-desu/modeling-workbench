@@ -62,6 +62,41 @@ class JudgmentTests(unittest.TestCase):
         with self.assertRaises(ValueError): prepare_judgments({}, specs * 5, self.binding)
         with self.assertRaises(ValueError): prepare_judgments({'irrelevant': 'x' * 32000}, specs, self.binding)
 
+    def test_cent_serialized_choice_preserves_raw_answer_and_selection(self):
+        questions = {'route': {'type': 'choice', 'instructions': 'Choose a route',
+                     'criteria': {k: k for k in ('a', 'b', 'c', 'd')}}}
+        for probabilities in ({'a': .62, 'b': .21, 'c': .12, 'd': .04},
+                              {'a': .62, 'b': .21, 'c': .12, 'd': .06}):
+            answers = {'route': {'type': 'choice', 'choice': 'a',
+                       'confidence': .49, 'probabilities': probabilities}}
+            original = deepcopy(answers)
+            self.assertEqual(validate_answers(questions, answers), {'route': 'a'})
+            self.assertEqual(answers, original)
+
+    def test_cent_compatibility_rejects_other_distribution_defects(self):
+        questions = {'route': {'type': 'choice', 'instructions': 'Choose a route',
+                     'criteria': {k: k for k in ('a', 'b', 'c', 'd')}}}
+        original = {'route': {'type': 'choice', 'choice': 'a', 'confidence': .49,
+                             'probabilities': {'a': .62, 'b': .21, 'c': .12, 'd': .04}}}
+        mutations = [lambda a: a['route']['probabilities'].update(d=.03),
+                     lambda a: a['route']['probabilities'].update(d=.041),
+                     lambda a: a['route']['probabilities'].pop('d'),
+                     lambda a: a['route']['probabilities'].update(e=0.),
+                     lambda a: a['route']['probabilities'].update(d=float('nan')),
+                     lambda a: a['route']['probabilities'].update(d=True),
+                     lambda a: a['route']['probabilities'].update(d=-.01),
+                     lambda a: a['route'].update(choice='b'),
+                     lambda a: a['route'].update(confidence=1.01)]
+        for mutate in mutations:
+            answers = deepcopy(original); mutate(answers)
+            with self.subTest(answers=answers), self.assertRaises(ValueError):
+                validate_answers(questions, answers)
+
+    def test_cent_compatibility_does_not_change_score_contract(self):
+        answers = deepcopy(self.answers)
+        answers['q2']['probabilities']['0'] = .01
+        with self.assertRaises(ValueError): validate_answers(self.packet['questions'], answers)
+
 
 if __name__ == '__main__':
     unittest.main()

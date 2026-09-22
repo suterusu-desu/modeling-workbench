@@ -5,6 +5,9 @@ import json
 import numpy as np
 from . import guide_fitting
 from . import material_operations
+from .preparation_contracts import PreparationOperation
+from .result_reporting import json_data, compact_summary
+from .triangle_contact import projected_triangle_contact
 
 
 def active_vertex_coverage(vertex_count, faces, driven):
@@ -88,17 +91,26 @@ ARRAY_OPERATIONS = {'section_fit': guide_fitting.prepare_section_fit,
     'surface_realization': material_operations.surface_realization,
     'fit_landmark_field': material_operations.fit_landmark_field,
     'material_trajectory': material_operations.material_trajectory,
-    'attachment_motion': material_operations.attachment_motion}
+    'attachment_motion': material_operations.attachment_motion,
+    'projected_triangle_contact': projected_triangle_contact}
 
 
-def prepare_arrays(operation, *, inputs, parameters=None):
+def prepare_arrays(operation, *, inputs, parameters=None, operations=None):
     """Execute a declarative recipe in an existing queued handler.
 
     Each input is {path, sha256, array}. Paths and keys stay private; exact bytes
     are checked once before loading without pickle. No arbitrary code is run.
     """
-    if operation not in ARRAY_OPERATIONS or set(inputs).intersection(parameters or {}):
+    registry = {name: PreparationOperation(function) for name, function in ARRAY_OPERATIONS.items()}
+    if operations:
+        if set(operations).intersection(registry) or any(not isinstance(v, PreparationOperation) for v in operations.values()):
+            raise ValueError('Private pure-array operations need unique names and explicit contracts')
+        registry.update(operations)
+    if operation not in registry or set(inputs).intersection(parameters or {}):
         raise ValueError('Known array operation and distinct arguments required')
+    selected = registry[operation]
+    # Check names and dependencies before loading potentially large archives.
+    selected.bind({**dict.fromkeys(inputs), **(parameters or {})})
     arrays, archives = {}, {}
     for key, source in inputs.items():
         path = Path(source['path'])
@@ -111,17 +123,26 @@ def prepare_arrays(operation, *, inputs, parameters=None):
             with np.load(io.BytesIO(raw), allow_pickle=False) as archive:
                 archives[identity] = {name: archive[name] for name in archive.files}
         arrays[key] = archives[identity][source['array']]
-    return ARRAY_OPERATIONS[operation](**arrays, **(parameters or {}))
+    return selected(**arrays, **(parameters or {}))
 
 
 def save_preparation(directory, result):
     """Preserve arrays and JSON provenance as a new immutable preparation output."""
+    if not isinstance(result, dict):
+        raise ValueError('Preparation must return an array/metadata dictionary')
     directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=False)
     arrays = {k: v for k, v in result.items() if isinstance(v, np.ndarray)}
-    np.savez_compressed(directory / 'arrays.npz', **arrays)
-    details = {k: v for k, v in result.items() if k not in arrays}
-    (directory / 'result.json').write_text(json.dumps(details, indent=2, allow_nan=False), encoding='utf-8')
+    if any(value.dtype.hasobject for value in arrays.values()):
+        raise ValueError('Prepared arrays must load without pickle')
+    details = json_data({k: v for k, v in result.items() if k not in arrays})
+    encoded = json.dumps(details, indent=2, allow_nan=False)
+    # Validate serialization before creating the immutable output directory.
+    import io
+    packed = io.BytesIO()
+    np.savez_compressed(packed, **arrays)
+    directory.mkdir(parents=True, exist_ok=False)
+    (directory / 'arrays.npz').write_bytes(packed.getvalue())
+    (directory / 'result.json').write_text(encoded, encoding='utf-8')
     return {name: {'path': str(directory / name),
                    'sha256': hashlib.sha256((directory / name).read_bytes()).hexdigest()}
             for name in ('arrays.npz', 'result.json')}
@@ -133,8 +154,9 @@ class ArrayPreparation:
     Payload: operation, inputs, parameters. Optional effect evidence is produced
     by a separate prepared_effect recipe, using the actual active surface.
     """
-    def __init__(self, directory):
+    def __init__(self, directory, *, operations=None):
         self.directory = Path(directory)
+        self.operations = dict(operations or {})
 
     def __call__(self, item, context):
         from .controller import fingerprint, write_json
@@ -145,27 +167,40 @@ class ArrayPreparation:
         if any(source['sha256'] not in item['reads'].values() for source in sources.values()):
             raise ValueError('Every prepared-array file must be bound to current task dependencies')
         directory = self.directory / fingerprint({'task': item, 'attempt': context['attempt_key']})[:20]
+        if directory.exists():
+            raise ValueError('Preserve the existing preparation attempt; inspect its original receipt instead of replaying')
         try:
-            result = prepare_arrays(payload['operation'], inputs=sources, parameters=payload.get('parameters'))
-        except (ValueError, KeyError, OSError) as error:
-            # No native effects and no output yet. Preserve this failed preparation
-            # so a separately offered recovery can be selected without a replay.
+            result = prepare_arrays(payload['operation'], inputs=sources, parameters=payload.get('parameters'),
+                                    operations=self.operations)
+            artifacts = save_preparation(directory, result)
+        except (ValueError, KeyError, OSError, ImportError, TypeError, IndexError) as error:
+            # Qualified pure-array functions have no native or provider effects.
+            # Preserve partial files if persistence failed; never overwrite them.
             write_json(directory / 'failure.json', {'operation': payload['operation'], 'error': str(error),
-                'effects': 'No native access; no prepared output', 'inputs': sources})
+                'effects': 'No native access; preparation did not complete', 'inputs': sources,
+                'partial_files': sorted(p.name for p in directory.iterdir()) if directory.exists() else []})
             evidence = [{'kind': 'file', 'path': str(directory / 'failure.json'), 'role': 'Preparation failure'}]
             return {'status': 'failed', 'workbench': {'checks': {'analysis': {'status': 'fail', 'evidence': evidence}},
                 'findings': [{'kind': 'failure', 'scope': 'qualified preparation',
-                              'summary': str(error) if isinstance(error, ValueError) else 'A required saved input could not be loaded; inspect the retained preparation failure.'}]}}
-        artifacts = save_preparation(directory, result)
+                              'summary': 'Preparation failed before a usable output was published. Inspect the retained dependency, array-contract or serialization failure; no native operation occurred.'}]}}
         evidence = [{'kind': 'file', 'path': row['path'], 'role': name} for name, row in artifacts.items()]
         summary = {k: v for k, v in result.items() if k in ('maximum', 'rms', 'changed_count',
             'has_effect_above_tolerance', 'complete_active_coverage', 'active_count', 'driven_active_count',
             'unused_vertex_count', 'best_sample_index', 'passed', 'landmark_maximum',
-            'orientation_determinant', 'maximum_by_pose', 'relative_motion_maximum')}
+            'orientation_determinant', 'maximum_by_pose', 'relative_motion_maximum',
+            'overlap_pairs', 'critical_vertices', 'branch_crossings', 'violating_vertices',
+            'minimum_slack', 'coverage_complete', 'fixed_infeasible_rows')}
+        summary = json_data(summary)
         no_progress = (payload.get('stop_on_no_effect') is True
                        and result.get('has_effect_above_tolerance') is False)
+        limits = 'Saved-array preparation; appearance remains unjudged. ' + result.get('limits', '')
+        try:
+            finding = compact_summary(payload['operation'], summary, limits=limits)
+        except ValueError:
+            # Keep an oversized limitation intact for OperatingSession's report
+            # repair path, rather than hiding it or repeating completed math.
+            finding = json.dumps({'operation': payload['operation'], 'limits': limits})
         return {'status': 'no_progress' if no_progress else 'completed', 'prepared': artifacts, 'summary': summary,
             'workbench': {'checks': {'analysis': {'status': 'pass', 'evidence': evidence}},
                 'findings': [{'kind': 'measured', 'scope': 'qualified preparation',
-                    'summary': json.dumps({'operation': payload['operation'], 'result': summary,
-                        'limits': 'Saved-array preparation; appearance remains unjudged.'})}]}}
+                    'summary': finding}]}}

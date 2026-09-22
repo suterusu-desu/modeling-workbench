@@ -15,6 +15,8 @@ Use [executable methods](references/method-control.md) to register genuine prepa
 
 For repeated modeling mechanisms use [parameterized operations](references/operation-recipes.md): bind meaningful method alternatives as data, reuse guide-landmark/material-trajectory math, compare actual face-owning geometry, and execute NativeJob/RetainCheckpoint through the existing controller. Retention reuses returned fresh states while preserving native guards and independent reopen. Begin actual image review with `session.begin_review(task)` so workload coverage is retained automatically through submission.
 
+Use [preparation and scoped setup](references/preparation-and-bootstrap.md) for dependency/array contracts, numerical JSON, complete projected triangle contact and measured native bootstrap. Preserve a completed effect if only its report needs repair. Keep a required minimal evidence bundle inside the selected operation; do not ask Jev to invent camera preferences for fixed housekeeping. Every exact-coordinate lock needs a reason and evidence: accepted guide identity does not make defective current geometry immutable.
+
 Use [typed capability control](references/typed-control.md) to let Jev bind qualified
 operation arguments, choose observations for named uncertainties, retrieve omitted
 experience before action selection, and check consequential claims against exact

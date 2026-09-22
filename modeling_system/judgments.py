@@ -105,6 +105,22 @@ def _number(value, lower, upper):
     return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
 
 
+def _complete_probability_mass(probs, kind):
+    total = math.fsum(probs.values())
+    if abs(total - 1) <= 1e-5:
+        return True
+    # Compatibility with observed Choice responses serialized in hundredths.
+    # The upstream contract says sum=1; it does not promise this rounding mode.
+    # Accept at most one cent of drift, only when a unit-mass distribution can
+    # round to these exact entries. Never normalize or replace the raw values.
+    if (kind != 'choice' or abs(total - 1) > .010000000001
+            or any(abs(p * 100 - round(p * 100)) > 1e-10 for p in probs.values())):
+        return False
+    lower = math.fsum(max(0., p - .005) for p in probs.values())
+    upper = math.fsum(min(1., p + .005) for p in probs.values())
+    return lower <= 1 + 1e-12 and upper >= 1 - 1e-12
+
+
 def validate_answers(questions, answers, *, budget=None):
     """Validate full distributions; return values without discarding source answers."""
     validate_questions(questions, budget=budget)
@@ -125,7 +141,7 @@ def validate_answers(questions, answers, *, budget=None):
             probs = answer.get('probabilities')
             if (not isinstance(probs, dict) or set(probs) != set(expected)
                     or any(not _number(v, 0, 1) for v in probs.values())
-                    or abs(sum(probs.values()) - 1) > 1e-5
+                    or not _complete_probability_mass(probs, kind)
                     or not _number(answer.get('confidence'), 0, 1)):
                 raise ValueError('Invalid complete probability distribution or confidence')
             if kind == 'choice':

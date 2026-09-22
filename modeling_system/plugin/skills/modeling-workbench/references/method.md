@@ -34,6 +34,13 @@ Form one testable mechanism hypothesis with a resource bound and discriminating 
 
 Use coupled response screening where supported. A local derivative or finite linear optimizer cannot prove nonlinear motion correctness or anatomical infeasibility. Distinguish numerical nonconvergence from conflicting constraints. Keep fit goals separate from preservation constraints and artistic choices. Unknown target coordinates must not be manufactured to make an optimization succeed.
 
+Give every exact-coordinate preservation constraint a reason and evidence.
+Accepted guide identity, protected user work and the current native implementation
+are different things. If the current rest pose already contains a rejected gap,
+fold or attachment error, preserving those vertices exactly can forbid the needed
+repair. Keep the accepted design fixed while allowing its defective implementation
+to change under registered guide, depth and corresponding-section constraints.
+
 Apply the selected proposal only through the native owner, expected-state checks and a recoverable trial. Preserve originals and unrelated user changes. Check predictions against actual native results. Do not deform the character merely to make fitting a flawed guide easier.
 
 ## Compare, save and retain

@@ -51,6 +51,13 @@ retain an action/defer choice. Retention uses returned fresh state to avoid
 duplicate scene inspections and skips reopening an already loaded exact candidate,
 while preserving native guards, independent reopen evidence and actual visual review.
 
+[Preparation and scoped setup](modeling_system/plugin/skills/modeling-workbench/references/preparation-and-bootstrap.md)
+check declared dependencies and array shapes, preserve numerical results, and
+keep long reports recoverable without repeating completed work. Complete projected
+triangle contact catches intersections missed by sparse samples. Qualified native
+jobs can replace broad scene exports with explicit feature checks and record
+setup, execution and evidence timings; actual savings depend on the workload.
+
 [Typed capability control](modeling_system/plugin/skills/modeling-workbench/references/typed-control.md)
 lets Jev select qualified operation arguments alongside the operation itself.
 When relevant experience exceeds the initial context, it selects useful sources
@@ -58,6 +65,10 @@ before the action decision. Named uncertainty, optional grounded claim checks,
 and outcome-linked decision records keep choices connected to actual modeling
 evidence. Explicit decision budgets and provider retry timing use the existing
 workspace accounting and recovery path.
+
+The response reader validates provider answers while preserving their original
+values. See the [reader compatibility limits](modeling_system/plugin/skills/modeling-workbench/references/judgments.md)
+for its narrow handling of rounded Choice probabilities.
 
 ## What can I use today?
 

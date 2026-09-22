@@ -66,6 +66,15 @@ Independent reopen and actual appearance review remain separate obligations.
 Review opening/submission and per-stage native timings expose incomplete workload
 coverage instead of treating missing Astra work as zero.
 
+Preparation contracts check dependencies and numerical shapes before expensive
+work. Strict numerical serialization preserves real results; an oversized public
+report retains its known effect and full limitations while withholding dependent
+use until its projection is repaired. Complete projected triangle-contact checks
+and constraints operate below artistic judgment, under a declared frame, pose,
+topology and displacement law. Scoped native setup replaces a broad export only
+when the qualified operation checks its entire feature dependency closure, with
+the same fresh-state and ownership guards. Phase receipts expose the actual cost.
+
 Every row has links to the rows above and below. A short observation expands to
 an exact operation, input identity, original artifact, procedure and judgment.
 The queue is an execution index; native files, generation jobs, episode records
@@ -81,6 +90,13 @@ priority, method, scope, evidence and recovery decisions and dispatches directly
 to code. Astra does not perform a second native handoff, nor directly inspect,
 pose, capture, save or edit Blender. Fixed prerequisites inside an authorized
 selected operation are deterministic and need no gratuitous inference.
+
+A minimal evidence bundle can be fixed inside a selected operation when every
+view is required to answer its named question. Jev chooses useful discretionary
+work; it need not invent a preference between equivalent housekeeping options.
+Every preservation lock names its reason and evidence. Accepted guide identity
+is distinct from an unaccepted current implementation: a known defect at rest
+must not become an exact-coordinate invariant merely because it is the baseline.
 
 A selected task enters the existing episode lease and operation journal before
 its effects. It captures applicable workbench procedure context, executes the

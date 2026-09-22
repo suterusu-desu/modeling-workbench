@@ -122,6 +122,20 @@ class NativeJob:
             'evidence': [str(log)] + ([str(receipt_path)] if receipt_path and receipt_path.is_file() else []),
             'native_stages_ms': {'isolated_job': round((time.perf_counter()-started)*1000, 3)},
             'cancel_requested': cancelled}
+        phase_path = Path(output)/'native-stages.json' if output else None
+        if phase_path and phase_path.is_file():
+            result['evidence'].append(str(phase_path))
+            try:
+                from .native_bootstrap import phase_summary
+                if phase_path.stat().st_size > 65536:
+                    raise ValueError('Native timing receipt too large')
+                phases = json.loads(phase_path.read_text(encoding='utf-8'))
+                result['native_stages_ms'].update({'worker_' + name: value for name, value in phase_summary(phases).items()})
+                result['worker_timing_status'] = phases['status']
+            except (OSError, ValueError, TypeError, AttributeError):
+                result['worker_timing_status'] = 'invalid; raw timing receipt retained'
+            # Optional telemetry cannot turn a known effect into a replay or
+            # qualify an incomplete native worker. The worker receipt governs.
         write_json(folder/'receipt.json', result)
         return result
 

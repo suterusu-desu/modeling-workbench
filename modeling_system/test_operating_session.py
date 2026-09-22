@@ -246,6 +246,37 @@ class OperatingTests(unittest.TestCase):
         self.session().run(max_steps=2)
         self.assertEqual(self.ran, ['work'])
 
+    def test_numpy_results_are_retained_without_report_interruption(self):
+        import numpy as np
+        item = self.item('work'); self.items = [item]
+        self.results['work'] = {'status': 'completed', 'count': np.int32(3),
+                                'metrics': np.array([.1, .2]), 'workbench': self.report(item)}
+        session = self.session()
+        self.assertEqual(session.run(max_steps=2)['status'], 'completed')
+        entry = session.record['results']['work']
+        raw = read_json(self.service.store.root/'calls'/entry['operation_handle']/'capability-result.json')
+        self.assertEqual(raw['count'], 3); self.assertEqual(raw['metrics'], [.1, .2])
+
+    def test_oversized_report_keeps_known_effect_and_repairs_without_replay(self):
+        first = self.item('work')
+        self.items = [first, self.item('use', requires={'work': ['completed']}, consumes={'work': ['analysis']})]
+        report = self.report(first); report['findings'][0]['summary'] = 'Complete limits. '*200
+        self.reports['work'] = report
+        session = self.session()
+        self.assertEqual(session.run(max_steps=4)['status'], 'needs_review')
+        entry = session.record['results']['work']
+        self.assertEqual(entry['status'], 'completed')
+        self.assertTrue(entry['result']['workbench']['report_needs_repair'])
+        self.assertEqual(self.ran, ['work'])
+        folder = self.service.store.root/'calls'/entry['operation_handle']
+        retained, = folder.glob('report-*.json')
+        self.assertEqual(read_json(retained), report)
+        original = (folder/'result.json').read_bytes()
+        session.repair_report('work', self.report(first))
+        self.assertEqual((folder/'result.json').read_bytes(), original)
+        self.assertEqual(session.run(max_steps=4)['status'], 'completed')
+        self.assertEqual(self.ran, ['work', 'use'])
+
     def test_recover_return_after_queue_index_crash_does_not_replay(self):
         self.items = [self.item('work')]
         session = self.session(); session.run(max_steps=2)
