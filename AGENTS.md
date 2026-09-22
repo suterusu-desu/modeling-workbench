@@ -8,4 +8,6 @@ Keep source, installed package, bound workspace, running adapter and operator ad
 
 Use explicit workspace bindings. Never invent anatomy, correspondence, target depth or native qualification. Native operations need a verified adapter, sole owner, expected state and recoverable change. Never clear an original rejection to admit a repaired derivative.
 
+Before authoring native workers, read the Python runtime boundary in [DEVELOPING.md](DEVELOPING.md). Keep offline numerical dependencies separate from Blender's embedded runtime and verify new native imports through the existing controller before scene effects.
+
 Do not commit runtime exports or character evidence. Run the synthetic suite and source-distribution checks for behavior changes. Use the repository owner's configured identity and GitHub noreply address for commits; check both author and committer. Keep publication visibility unchanged unless explicitly requested.
