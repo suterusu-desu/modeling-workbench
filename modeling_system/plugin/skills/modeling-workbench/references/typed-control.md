@@ -81,13 +81,26 @@ does not approve appearance or delay ordinary checkpoint saving.
 `RetainedContext` still projects eligible records before limiting them and retains
 whole passages with their caveats. When the broader candidate pool exceeds the
 initial context, `LaneSelector` first asks independent relevance and relationship
-questions. Applicable contradictions are preserved alongside support and changed
-prerequisites. A subsequent action request receives the selected sources.
+questions. Packing admits the best fitting whole passage of each applicable
+relationship (supporting, contradicting or conditional), in relevance order,
+then fills remaining space by relevance. An oversized passage is skipped whole;
+a smaller passage of the same relationship can still fit. Neither a large
+failure archive nor many supporting reviews get unconditional priority.
+A subsequent action request receives these sources in relevance order.
+
+The passage and byte limits stay unchanged. With too little room, some sides
+can remain unrepresented: `semantic_coverage.coverage_by_relationship` reports
+candidate, selected and omitted counts for every relationship. `excluded` names
+budget-omitted eligible passages and the binding passage or byte limit;
+unrelated candidates stay out and are counted separately. Complete source
+caveats and raw judgments remain intact. This is bounded greedy coverage, not
+an exhaustive source search or an override of Jev's action/defer choice.
 
 This second request supplies new evidence; sibling questions cannot consume one
 another's answers. Small sufficient context continues through one batch. The
-retrieval and final choice each have exact dependency-bound caches, and missing
-coverage remains visible. No passage's relevance changes current guide authority.
+retrieval and final choice each have exact dependency-bound caches. A changed
+selection policy also invalidates both caches without rewriting old decisions.
+No passage's relevance changes current guide authority.
 Historical failures inform mechanisms without universally banning repaired uses.
 
 ## One local decision budget

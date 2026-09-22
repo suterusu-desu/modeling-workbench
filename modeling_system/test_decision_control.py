@@ -4,16 +4,17 @@ from pathlib import Path
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from . import test_operating_session as fixtures
 from .capability_calls import DEFAULT, UNKNOWN, compile_call
 from .controller import fingerprint, read_json, write_json
-from .decision_budget import DecisionBudget
-from .decision_evidence import grounded_claim, observation_contract
+from .decision_budget import DecisionBudget, encoded_size
+from .decision_evidence import grounded_claim, observation_contract, select_passages
 from .decision_outcomes import composite_scores
 from .judgments import prepare_judgments, resolve_judgments
 from .operating_session import inspect_session
-from .work_queue import LaneSelector
+from .work_queue import DEFER, LaneSelector
 
 
 def answer_batch(state, decisions, binding, choose=None):
@@ -152,6 +153,64 @@ class TypedSessionTests(unittest.TestCase):
         self.assertIn('no new render', json.dumps(self.calls[0][1]))
 
 
+class PassageCoverageTests(unittest.TestCase):
+    def evidence(self, relationships, scores=None):
+        candidates, judgments = [], {}
+        for i, relation in enumerate(relationships):
+            candidates.append({'index': 10 * i + 3, 'role': 'matches', 'content': {
+                'review': f'Complete review {i}. Local result only; later motion remains unreviewed.'}})
+            judgments[f'relation_{i}'] = {'choice': relation}
+            judgments[f'relevance_{i}'] = {'score': scores[i] if scores else 2 - i / 100}
+        return candidates, judgments
+
+    def test_many_failures_do_not_hide_the_highest_ranked_success(self):
+        candidates, judgments = self.evidence(['contradicts'] * 8 + ['supports'], [1.8] * 8 + [1.9])
+        original = deepcopy((candidates, judgments))
+        result = select_passages(candidates, judgments, DecisionBudget(context_passages=4))
+        self.assertEqual([p['index'] for p in result['passages']], [83, 3, 13, 23])
+        self.assertEqual(result['coverage_by_relationship']['supports'],
+                         {'candidates': 1, 'selected': 1, 'omitted': 0})
+        self.assertEqual(result['unreturned_conflicts'], 5)
+        self.assertEqual((candidates, judgments), original)
+        self.assertEqual(result['judgments'], judgments)
+
+    def test_many_supporting_reviews_keep_counterevidence_and_changed_prerequisites(self):
+        candidates, judgments = self.evidence(['supports'] * 8 + ['contradicts', 'conditional'])
+        result = select_passages(candidates, judgments, DecisionBudget(context_passages=4))
+        self.assertEqual([p['index'] for p in result['passages']], [3, 13, 83, 93])
+        self.assertEqual({p['relationship'] for p in result['passages']},
+                         {'supports', 'contradicts', 'conditional'})
+
+    def test_one_slot_uses_relevance_and_reports_the_missing_sides(self):
+        candidates, judgments = self.evidence(['contradicts', 'supports', 'conditional'], [1.7, 1.9, 1.8])
+        result = select_passages(candidates, judgments, DecisionBudget(context_passages=1))
+        self.assertEqual([p['index'] for p in result['passages']], [13])
+        self.assertEqual(result['coverage_by_relationship']['contradicts']['omitted'], 1)
+        self.assertTrue(all(p['reason'] == 'passage_limit' for p in result['excluded']))
+
+    def test_byte_limit_keeps_whole_caveats_and_skips_oversized_representatives(self):
+        candidates, judgments = self.evidence(['supports', 'contradicts', 'supports', 'conditional'])
+        candidates[0]['content']['review'] *= 20
+        candidates[2]['content']['review'] += ' Retained shape: \u66f2\u9762.'
+        expected = [{**candidates[i], 'relationship': r}
+                    for i, r in [(1, 'contradicts'), (2, 'supports')]]
+        limit = encoded_size(expected)
+        result = select_passages(candidates, judgments, DecisionBudget(context_bytes=limit))
+        self.assertEqual(result['passages'], expected)
+        self.assertEqual(encoded_size(result['passages']), limit)
+        self.assertEqual([p['index'] for p in result['excluded']], [3, 33])
+        self.assertTrue(all(p['reason'] == 'byte_limit' for p in result['excluded']))
+        self.assertEqual(result['coverage_by_relationship']['conditional']['selected'], 0)
+
+    def test_only_unrelated_or_unfittable_evidence_does_not_force_a_passage(self):
+        candidates, judgments = self.evidence(['supports', 'unrelated'], [1.8, 2.0])
+        result = select_passages(candidates, judgments, DecisionBudget(context_bytes=1))
+        self.assertEqual(result['passages'], [])
+        self.assertEqual(result['excluded'], [{'index': 3, 'relationship': 'supports', 'reason': 'byte_limit'}])
+        self.assertEqual(result['coverage_by_relationship']['unrelated'],
+                         {'candidates': 1, 'selected': 0, 'omitted': 1})
+
+
 class RetrievalTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
@@ -197,6 +256,36 @@ class RetrievalTests(unittest.TestCase):
         before = len(self.batches)
         selector(self.snapshot, self.actions, {})
         self.assertEqual(len(self.batches) - before, 1)
+
+    def test_balanced_context_and_coverage_reach_action_but_do_not_override_defer(self):
+        def judge(state, decisions, binding):
+            self.batches.append(deepcopy(state))
+            return answer_batch(state, decisions, binding, lambda d, s:
+                'supports' if d['id'] == 'relation_9' else
+                'contradicts' if d['id'].startswith('relation_') else
+                DEFER if d['id'] == 'repair' else None)
+        budget = DecisionBudget(context_passages=3)
+        selector = LaneSelector(self.root, judge=judge, project=self.projection, budget=budget)
+        self.assertEqual(selector(self.snapshot, self.actions, {})['status'], 'needs_review')
+        context = self.batches[1]['retained_experience']
+        self.assertEqual({p['relationship'] for p in context['passages']}, {'supports', 'contradicts'})
+        self.assertEqual(context['semantic_coverage']['coverage_by_relationship']['supports']['selected'], 1)
+        self.assertEqual(context['semantic_coverage']['unreturned_conflicts'], 7)
+        self.assertIn('selection_policy', context['semantic_coverage'])
+        again = LaneSelector(self.root, judge=judge, project=self.projection, budget=budget)
+        self.assertEqual(again(self.snapshot, self.actions, {})['status'], 'needs_review')
+        self.assertEqual(len(self.batches), 2)
+
+    def test_changed_policy_invalidates_retrieval_and_action_caches(self):
+        with patch('modeling_system.work_queue.SELECTION_POLICY', 'legacy-policy'):
+            LaneSelector(self.root, judge=self.judge, project=self.projection)(self.snapshot, self.actions, {})
+        previous = {p: p.read_bytes() for folder in ('retrieval', 'decisions')
+                    for p in (self.root / folder).glob('*.json')}
+        LaneSelector(self.root, judge=self.judge, project=self.projection)(self.snapshot, self.actions, {})
+        self.assertEqual(len(self.batches), 4)
+        self.assertEqual(len(list((self.root / 'retrieval').glob('*.json'))), 2)
+        self.assertEqual(len(list((self.root / 'decisions').glob('*.json'))), 2)
+        self.assertTrue(all(p.read_bytes() == raw for p, raw in previous.items()))
 
 
 class BudgetAndPolicyTests(unittest.TestCase):

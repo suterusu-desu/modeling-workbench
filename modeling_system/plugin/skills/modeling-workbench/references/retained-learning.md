@@ -71,9 +71,12 @@ another passage. Use
 
 When all candidates fit the initial context, the passages and independent
 relevance questions share the action-selection request. Otherwise one cached
-evidence-selection request precedes action selection, making selected passages
-and contradictions available to the action questions. Exact dependency changes
-invalidate both stages. See [typed control](typed-control.md) for configuration,
+evidence-selection request precedes action selection. It packs relevant support,
+counterexamples and conditional evidence together, then fills by relevance;
+neither successes nor failures can monopolize context just by their relationship.
+Whole-passage byte limits can still leave gaps, which are reported by relationship
+in the action context. Exact dependency or selection-policy changes invalidate
+both stages. See [typed control](typed-control.md) for configuration,
 coverage and interruption recovery. Relevance is not guide admission, appearance
 approval or proof that a mechanism caused improvement.
 

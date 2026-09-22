@@ -1,4 +1,11 @@
-# Current operating integration: 0.2.31
+# Current operating integration: 0.2.32
+
+Semantic context packing now keeps the best fitting support, counterexample and
+conditional passage in relevance order before filling remaining space by
+relevance. The old contradiction-first rule could omit the highest-ranked
+supporting review. Whole passages, raw judgments and existing budgets remain;
+per-relationship omissions reach the action request. The policy revision
+invalidates old retrieval and action caches without altering saved decisions.
 
 Projected contact now carries paired barycentric weights through strict
 half-space clipping and bound crossings. Exact rational fallback handles
@@ -30,6 +37,7 @@ targets are integrated below; installation and actual use remain separately evid
 
 | Observed gap | Implemented change | Verification boundary |
 | --- | --- | --- |
+| A failure archive crowded out a successful matching method despite its higher Jev relevance score | Relevance-ordered relationship coverage, then relevance fill; explicit omissions and versioned caches | Both evidence directions, tight bytes/slots, complete caveats, unrelated sources, action deferral and cache invalidation tested; packing alone does not establish a better action or appearance |
 | A missing isolated-runner field consumed selection and reached a failed dispatch | NativeJob exposes structural preflight; OperatingSession excludes malformed fixed inputs before inference or operation reservation | No provider, native call, output folder or operation receipt is created for a missing runner executable |
 | Complete Choice probabilities can arrive rounded with a small total discrepancy | Strict hundredth-grid compatibility preserves every raw value and selected maximum; other invalid distributions still fail | Synthetic reader/recovery cases; upstream documentation does not guarantee rounding |
 | Missing preparation dependencies, wrong array shapes and numerical JSON values interrupted useful work | PreparationOperation contracts, strict numerical conversion, immutable full results and compact metrics | Dependency-before-load, frame-shape, NumPy scalar and nonfinite/object rejection tests |

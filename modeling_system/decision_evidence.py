@@ -9,6 +9,7 @@ RELATIONSHIPS = {
     'contradicts': 'Contradicts a current premise or reports an applicable failure that the next choice must account for.',
     'conditional': 'Related, but applicability depends on missing or changed prerequisites.',
     'unrelated': 'Does not help answer the current question.'}
+PASSAGE_SELECTION_POLICY = 'relevance-with-relationship-coverage-v1'
 
 
 def observation_contract(*, question, hypotheses, changes_next_action, cost=None, existing_evidence=None):
@@ -70,22 +71,47 @@ def retrieval_questions(candidates):
 
 
 def select_passages(candidates, judgments, budget):
+    """Keep whole, relevant evidence from different sides within the same budget.
+
+    First admit the best fitting passage of each applicable relationship, in
+    relevance order. Then fill remaining space by relevance. Neither failures
+    nor successes get an unconditional priority; insufficient coverage stays
+    explicit. Judgments and source qualifications are never rewritten.
+    """
     rows = []
+    coverage = {relation: {'candidates': 0, 'selected': 0, 'omitted': 0}
+                for relation in RELATIONSHIPS}
     for i, row in enumerate(candidates):
         relation = judgments[f'relation_{i}']['choice']
         if relation not in RELATIONSHIPS:
             raise ValueError('Unknown evidence relationship')
+        coverage[relation]['candidates'] += 1
         if relation == 'unrelated':
             continue
-        rows.append((relation != 'contradicts', -judgments[f'relevance_{i}']['score'], i, relation))
-    public, excluded = [], []
-    for _, _, index, relation in sorted(rows):
-        candidate = {**deepcopy(candidates[index]), 'relationship': relation}
-        if (len(public) >= budget.context_passages
-                or encoded_size(public + [candidate]) > budget.context_bytes):
-            excluded.append({'index': candidate['index'], 'relationship': relation})
-        else:
-            public.append(candidate)
+        rows.append((-judgments[f'relevance_{i}']['score'], i, relation))
+    rows.sort()
+    passages = {i: {**deepcopy(candidates[i]), 'relationship': relation}
+                for _, i, relation in rows}
+    chosen, represented, public = set(), set(), []
+    for representatives_only in (True, False):
+        for _, index, relation in rows:
+            if index in chosen or representatives_only and relation in represented:
+                continue
+            candidate = passages[index]
+            if (len(public) < budget.context_passages
+                    and encoded_size(public + [candidate]) <= budget.context_bytes):
+                chosen.add(index)
+                represented.add(relation)
+                public.append(candidate)
+                coverage[relation]['selected'] += 1
+    # Display the selected evidence in relevance order, not admission order.
+    public = [passages[i] for _, i, _ in rows if i in chosen]
+    excluded = [{'index': candidates[i]['index'], 'relationship': relation,
+                 'reason': 'passage_limit' if len(public) >= budget.context_passages else 'byte_limit'}
+                for _, i, relation in rows if i not in chosen]
+    for counts in coverage.values():
+        counts['omitted'] = counts['candidates'] - counts['selected']
     return {'passages': public, 'excluded': excluded,
             'unreturned_conflicts': sum(row['relationship'] == 'contradicts' for row in excluded),
+            'coverage_by_relationship': coverage, 'selection_policy': PASSAGE_SELECTION_POLICY,
             'judgments': deepcopy(judgments), 'candidate_count': len(candidates)}

@@ -9,8 +9,8 @@ See the [system design](DESIGN.md) for responsibilities and retained workflows.
 
 Actual visual reviews and conditional lessons carry into later Jev decisions
 automatically. Their exact evidence stays in the private workspace; compact
-context distinguishes observed failures, changed prerequisites and remaining
-uncertainties. See [retained learning](modeling_system/plugin/skills/modeling-workbench/references/retained-learning.md).
+context keeps relevant successes, failures and changed prerequisites together,
+with omitted evidence reported explicitly. See [retained learning](modeling_system/plugin/skills/modeling-workbench/references/retained-learning.md).
 
 Reusable tools and an evidence-based workflow for character modeling: exact recorded geometry, matched observations, guide/depth qualification, coupled response analysis, recoverable trials and retained learning.
 
@@ -74,7 +74,7 @@ workspace accounting and recovery path.
 
 The response reader validates provider answers while preserving their original
 values. See the [reader compatibility limits](modeling_system/plugin/skills/modeling-workbench/references/judgments.md)
-for its narrow handling of rounded Choice probabilities.
+for its narrow handling of rounded Choice and Score answers.
 
 ## What can I use today?
 

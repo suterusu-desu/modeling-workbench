@@ -13,7 +13,7 @@ LANES = ('diagnosis', 'repair', 'verification', 'review', 'recovery',
          'experience', 'preparation')
 DEFER = '__needs_review__'
 # Advance when selection question meanings or their composition change.
-SELECTION_POLICY = 'typed-capabilities-and-evidence-v5'
+SELECTION_POLICY = 'typed-capabilities-and-evidence-v6'
 LANE_QUESTIONS = {
     'diagnosis': 'Which offered observation best distinguishes the remaining plausible causes and changes the next edit?',
     'repair': 'Which offered qualified method best addresses the observed failure mechanism while preserving retained gains?',
@@ -258,7 +258,8 @@ facts and descriptions keyed by action ID; private IDs/payloads never go on wire
                 retrieval_dispatched = True
             public['state']['retained_experience']['passages'] = deepcopy(retrieval['passages'])
             public['state']['retained_experience']['semantic_coverage'] = {
-                k: deepcopy(retrieval[k]) for k in ('excluded', 'unreturned_conflicts', 'candidate_count')}
+                k: deepcopy(retrieval[k]) for k in ('excluded', 'unreturned_conflicts', 'candidate_count',
+                                                  'coverage_by_relationship', 'selection_policy')}
             public['rank_experience'] = []  # These exact sources were just judged.
         decisions, lane_keys, resolved = [], {}, {}
         # Choices for different lanes share state but never assume other answers.
