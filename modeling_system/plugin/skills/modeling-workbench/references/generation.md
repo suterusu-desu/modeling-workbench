@@ -10,6 +10,26 @@ Ordinary local guide reconstruction is a distinct intent class, not a comparison
 
 Pass the same use case, `transport='Tripo Studio website'`, route, output settings and observed generation cost in preparation, with the configured authorization scope/source and fixed key. The live claim preflight must identify the source SHA and every configured output setting as well as fresh mode/model/time/cost/balance. Preparation and claim compare actual stored image bytes and the selected review/job; claim also rechecks the full authorization snapshot. Changes require explicit reconciliation of the same prepared job, not a new retry key. Neither a comparison ID nor a generic P2 request can be relabeled to consume this ordinary local authorization. No API transport, funding, purchase or expanded character scope is supplied by this contract.
 
+## Multi-view mesh jobs
+
+A mesh reconstructed from one image invents the unseen sides; a provider's multi-view mode takes separate images of
+the same pose in named slots. Bind them with `prepare_guide(front_review, provider, settings, ...)` where
+`settings['views'] = {'front': front_review, 'left': ..., 'right': ..., 'back': ...}`. Each slot is a currently usable
+image review (an accepted existing drawing enters as an image job whose outputs are those files, reviewed like any
+other source); `front` must be the request's reviewed source; every slot needs its own image, so the same picture in
+two slots is refused. A workspace policy with
+
+```json
+"tripo": {"multi_view_requirement": {"required": true, "minimum_distinct_views": 2}}
+```
+
+refuses a mesh request with fewer distinct reviewed views, at preparation and again at claim, so a job prepared before
+the rule existed cannot be dispatched after it (cancel it). The prepared transport lists `view_slots`, the exact files
+to load. `claim_job` re-checks every slot's review and bytes, and the live preflight must report `slot_sha256` for
+exactly the prepared slots, read from what the panel actually holds; `settings['output_settings']` (for example
+`{"topology": "Quad", "polycount": 25000}`) must match the panel's values and types. A later rejection of any view's
+review blocks the claim.
+
 After delivery inspect actual connected skin, registration, depth/sections, ocular relationships and exclusions. Missing foreground skin is the applicability of the complete-skin preparation lesson, not a universal crop prohibition. Useful interior support may coexist with invented backs or brows. Keep rejected and unresolved regions explicit.
 
 `runtime_status` reports observed process source and method signatures. A current disk hash does not update an already loaded process. New plugin materialization/cache, a fresh service process/schema, and the operator actually reading/using this procedure are distinct adoption evidence.

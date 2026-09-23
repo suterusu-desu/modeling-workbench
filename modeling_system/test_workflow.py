@@ -82,6 +82,87 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(cancelled['status'],'cancelled');self.assertNotIn('submission_intent',cancelled['data'])
         self.assertEqual([h['status'] for h in cancelled['history']],['prepared'])
 
+    def reviewed_view(self, key, color):
+        path=self.root/(key+'.png');Image.new('RGB',(200,100),color).save(path)
+        job=self.completed(key=key,path=path)
+        return self.s.review_reference(job['handle'],0,'useful','eye',10,'Fixture view','unchanged','matched','closed',[])['review']
+
+    def multi_view_policy(self, minimum=2):
+        path=self.root/'MESH-GENERATION.json'
+        path.write_text(json.dumps({'tripo':{'mode':'Smart Mesh','model':'P2.0',
+            'multi_view_requirement':{'required':True,'minimum_distinct_views':minimum}}}),encoding='utf-8')
+        self.s.references.generation_policy=path
+
+    def multi_view_request(self, views, key='mv', **extra):
+        return self.s.prepare_guide(views['front'],'Tripo Studio',{'mode':'Smart Mesh','model':'P2.0','displayed_generation_credits':100,
+            'views':views,**extra},{'scope':'fixture only','source':'unit test'},key)
+
+    def test_single_image_mesh_is_refused_when_the_policy_requires_views(self):
+        front,other=self.reviewed_view('front','red'),self.reviewed_view('other','blue');self.multi_view_policy()
+        with self.assertRaisesRegex(ValueError,'never generated from a single image'):
+            self.tripo_request(front)
+        with self.assertRaisesRegex(ValueError,'never generated from a single image'):
+            self.multi_view_request({'front':front})
+        with self.assertRaisesRegex(ValueError,'its own image'):
+            self.multi_view_request({'front':front,'left':front})
+        with self.assertRaisesRegex(ValueError,'front/left/right/back'):
+            self.multi_view_request({'front':front,'top':other})
+        with self.assertRaisesRegex(ValueError,'front slot'):
+            self.s.prepare_guide(front,'Tripo Studio',{'mode':'Smart Mesh','model':'P2.0','displayed_generation_credits':100,
+                'views':{'front':other,'left':front}},{'scope':'fixture only','source':'unit test'},'mv')
+        self.multi_view_policy(minimum=3)
+        with self.assertRaisesRegex(ValueError,'at least 3'):
+            self.multi_view_request({'front':front,'left':other})
+        with self.assertRaisesRegex(ValueError,'mesh generation'):
+            self.s.request_reference(self.ob,[str(self.image)],'Close the eye','image','fixture transport',{'views':{'front':front}},
+                                     {'scope':'fixture','source':'unit test'},'img-views')
+        self.assertFalse(any(j['intent']['kind']=='mesh' for j in self.s.ledger.list()))
+
+    def test_multi_view_mesh_binds_every_slot_and_the_live_panel(self):
+        views={slot:self.reviewed_view(slot,color) for slot,color in
+               (('front','red'),('left','green'),('right','blue'),('back','white'))}
+        self.multi_view_policy()
+        job=self.multi_view_request(views,output_settings={'topology':'Quad','polycount':25000})
+        self.assertEqual(sorted(job['transport']['view_slots']),sorted(views))
+        self.assertEqual(len(set(job['transport']['input_paths'])),4)
+        bound=self.s.inspect_workflow(job['job'])['intent']['view_inputs']
+        slots={slot:entry['source']['sha256'] for slot,entry in bound.items()}
+        self.assertEqual(len(set(slots.values())),4)
+        good={'mode':'Smart Mesh','model':'P2.0','displayed_generation_credits':100,'observed_balance':1000,
+              'observed_at':datetime.now(timezone.utc).isoformat(),'source':'observed Tripo multi-view panel',
+              'slot_sha256':slots,'topology':'Quad','polycount':25000}
+        swapped=dict(slots,left=slots['right'],right=slots['left'])
+        for preflight in [{k:v for k,v in good.items() if k!='slot_sha256'},dict(good,slot_sha256=swapped),
+                          dict(good,slot_sha256={k:v for k,v in slots.items() if k!='back'}),
+                          dict(good,topology='Triangle'),dict(good,polycount=5000),dict(good,polycount='25000')]:
+            with self.subTest(preflight=preflight),self.assertRaises(ValueError):
+                self.s.claim_job(job['job'],job['revision'],preflight)
+            self.assertEqual(self.s.inspect_workflow(job['job'])['revision'],job['revision'])
+        claimed=self.s.claim_job(job['job'],job['revision'],good)
+        self.assertEqual(claimed['status'],'dispatching');self.assertEqual(claimed['data']['provider_preflight']['slot_sha256'],slots)
+
+    def test_a_view_rejected_after_preparation_blocks_the_claim(self):
+        views={slot:self.reviewed_view(slot,color) for slot,color in (('front','red'),('left','green'))}
+        self.multi_view_policy();job=self.multi_view_request(views)
+        left=self.s.store.get(views['left'],'reference_review')
+        self.s.review_reference(left['job'],0,'rejected','eye',10,'Wrong pose on closer review','n/a','n/a','n/a',['pose'])
+        good={'mode':'Smart Mesh','model':'P2.0','displayed_generation_credits':100,'observed_balance':1000,
+              'observed_at':datetime.now(timezone.utc).isoformat(),'source':'observed Tripo multi-view panel',
+              'slot_sha256':{s:e['source']['sha256'] for s,e in self.s.inspect_workflow(job['job'])['intent']['view_inputs'].items()}}
+        with self.assertRaises(ValueError):
+            self.s.claim_job(job['job'],job['revision'],good)
+        self.assertEqual(self.s.inspect_workflow(job['job'])['status'],'prepared')
+
+    def test_single_image_job_prepared_before_the_rule_cannot_be_claimed_after_it(self):
+        review=self.reviewed();self.tripo_policy();job=self.tripo_request(review)
+        self.multi_view_policy()
+        good={'mode':'Smart Mesh','model':'P2.0','displayed_generation_credits':65,'observed_balance':100,
+              'observed_at':datetime.now(timezone.utc).isoformat(),'source':'observed Tripo generation panel'}
+        with self.assertRaisesRegex(ValueError,'never generated from a single image'):
+            self.s.claim_job(job['job'],job['revision'],good)
+        cancelled=self.s.reconcile_job(job['job'],job['revision'],'cancelled',receipt={'reason':'single image; never dispatched'})
+        self.assertEqual(cancelled['status'],'cancelled')
+
     def test_job_idempotency_and_uncertain_dispatch_never_duplicate(self):
         first=self.request();same=self.request();self.assertTrue(same['reused']);self.assertEqual(first['job'],same['job'])
         claimed=self.s.claim_job(first['job'],first['revision'])

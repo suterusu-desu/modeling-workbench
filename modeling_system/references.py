@@ -119,7 +119,48 @@ class References:
                              'Do not reuse HD v3.1 defaults; read MESH-GENERATION.json.')
         return required
 
-    def _provider_preflight(self, required, settings, preflight):
+    VIEW_SLOTS = ('front', 'left', 'right', 'back')
+
+    def _multi_view_rule(self):
+        """The workspace's multi-view requirement for Tripo meshes, or None when the policy has none."""
+        if not self.generation_policy or not Path(self.generation_policy).exists():
+            return None
+        rule = json.loads(Path(self.generation_policy).read_text(encoding='utf-8-sig')).get('tripo', {}).get('multi_view_requirement')
+        return rule if isinstance(rule, dict) and rule.get('required') else None
+
+    def _view_inputs(self, views, reviewed_source):
+        """Bind each multi-view slot to the exact bytes of a currently usable image review."""
+        if (not isinstance(views, dict) or not views or set(views) - set(self.VIEW_SLOTS)
+                or not all(isinstance(v, str) and v for v in views.values())):
+            raise ValueError('Multi-view inputs map front/left/right/back slots to usable image review IDs')
+        if views.get('front') != reviewed_source:
+            raise ValueError('The front slot must be the reviewed source of the mesh request')
+        bound = {}
+        for slot in self.VIEW_SLOTS:
+            if slot not in views:
+                continue
+            review = self.require_usable_review(views[slot])
+            source = self.ledger.read(review['job'])['data']['outputs'][review['output_index']]
+            if review['source_sha256'] != source['sha256']:
+                raise ValueError('Reviewed ' + slot + ' view changed')
+            self.store.resolve_blob(source)
+            bound[slot] = {'review': views[slot], 'source': source}
+        hashes = [entry['source']['sha256'] for entry in bound.values()]
+        if len(set(hashes)) != len(hashes):
+            raise ValueError('Each view slot needs its own image; one image in several slots is still a single-view mesh')
+        return bound
+
+    def _require_views(self, kind, required, view_inputs):
+        rule = self._multi_view_rule() if kind == 'mesh' and required is not None else None
+        if rule:
+            minimum = rule.get('minimum_distinct_views', 2)
+            if type(minimum) is not int or minimum < 2:
+                raise ValueError('multi_view_requirement.minimum_distinct_views must be an integer of at least 2')
+            if not view_inputs or len(view_inputs) < minimum:
+                raise ValueError('This workspace requires at least %d distinct reviewed views in multi-view mode '
+                                 '(settings.views); a mesh is never generated from a single image' % minimum)
+
+    def _provider_preflight(self, required, settings, preflight, view_inputs=None):
         if required is None:
             return
         if not isinstance(preflight, dict):
@@ -127,6 +168,12 @@ class References:
         if (self._route(preflight.get('mode'), preflight.get('model')) != self._route(required['mode'], required['model'])
                 or not isinstance(preflight.get('source'), str) or not preflight['source'].strip()):
             raise ValueError('Live Tripo panel must confirm ' + required['mode'] + ' / ' + required['model'] + ' before dispatch')
+        if view_inputs and preflight.get('slot_sha256') != {slot: entry['source']['sha256'] for slot, entry in view_inputs.items()}:
+            raise ValueError('Live Tripo panel must show exactly the prepared image in every view slot (slot_sha256)')
+        outputs = settings.get('output_settings')
+        if outputs is not None and (not isinstance(outputs, dict) or any(
+                preflight.get(k) != v or type(preflight.get(k)) is not type(v) for k, v in outputs.items())):
+            raise ValueError('Live Tripo panel output settings differ from the prepared request')
         comparison = required.get('comparison_authorization')
         if comparison and preflight.get('source_sha256') != comparison['policy']['source_sha256']:
             raise ValueError('Live Tripo panel must identify the authorized comparison source_sha256')
@@ -207,9 +254,13 @@ class References:
         if not authorization.get('scope') or not authorization.get('source'):
             raise ValueError('Record existing user authorization scope and its source')
         settings = dict(settings)
+        if 'views' in settings and kind != 'mesh':
+            raise ValueError('View slots belong to mesh generation')
+        view_inputs = self._view_inputs(settings['views'], reviewed_source) if 'views' in settings else None
         generation_input = source or ob['image']
         input_path = str(self.store.resolve_blob(generation_input))
         required = self._mesh_policy(kind, provider, settings, generation_input, reviewed_source)
+        self._require_views(kind, required, view_inputs)
         comparison = (required or {}).get('comparison_authorization')
         reconstruction=(required or {}).get('reconstruction_authorization')
         if comparison and idempotency_key != comparison['policy']['idempotency_key']:
@@ -233,6 +284,8 @@ class References:
             intent['comparison_authorization'] = comparison
         if reconstruction:
             intent.update(intent_class='local_guide_reconstruction',reconstruction_authorization=reconstruction)
+        if view_inputs:
+            intent['view_inputs'] = view_inputs
         # Older prepared jobs predate explicit roles. Preserve their immutable
         # intent during an exact retry instead of manufacturing another job.
         handle=digest(canonical(['reference_job',idempotency_key]))
@@ -245,6 +298,9 @@ class References:
         inputs = [input_path]
         if kind == 'image':
             inputs += [str(self.store.resolve_blob(x)) for x in identities]
+        slots = {slot: str(self.store.resolve_blob(entry['source'])) for slot, entry in intent.get('view_inputs', {}).items()}
+        if slots:
+            inputs = list(slots.values())
         prompt = ('Depict the character defined by the supplied authoritative identity artwork at the viewing conditions of the first image. '
                   'Use that mesh preview for camera perspective, crop, zoom, spatial framing and pose; its faulty anatomy is not identity authority. '
                   'Character references govern feature design, proportions, likeness and intended style. '
@@ -253,6 +309,7 @@ class References:
             prompt += ' Fixed camera and framing. Silent video, no speech, music or audio.'
         return dict(job=job['handle'], revision=job['revision'], status=job['status'], reused=job['reused'], transport={'provider':provider, 'kind':kind, 'input_paths':inputs, 'prompt':prompt,
                                        'settings':settings, 'reference_roles':roles, 'submission':'not submitted by preparation',
+                                       **({'view_slots':slots} if slots else {}),
                                        'next':'claim_job before dispatch; reconcile the same job after an uncertain response'},
                     limits='Generated view, likeness and motion require review; source depth is not inferred from pixels.')
 
@@ -280,7 +337,15 @@ class References:
         if reconstruction and (intent.get('intent_class')!='local_guide_reconstruction'
                 or handle!=digest(canonical(['reference_job',reconstruction['policy']['idempotency_key']]))):
             raise ValueError('Local reconstruction job identity or intent class differs from its authorization')
-        self._provider_preflight(required, intent['settings'], provider_preflight)
+        views = intent.get('view_inputs')
+        for slot, entry in (views or {}).items():
+            review = self.require_usable_review(entry['review'])
+            source = self.ledger.read(review['job'])['data']['outputs'][review['output_index']]
+            if source != entry['source'] or review['source_sha256'] != source['sha256']:
+                raise ValueError('Prepared ' + slot + ' view no longer matches its reviewed source')
+            self.store.resolve_blob(source)
+        self._require_views(intent['kind'], required, views)
+        self._provider_preflight(required, intent['settings'], provider_preflight, views)
         data = {'submission_intent':True}
         if provider_preflight is not None:
             data['provider_preflight'] = provider_preflight

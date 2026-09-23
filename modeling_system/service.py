@@ -626,7 +626,13 @@ class ModelingService:
         return dict(self.references.claim(job,expected_revision,provider_preflight),decision_context=decision['context_record'])
 
     def prepare_guide(self, review: str, provider: str, settings: dict, authorization: dict, idempotency_key: str) -> dict:
-        """Prepare one mesh-generation job from a reviewed exact-view image; no multi-pose image bundle or automatic spending."""
+        """Prepare one mesh-generation job from a reviewed exact-view image; no multi-pose image bundle or automatic spending.
+
+        settings['views'] = {'front': review, 'left': ..., 'right': ..., 'back': ...} binds the separate reviewed
+        views of the SAME pose to the provider's multi-view slots (front must be `review`); a workspace policy with
+        tripo.multi_view_requirement refuses single-image meshes, and claim_job then requires the live panel's
+        slot_sha256 for every slot.
+        """
         reviewed=self.store.get(review,'reference_review');source=self.ledger.read(reviewed['job'])
         decision=self.capture_operation_context('generation',{'provider':provider,'kind':'mesh',
             **{k:settings[k] for k in ('use_case','intent_class','comparison_id','reconstruction_id') if k in settings}})
