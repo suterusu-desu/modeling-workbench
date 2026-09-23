@@ -69,6 +69,13 @@ procedure context. Current findings, visual feedback and relevant retained
 experience enter the next owner observation. Historical evidence never overwrites
 current authority. `WorkLimits` bounds local catalogs and context, not spending.
 
+Compare baseline and candidate at matched views, poses and states. `review_sheets.compose_review_sheet(rows,
+columns, output)` arranges the actual renders in a labeled grid, pins each source image's hash for the review
+evidence and reports missing images or differing image sizes (an unmatched comparison) instead of hiding them;
+`review_sheets.rows_from_frames(frames, views=..., poses=..., states=...)` builds the rows from recorded frames.
+It arranges images only: look at every one, and keep the overlap view (character solid, guide wire) as the
+guide comparison.
+
 Read the exact review basis and inspect linked images before submitting:
 
 ```python
