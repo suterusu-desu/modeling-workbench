@@ -52,6 +52,21 @@ class DecisionTests(unittest.TestCase):
             self.assertIn('rejected',result['matches'][0]['excerpt'])
             self.assertEqual(applicability({'topology':'old'},{'topology':'new'})['status'],'inapplicable')
 
+    def test_relevance_order_keeps_a_lower_priority_rejection_within_the_limit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/'state.md').write_text('\n\n'.join(f'Current scope note {i}: closed pose fit.' for i in range(6)))
+            (root/'history.md').write_text('Earlier: a local closed fit added a peripheral ring around the corner and was rejected.')
+            sources=[{'path':'state.md','role':'state','priority':0},{'path':'history.md','role':'history','priority':1}]
+            query='local closed fit peripheral ring corner'
+            default=retrieve(root,Store(root/'store'),query,2,sources=sources)
+            ranked=retrieve(root,Store(root/'store'),query,2,sources=sources,order='relevance')
+            self.assertFalse(any('peripheral ring' in r['excerpt'] for r in default['authority']))
+            self.assertIn('peripheral ring',ranked['authority'][0]['excerpt'])
+            self.assertEqual(default['coverage']['eligible_authority'],ranked['coverage']['eligible_authority'])
+            with self.assertRaises(ValueError):
+                retrieve(root,Store(root/'store'),query,2,sources=sources,order='newest')
+
     def test_preference_is_separate_from_authorization(self):
         with tempfile.TemporaryDirectory() as d:
             from .init_workspace import initialize
@@ -175,6 +190,18 @@ class EpisodeTests(unittest.TestCase):
         r=self.s.revise_episode(e['episode'],r['revision'],{'remove_links':[link_id(new)]})
         self.assertEqual(self.s.decision_workspace(e['episode'],detail='links')['context']['links'],original)
         with self.assertRaises(PreconditionRefusal):self.s.revise_episode(e['episode'],r['revision'],{'remove_links':['unknown']})
+
+    def test_structured_fields_nested_in_context_are_refused_not_stored(self):
+        e=self.episode()
+        hypothesis={'id':'h9','explanation':'Crowded material buckles','prediction':'Relaxation softens it',
+                    'discriminating_observation':'Matched renders and principal stretch'}
+        with self.assertRaisesRegex(ValueError,'top level'):
+            self.s.revise_episode(e['episode'],e['revision'],{'context':{'hypotheses':[hypothesis]}})
+        note=self.s.revise_episode(e['episode'],e['revision'],{'context':{'note':'free-form remark'}})
+        placed=self.s.revise_episode(e['episode'],note['revision'],{'hypotheses':[hypothesis]})
+        context=self.s.decision_workspace(e['episode'])['context']
+        self.assertEqual([h['id'] for h in context['hypotheses']],['h9'])
+        self.assertEqual(placed['status'],'active')
 
     def test_concurrent_additions_cannot_overwrite_the_winning_revision(self):
         import threading

@@ -37,6 +37,17 @@ actual candidate and protected baseline measurements. Qualify metric direction:
 signed distance alone is not penetration. Missing cells remain unknown; finite
 pose samples do not certify unsampled motion or appearance.
 
+A guide-residual cell measures a guide-defined outcome only where samples
+correspond to that guide. Select its samples on the baseline (for example within
+the fit's own gap tolerance) inside the adapter, not from the candidate, and
+protect regions the guide does not represent with their own outcome. A tail
+statistic over uncorresponding samples can fail or pass for reasons unrelated to
+the guide. State the bound's evidence: a guide's documented fit or registration
+accuracy is a defensible allowed increase; zero is not a qualified tolerance for a
+noisy residual. When a cell proves ill-posed, record the failed assessment, revise
+the requirements before the next trial and run a new candidate; do not re-score
+the old one.
+
 An adapter supplies pinned `sources` and three callbacks:
 
 - `coverage(item, document)` returns affected outcome IDs and bound current

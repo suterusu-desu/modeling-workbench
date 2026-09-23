@@ -74,6 +74,11 @@ def validate_context(service, context):
     if not isinstance(context,dict): raise ValueError('Episode context must be an object')
     allowed={'stage','feature','mechanism','requirements','hypotheses','uncertainties','judgments','links','semantic_graph','next_question','resource_bound','context'}
     if set(context)-allowed: raise ValueError('Unknown episode context fields: '+str(sorted(set(context)-allowed)))
+    nested=context.get('context')
+    if isinstance(nested,dict) and set(nested)&(allowed-{'context'}):
+        # A free-form note is allowed; structured fields nested in it would be stored verbatim and never validated.
+        raise ValueError('Put structured episode fields at the top level of the context or patch, not inside "context": '
+                         +str(sorted(set(nested)&(allowed-{'context'}))))
     value=dict(context)
     for req in value.get('requirements',[]):
         if req.get('category') not in CATEGORIES or not all(req.get(k) for k in ('id','text','source','scope')):

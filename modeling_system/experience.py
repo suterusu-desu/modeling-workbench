@@ -72,9 +72,11 @@ def applicability(required, context):
                 missing=missing, conflicts=conflicts)
 
 
-def retrieve(workspace, store, query, limit=6, context=None, sources=None, row_filter=None):
+def retrieve(workspace, store, query, limit=6, context=None, sources=None, row_filter=None, order='priority'):
     if not query.strip() or not 1 <= limit <= 254:
         raise ValueError('Query and a bounded candidate limit from one to 254 required')
+    if order not in ('priority', 'relevance'):
+        raise ValueError("Authority order must be 'priority' or 'relevance'")
     context = context or {}
     if sources is None:
         from .bindings import load_binding
@@ -108,10 +110,15 @@ def retrieve(workspace, store, query, limit=6, context=None, sources=None, row_f
                 source=str(store.root/'records'/(key+'.json')), score=hit, priority=10,
                 role=value['origin'], public=public, evidence_count=len(value.get('evidence', [])),
                 excerpt=value, applicability=fit))
-    order = lambda r: (r.get('priority',10), -r['score'], r.get('source',''),r.get('line_start',0))
-    authority.sort(key=order)
+    ranking = lambda r: (r.get('priority',10), -r['score'], r.get('source',''),r.get('line_start',0))
+    if order == 'relevance':
+        # Relevance first, priority as the tie-breaker: a strongly matching passage in a lower-priority
+        # bound source (for example a recorded rejected method) is not cut by the limit.
+        authority.sort(key=lambda r: (-r['score'], r.get('priority',10), r.get('source',''), r.get('line_start',0)))
+    else:
+        authority.sort(key=ranking)
     experience.sort(key=lambda r: (r.get('applicability',{}).get('status') == 'inapplicable'
-                                  if isinstance(r.get('applicability'),dict) else False, -r['score'], order(r)))
+                                  if isinstance(r.get('applicability'),dict) else False, -r['score'], ranking(r)))
     counts = {'authority_matches': len(authority), 'experience_matches': len(experience)}
     # Filter BEFORE limiting: private/unprojectable records must not starve a
     # lower-ranked usable passage. Ordinary source-exact retrieval is unchanged.
@@ -122,4 +129,5 @@ def retrieve(workspace, store, query, limit=6, context=None, sources=None, row_f
                 coverage=dict(**counts, eligible_authority=len(authority), eligible_experience=len(experience),
                               returned_authority=min(limit,len(authority)),returned_experience=min(limit,len(experience)),
                               missing_sources=missing,expand='Increase limit or read full source_asset / read_record; absence is not proof of no rule'),
-                method='authority before similarity; actual matching passages; explicit applicability')
+                method=('authority before similarity' if order == 'priority' else 'authority ranked by matched terms, priority as tie-breaker')
+                       + '; actual matching passages; explicit applicability')

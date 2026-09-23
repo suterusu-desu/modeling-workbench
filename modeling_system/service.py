@@ -842,9 +842,12 @@ class ModelingService:
         """Retain separate character and method dispositions with evidence and applicability; preserve earlier records."""
         return self.wb.record_outcome(question,character,method,evidence,applicability)
 
-    def retrieve_experience(self, query: str, limit: int = 6, context: dict | None = None) -> dict:
-        """Retrieve concise relevant decisions, successes, failures and limits with exact source links."""
-        return retrieve(self.workspace,self.store,query,limit,context)
+    def retrieve_experience(self, query: str, limit: int = 6, context: dict | None = None, order: str = 'priority') -> dict:
+        """Retrieve concise relevant decisions, successes, failures and limits with exact source links.
+
+        order='priority' (default) lists higher-priority authority first; order='relevance' ranks authority
+        passages by matched terms, so a relevant passage in a lower-priority bound source is not cut by the limit."""
+        return retrieve(self.workspace,self.store,query,limit,context,order=order)
 
     def read_record(self, record: str, path: list[str | int] | None = None, offset: int = 0,
                     limit: int = 20, max_chars: int = 8000) -> dict:

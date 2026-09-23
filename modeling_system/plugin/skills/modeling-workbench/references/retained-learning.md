@@ -64,6 +64,14 @@ context, exactly the deliberately public projection used in session feedback.
 evidence and private provenance. Read `public` to decide relevance; expand the
 record only when its evidence matters.
 
+Authority passages are ordered by source priority, so a highly relevant passage
+in a lower-priority bound source (for example a project record of a rejected
+method) can fall past the limit. Before a native trial, query with the task's
+stated problem and mechanism using `order="relevance"`, which ranks authority by
+matched terms with priority as the tie-breaker, and read the top passages and
+matching lessons. A read-only copy of another owner's authority can be bound as a
+lower-priority source for exactly this recall.
+
 The default query uses the current public situation and offered work descriptions.
 An explicit `RetainedContext` can add source passages or custom queries. Dedicated
 review/lesson records remain available even if its old projector accepts only a
