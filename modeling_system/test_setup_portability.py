@@ -29,8 +29,9 @@ class SetupPortabilityTests(unittest.TestCase):
         self.assertFalse((moved/'.agents/skills/typesafe-ai').exists())
         self.assertTrue((moved/'.agents/skills/modeling-workbench/references/cooperation.md').is_file())
         binding = (moved/'modeling-workspace.json').read_text(encoding='utf-8')
-        for locator in (str(original), json.dumps(str(original))[1:-1], original.as_posix()):
-            self.assertNotIn(locator, binding)
+        for path in (original, original.resolve()):
+            for locator in (str(path), json.dumps(str(path))[1:-1], path.as_posix()):
+                self.assertNotIn(locator, binding)
         with patch.dict(os.environ, {}, clear=True):
             report = inspect_setup(moved)
         self.assertTrue(report['core_ready'], report)

@@ -49,7 +49,8 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(len(captured), 1)
         payload = json.dumps(captured)
         self.assertIn('visible ledge', payload)
-        for private in (str(self.base.base.image), review['operation_handle'], review['operation_fact']):
+        for private in (str(self.base.base.image), str(Path(self.base.base.image).resolve()),
+                        review['operation_handle'], review['operation_fact']):
             self.assertNotIn(json.dumps(private)[1:-1], payload)   # JSON-escaped form, meaningful on Windows too
         self.assertTrue(captured[0]['passages'])
 
@@ -63,9 +64,9 @@ class LearningTests(unittest.TestCase):
         self.assertIn('visible ledge', match['public']['review']['reason'])
         self.assertEqual(match['public']['condition_comparison']['status'], 'conditional')
         self.assertEqual(match['evidence_count'], len(match['excerpt']['evidence']))
-        # The public projection carries no private locators; the full record still does.
-        # Compare JSON-escaped text: a raw Windows path never occurs verbatim in JSON output.
-        locator = json.dumps(str(self.base.base.image))[1:-1]
+        # The public projection carries no private locators; the full record still does. Use the
+        # stored locator (the store resolves paths, e.g. Windows short names) in JSON-escaped form.
+        locator = json.dumps(match['excerpt']['evidence'][0]['path'])[1:-1]
         self.assertIn(locator, json.dumps(match['excerpt']))
         self.assertNotIn(locator, json.dumps(match['public']))
 

@@ -133,7 +133,8 @@ class MethodTests(unittest.TestCase):
         session.select = lambda state, actions, plan: 'section'
         session.run(max_steps=1)
         self.assertTrue(before['observations']['experience']['passages'])
-        self.assertNotIn(json.dumps(str(path))[1:-1], json.dumps(before['observations']['experience']))
+        for locator in (str(path), str(Path(path).resolve())):
+            self.assertNotIn(json.dumps(locator)[1:-1], json.dumps(before['observations']['experience']))
         path.write_text('A section fit changed; use the recorded world coordinate frame.', encoding='utf-8')
         after = session.observe()
         self.assertNotEqual(before['values']['operating_experience'], after['values']['operating_experience'])
