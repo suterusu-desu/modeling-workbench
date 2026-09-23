@@ -232,6 +232,51 @@ class OperatingTests(unittest.TestCase):
         self.assertEqual(self.session().run(max_steps=2)['status'], 'completed')
         self.assertEqual(self.ran, ['work'])
 
+    def test_raised_capability_settles_only_from_evidence_backed_reconciliation(self):
+        effect = self.root / 'inner-effect.txt'
+        def raising(item, context):
+            if item['id'] == 'work' and item['revision'] == '1':
+                self.ran.append(item['id'])
+                effect.write_text('inner effect completed before the wrapper failed')
+                raise KeyError('wrapper error after the inner effect')
+            return self.execute(item, context)
+        self.items = [self.item('work'), self.item('use', requires={'work': ['completed']})]
+        session = self.session(execute=raising)
+        self.assertEqual(session.run(max_steps=2)['status'], 'needs_reconciliation')
+        entry = session.record['results']['work']; handle = entry['operation_handle']
+        with self.assertRaisesRegex(ValueError, 'Uncertain queue effect'):
+            session.observe()
+        with self.assertRaisesRegex(ValueError, 'handle differs'):
+            session.settle_reconciled('work', expected_handle='0' * 32)
+        with self.assertRaisesRegex(ValueError, 'Reconcile the original operation'):
+            session.settle_reconciled('work', expected_handle=handle)
+        self.service.reconcile_operation(handle, observed={'effect_status': 'resolved_failed',
+            'basis': 'Inner effect inspected; the wrapper raised before any qualified return'}, evidence_paths=[str(effect)])
+        settled = session.settle_reconciled('work', expected_handle=handle)
+        self.assertEqual(settled['status'], 'failed'); self.assertFalse(settled['effects_replayed'])
+        self.assertEqual(settled['reconciliation']['effect_status'], 'resolved_failed')
+        self.assertEqual(session.record['results']['work']['status'], 'failed')
+        with self.assertRaisesRegex(ValueError, 'not awaiting reconciliation'):
+            session.settle_reconciled('work', expected_handle=handle)
+        # The failed prerequisite blocks its dependent; nothing is replayed.
+        self.assertEqual(self.session(execute=raising).run(max_steps=3)['status'], 'needs_review')
+        self.assertEqual(self.ran, ['work'])
+        # A corrected revision is new work and runs normally.
+        self.items[0]['revision'] = '2'
+        self.assertEqual(self.session(execute=raising).run(max_steps=4)['status'], 'completed')
+        self.assertEqual(self.ran, ['work', 'work', 'use'])
+
+    def test_confirmed_return_is_not_settled_as_failure(self):
+        self.items = [self.item('work')]
+        self.reports['work'] = {'findings': [{'kind': 'invalid'}]}
+        session = self.session(); session.run(max_steps=2)
+        entry = session.record['results']['work']; handle = entry['operation_handle']
+        source = self.service.store.root / 'calls' / handle / 'capability-result.json'
+        self.service.reconcile_operation(handle, observed={'effect_status': 'confirmed_returned',
+            'basis': 'Exact capability return retained'}, evidence_paths=[str(source)])
+        with self.assertRaisesRegex(ValueError, 'recover\\(\\) or repair_report'):
+            session.settle_reconciled('work', expected_handle=handle)
+
     def test_feedback_submission_never_overwrites_running_queue(self):
         self.items = [self.item('done')]
         session = self.session(); session.run(max_steps=2)

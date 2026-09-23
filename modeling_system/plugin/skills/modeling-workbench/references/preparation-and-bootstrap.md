@@ -132,6 +132,14 @@ executing any, avoiding stale bytecode or accidental historical construction.
 Restore required drivers and inventory callbacks, relocate mutable diagnostics
 into the isolated output, and preserve required support files.
 
+Module names must be fresh in the process. A long-lived visible session that
+loads another checkpoint must bootstrap again in the same interpreter: pass
+`replace_pinned=True` to reuse names whose current modules this helper pinned
+earlier. Any other existing module still refuses, so a canonical or third-party
+module is never shadowed, and a batch that fails restores every name it touched.
+Bind the context the setup needs (for example a window after a file load inside
+a timer callback) explicitly rather than relying on the caller's context.
+
 Register `NativeJob` directly as the handler to use its read-only `preflight`
 automatically during task observation, before inference or operation reservation.
 It requires the runner executable, source checkpoint, script, output root, exact

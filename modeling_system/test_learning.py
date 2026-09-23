@@ -50,8 +50,24 @@ class LearningTests(unittest.TestCase):
         payload = json.dumps(captured)
         self.assertIn('visible ledge', payload)
         for private in (str(self.base.base.image), review['operation_handle'], review['operation_fact']):
-            self.assertNotIn(private, payload)
+            self.assertNotIn(json.dumps(private)[1:-1], payload)   # JSON-escaped form, meaningful on Windows too
         self.assertTrue(captured[0]['passages'])
+
+    def test_retrieval_leads_with_the_public_judgment_and_lesson(self):
+        _, review = self.reviewed(lesson=self.lesson())
+        found = self.service.retrieve_experience('shared material trajectory timing opposing surface', limit=3)
+        match = next(row for row in found['matches'] if row.get('record_kind') == 'modeling_experience')
+        keys = list(match)
+        self.assertLess(keys.index('public'), keys.index('excerpt'))
+        self.assertEqual(match['public']['lesson']['mechanism'], 'Shared material trajectory')
+        self.assertIn('visible ledge', match['public']['review']['reason'])
+        self.assertEqual(match['public']['condition_comparison']['status'], 'conditional')
+        self.assertEqual(match['evidence_count'], len(match['excerpt']['evidence']))
+        # The public projection carries no private locators; the full record still does.
+        # Compare JSON-escaped text: a raw Windows path never occurs verbatim in JSON output.
+        locator = json.dumps(str(self.base.base.image))[1:-1]
+        self.assertIn(locator, json.dumps(match['excerpt']))
+        self.assertNotIn(locator, json.dumps(match['public']))
 
     def test_conditional_lesson_keeps_failure_and_changed_prerequisite(self):
         record_lesson(self.service, lesson=self.lesson(), evidence=self.evidence)

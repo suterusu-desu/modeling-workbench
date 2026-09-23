@@ -50,9 +50,13 @@ priority or a local selector. No missing condition is silently inferred true.
 
 Queues journal before effects and save returns before report validation. Recovery
 restores an exact completed result or reconciles uncertainty against original
-receipts, never retries blindly. Historical selections, provider accounting and
-checkpoints stay readable without the retired transport implementation. Fresh
-direct sessions require current explicitly bound catalogs.
+receipts, never retries blindly. When a capability raised after its inner effect,
+the evidence-backed reconciliation of the original operation settles the task as
+failed so the same session can continue with a corrected revision. Precondition
+guards run before the first write, so a refusal leaves no partial record.
+Historical selections, provider accounting and checkpoints stay readable without
+the retired transport implementation. Fresh direct sessions require current
+explicitly bound catalogs.
 
 ## Accretive methods and portability
 

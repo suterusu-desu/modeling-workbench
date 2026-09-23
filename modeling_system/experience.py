@@ -96,14 +96,18 @@ def retrieve(workspace, store, query, limit=6, context=None, sources=None, row_f
             experience.append(dict(record=key, source=str(store.root/'records'/(key+'.json')),
                                    score=hit, priority=20, role='retained experience', excerpt=value,
                                    applicability=applicability(value.get('conditions',{}),context)))
-    from .learning import experience_rows
+    from .learning import experience_rows, public_experience
     for key, value in experience_rows(store):
         hit = len(terms(query) & terms(json.dumps(value['public'])))
         if hit:
+            fit = applicability(value['public'].get('lesson', {}).get('conditions', {}), context)
+            # Lead with the deliberately public judgment and lesson; the complete record
+            # (pinned evidence and provenance) follows unchanged in excerpt.
+            public = public_experience({'record_kind': 'modeling_experience', 'excerpt': value, 'applicability': fit})
             experience.append(dict(record=key, record_kind='modeling_experience',
                 source=str(store.root/'records'/(key+'.json')), score=hit, priority=10,
-                role=value['origin'], excerpt=value,
-                applicability=applicability(value['public'].get('lesson', {}).get('conditions', {}), context)))
+                role=value['origin'], public=public, evidence_count=len(value.get('evidence', [])),
+                excerpt=value, applicability=fit))
     order = lambda r: (r.get('priority',10), -r['score'], r.get('source',''),r.get('line_start',0))
     authority.sort(key=order)
     experience.sort(key=lambda r: (r.get('applicability',{}).get('status') == 'inapplicable'

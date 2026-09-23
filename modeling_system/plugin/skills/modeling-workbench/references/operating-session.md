@@ -97,6 +97,17 @@ interruption. `repair_report(task, report)` repairs evidence presentation withou
 repeating a known effect. Neither route invents a successful native outcome.
 Uncertain effects remain stopped until reconciled from their original receipts.
 
+A capability can also raise after its inner effect, for example a wrapper error
+after a completed native job, leaving no qualified return. Inspect the actual
+effect, reconcile the original operation with
+`service.reconcile_operation(handle, observed={"effect_status": "resolved_failed"
+or "confirmed_not_applied", "basis": ...}, evidence_paths=[...])`, then call
+`session.settle_reconciled(task, expected_handle=handle)`. The task is recorded
+as failed with a link to that reconciliation; nothing is dispatched and no
+success is reported. Dependents see a failed prerequisite, and a corrected task
+revision runs as new work in the same session. A `confirmed_returned`
+reconciliation still uses `recover` or `repair_report`.
+
 `recover_selection(expected_selection=..., observed=..., evidence=...)` can clear
 an exact old pending selection only with explicit no-dispatch evidence and no
 uncertain native effects. It does not request or release a model response.

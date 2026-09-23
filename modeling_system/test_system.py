@@ -155,6 +155,18 @@ class StateTests(unittest.TestCase):
         self.assertEqual(outcome['user_appearance_acceptance'],'not implied')
         self.assertEqual(self.wb.inspect_situation()['outcomes'],[result['outcome']])
         self.assertEqual(self.wb.inspect_situation(q)['outcomes'],[])
+        # The first outcome revised the question: its entry identity is now stale and is
+        # refused before anything is written, leaving no orphan outcome record.
+        from .ledger import PreconditionRefusal
+        before=sorted(key for key,_ in self.wb.store.records(('outcome',)))
+        with self.assertRaises(PreconditionRefusal) as refused:
+            self.wb.record_outcome(q,{'status':'unresolved'},{'status':'unresolved'},[evidence],'Second look')
+        self.assertEqual(refused.exception.modeling_effect_status,'refused before mutation dispatch')
+        self.assertEqual(refused.exception.modeling_details['current'],result['question'])
+        self.assertEqual(sorted(key for key,_ in self.wb.store.records(('outcome',))),before)
+        self.assertEqual(self.wb.store.current(),result['question'])
+        second=self.wb.record_outcome(self.wb.inspect_situation()['question'],{'status':'unresolved'},{'status':'unresolved'},[evidence],'Second look')
+        self.assertEqual(self.wb.inspect_situation()['outcomes'],[result['outcome'],second['outcome']])
 
 
 if __name__=='__main__':unittest.main()

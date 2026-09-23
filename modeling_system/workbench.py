@@ -151,6 +151,14 @@ class Workbench:
         if not evidence or not applicability.strip():raise ValueError('Evidence and applicability are required')
         allowed={'supported','rejected','unresolved'}
         if character.get('status') not in allowed or method.get('status') not in allowed:raise ValueError('Explicit supported/rejected/unresolved dispositions required')
+        self.store.get(question,'question')
+        current=self.store.current()
+        if current!=question:
+            # Each outcome revises the question, so an earlier revision is stale. Refuse before
+            # writing anything: an outcome record written first would be left without a question.
+            from .ledger import PreconditionRefusal
+            raise PreconditionRefusal('Outcome must name the current question revision; read inspect_situation() and retry with that identity',
+                                      'record_outcome.current_question',{'supplied':question,'current':current})
         payload={'question':question,'character':character,'method':method,'evidence':list(evidence),'applicability':applicability,
                  'user_appearance_acceptance':'not implied','human_ledger':'The bound workspace lesson and decision records remain authoritative'}
         key=self.store.put('outcome',payload)

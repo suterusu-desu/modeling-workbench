@@ -85,5 +85,27 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(modules[marker].VALUE, 42)
         with self.assertRaisesRegex(ValueError, 'fresh explicit'): load_pinned_modules({marker: ref})
 
+    def test_long_lived_session_replaces_only_its_own_pinned_modules_atomically(self):
+        first, second, broken = self.root/'first.py', self.root/'second.py', self.root/'broken.py'
+        first.write_text('VALUE = 1\n'); second.write_text('VALUE = 2\n'); broken.write_text('raise RuntimeError("bad module")\n')
+        ref = lambda p: {'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
+        name, other, plain = 'synthetic_pinned_session', 'synthetic_pinned_session_other', 'synthetic_unpinned_module'
+        for key in (name, other, plain): self.addCleanup(lambda key=key: sys.modules.pop(key, None))
+        original = load_pinned_modules({name: ref(first)})[name]
+        # A second bootstrap in the same process (after a file load) replaces its own pinned module on request.
+        with self.assertRaisesRegex(ValueError, 'fresh explicit'): load_pinned_modules({name: ref(second)})
+        replaced = load_pinned_modules({name: ref(second)}, replace_pinned=True)[name]
+        self.assertEqual(replaced.VALUE, 2); self.assertIs(sys.modules[name], replaced)
+        self.assertEqual(getattr(replaced, '__modeling_pinned_source__')['sha256'], ref(second)['sha256'])
+        # An ordinary module is never shadowed, even with the opt-in.
+        sys.modules[plain] = type(sys)('ordinary')
+        with self.assertRaisesRegex(ValueError, 'fresh explicit'):
+            load_pinned_modules({plain: ref(first)}, replace_pinned=True)
+        # A failing batch restores every name it touched.
+        with self.assertRaisesRegex(RuntimeError, 'bad module'):
+            load_pinned_modules({name: ref(first), other: ref(broken)}, replace_pinned=True)
+        self.assertIs(sys.modules[name], replaced); self.assertNotIn(other, sys.modules)
+        self.assertIsNot(original, replaced)
+
 
 if __name__ == '__main__': unittest.main()

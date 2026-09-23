@@ -1,4 +1,4 @@
-"""Metric-aware planar finite elements on supplied recorded geometry."""
+"""Metric-aware finite elements on supplied recorded geometry: planar charts and 3D triangle surfaces."""
 import numpy as np
 
 
@@ -90,3 +90,101 @@ def planar_fem_metric(chart, triangles, *, units, frame, relative_area_tolerance
             'relative_area_tolerance': float(relative_area_tolerance),
             'sign': 'Positive semidefinite stiffness: integrated gradient dot gradient'},
         'limits': 'Supplied Euclidean 2D chart only; no intrinsic 3D metric, anatomical qualification, global overlap test or target admission. Boundary stiffness rows include flux. Interior affine reproduction and edge orientation do not approve appearance or ensure nonnegative interpolation weights.'}
+
+
+def surface_fem_metric(positions, triangles, *, units, frame, relative_area_tolerance):
+    """Assemble the intrinsic P1 stiffness and lumped area mass of a 3D triangle surface.
+
+    Each element is the planar element in its own triangle plane, so the operator
+    measures lengths along the recorded surface instead of in a projection; a planar
+    chart of a steep or curved region distorts that metric. Same outputs as
+    planar_fem_metric. Linear functions of ambient coordinates are harmonic only on
+    a flat patch: their interior load is the discrete mean-curvature normal, reported
+    as curvature, not as an error.
+    """
+    from scipy.sparse import coo_matrix
+
+    points, tri = np.asarray(positions), np.asarray(triangles)
+    if (points.ndim != 2 or points.shape[1] != 3 or points.dtype.kind not in 'fiu'
+            or not 3 <= len(points) <= 100000 or not np.isfinite(points).all()
+            or tri.ndim != 2 or tri.shape[1] != 3 or tri.dtype.kind not in 'iu'
+            or not 1 <= len(tri) <= 200000 or np.any(tri < 0) or np.any(tri >= len(points))):
+        raise ValueError('Finite 3D positions and bounded valid integer triangles required')
+    if (not isinstance(units, str) or not units.strip()
+            or not isinstance(frame, str) or not frame.strip()
+            or type(relative_area_tolerance) not in (int, float)
+            or not np.isfinite(relative_area_tolerance) or not 0 < relative_area_tolerance < 1):
+        raise ValueError('Explicit position units, frame and dimensionless relative-area tolerance required')
+    points, tri = points.astype(float), tri.astype(np.int64)
+    if len(np.unique(np.sort(tri, axis=1), axis=0)) != len(tri):
+        raise ValueError('Duplicate triangles do not define a surface metric')
+    p = points[tri]
+    with np.errstate(over='ignore', invalid='ignore', divide='ignore'):
+        a, b = p[:, 1] - p[:, 0], p[:, 2] - p[:, 0]
+        normal = np.cross(a, b); area2 = np.linalg.norm(normal, axis=1)
+        longest2 = np.maximum.reduce([np.sum(a*a, axis=1), np.sum(b*b, axis=1), np.sum((b-a)**2, axis=1)])
+        relative_area = area2 / longest2
+    if (not np.isfinite(relative_area).all() or not np.isfinite(area2).all()
+            or np.any(relative_area <= relative_area_tolerance)):
+        raise ValueError('Degenerate or ill-conditioned surface triangle under the declared area tolerance')
+
+    edges = np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]])
+    unique, inverse, counts = np.unique(np.sort(edges, axis=1), axis=0, return_inverse=True, return_counts=True)
+    if np.any(counts > 2):
+        raise ValueError('Nonmanifold surface edge; qualify a manifold patch')
+    # Winding does not change intrinsic stiffness; mixed winding is reported, not refused.
+    direction = np.where(edges[:, 0] < edges[:, 1], 1, -1)
+    inconsistent = int(np.count_nonzero((counts == 2) & (np.bincount(inverse, weights=direction, minlength=len(unique)) != 0)))
+    boundary_edges = unique[counts == 1]
+    boundary = np.unique(boundary_edges)
+    interior = np.setdiff1d(np.arange(len(points)), boundary)
+
+    # Local orthonormal element frames: the planar element in each triangle's own plane.
+    u = a / np.linalg.norm(a, axis=1, keepdims=True)
+    v = np.cross(normal / area2[:, None], u)
+    local = np.stack([np.zeros((len(tri), 2)),
+                      np.stack([np.sum(a*u, axis=1), np.zeros(len(tri))], axis=1),
+                      np.stack([np.sum(b*u, axis=1), np.sum(b*v, axis=1)], axis=1)], axis=1)
+    gradients = np.stack([
+        np.stack([local[:, 1, 1]-local[:, 2, 1], local[:, 2, 0]-local[:, 1, 0]], axis=1),
+        np.stack([local[:, 2, 1]-local[:, 0, 1], local[:, 0, 0]-local[:, 2, 0]], axis=1),
+        np.stack([local[:, 0, 1]-local[:, 1, 1], local[:, 1, 0]-local[:, 0, 0]], axis=1)
+    ], axis=1) / area2[:, None, None]
+    area = area2 / 2
+    element = area[:, None, None] * np.einsum('tik,tjk->tij', gradients, gradients)
+    stiffness = coo_matrix((element.ravel(),
+        (np.repeat(tri, 3, axis=1).ravel(), np.tile(tri, (1, 3)).ravel())),
+        shape=(len(points), len(points))).tocsr()
+    stiffness.eliminate_zeros()
+    mass = np.bincount(tri.ravel(), weights=np.repeat(area / 3, 3), minlength=len(points))
+    if (not np.isfinite(stiffness.data).all() or not np.isfinite(mass).all()
+            or np.any(mass <= 0) or not np.isfinite(area.sum())):
+        raise ValueError('Finite stiffness and positive mass required for every supplied vertex')
+    curvature_load = stiffness @ (points - points[0])
+    constant_load = stiffness @ np.ones(len(points))
+    if not np.isfinite(curvature_load).all() or not np.isfinite(constant_load).all():
+        raise ValueError('Metric diagnostic overflow')
+    sparse = stiffness.tocoo()
+    # K x = 2 H n A at interior vertices (lumped area A): report the discrete mean curvature |H|.
+    mean_curvature = (np.linalg.norm(curvature_load[interior], axis=1) / (2 * mass[interior])) if len(interior) else None
+    metrics = {'vertices': len(points), 'triangles': len(tri),
+        'surface_area': float(area.sum()), 'length_unit': units,
+        'interior_vertices': len(interior), 'boundary_vertices': len(boundary),
+        'minimum_relative_area': float(relative_area.min()),
+        'constant_stiffness_defect': float(np.max(np.abs(constant_load))),
+        'interior_mean_curvature_max': float(mean_curvature.max()) if len(interior) else None,
+        'inconsistently_wound_edges': inconsistent,
+        'positive_offdiagonal_entries': int(np.count_nonzero((sparse.row != sparse.col) & (sparse.data > 0)))}
+    return {'stiffness_rows': sparse.row.copy(), 'stiffness_columns': sparse.col.copy(),
+        'stiffness_values': sparse.data.copy(), 'stiffness_shape': list(stiffness.shape),
+        'lumped_mass': mass, 'triangle_areas': area, 'boundary_edges': boundary_edges,
+        'boundary_vertices': boundary, 'interior_vertices': interior,
+        'interior_curvature_load': curvature_load[interior], 'public_metrics': metrics,
+        'metric': {'type': 'intrinsic_surface_p1', 'frame': frame, 'length_unit': units,
+            'stiffness_units': 'dimensionless', 'mass_units': 'length^2',
+            'mass_inverse_stiffness_units': 'length^-2',
+            'squared_laplacian_matrix_units': 'length^-2',
+            'interior_mean_curvature_units': 'length^-1', 'constant_stiffness_defect_units': 'dimensionless',
+            'relative_area_tolerance': float(relative_area_tolerance),
+            'sign': 'Positive semidefinite stiffness: integrated surface gradient dot gradient'},
+        'limits': 'Recorded piecewise-linear surface only; no smooth-surface, anatomical or correspondence qualification. Boundary stiffness rows include flux. Ambient-coordinate loads measure discrete curvature, not error. Obtuse elements can give signed weights; reproduction checks and orientation do not approve appearance.'}

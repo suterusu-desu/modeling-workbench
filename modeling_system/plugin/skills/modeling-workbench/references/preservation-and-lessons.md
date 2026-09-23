@@ -68,6 +68,15 @@ Verification can acquire missing evidence; promotion requires passing relevant
 checks. A failed check preserves the completed effect without replay. Existing
 checkpoint retention still owns native saves and recovery.
 
+Bind retention with `previous={"task": ..., "result": ...}` from the measured
+candidate operation. The core then requires a passing `evaluated_output`
+assessment whose subject is the retained candidate. Retention saves a new
+checkpoint file, so its adapter `measure` must either measure that file or carry
+the upstream candidate's evaluated arrays forward (the subject is in
+`item["workbench"]["preservation"]["upstream"]`) with evidence that the saved
+file reproduces them, such as an independent reopen of the retained checkpoint
+against those arrays. Pose, display and save alone do not show equal content.
+
 `require_preservation=True` blocks affected appearance/retention operations if
 the policy is omitted, while unrelated analysis remains available. Set this in
 the workspace's normal operator bridge; the public default stays compatible

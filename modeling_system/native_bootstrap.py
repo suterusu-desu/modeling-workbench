@@ -78,32 +78,51 @@ def phase_summary(record):
     return result
 
 
-def load_pinned_modules(references):
+PINNED_SOURCE = '__modeling_pinned_source__'
+
+
+def load_pinned_modules(references, *, replace_pinned=False):
     """Verify all exact source bytes before executing any qualified module.
 
     Only the native controller invokes this. Names and file references are
     supplied by the private workspace, never inferred from scene history.
+
+    A long-lived native session bootstraps again after loading another file.
+    With replace_pinned=True a name may be reused only when its current module
+    was itself loaded by this helper (it carries the pinned-source marker); any
+    other existing module still refuses, so a canonical or third-party module is
+    never shadowed. The batch is atomic: if any module fails to execute, every
+    name is restored to the module it held before the call.
     """
     sources = {}
     for name, ref in references.items():
-        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_]\w*', name) or name in sys.modules:
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_]\w*', name):
+            raise ValueError('A fresh explicit bootstrap module name is required')
+        existing = sys.modules.get(name)
+        if existing is not None and not (replace_pinned and isinstance(getattr(existing, PINNED_SOURCE, None), dict)):
             raise ValueError('A fresh explicit bootstrap module name is required')
         path = Path(ref['path']).resolve(strict=True)
         raw = path.read_bytes()
         if hashlib.sha256(raw).hexdigest() != ref['sha256']:
             raise ValueError('Pinned bootstrap module changed')
-        sources[name] = (path, raw)
+        sources[name] = (path, raw, ref['sha256'])
+    previous = {name: sys.modules.get(name) for name in sources}
     loaded = {}
-    for name, (path, raw) in sources.items():
-        spec = importlib.util.spec_from_file_location(name, path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        try:
+    try:
+        for name, (path, raw, sha256) in sources.items():
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            setattr(module, PINNED_SOURCE, {'path': str(path), 'sha256': sha256})
+            sys.modules[name] = module
             exec(compile(raw, str(path), 'exec'), module.__dict__)
-        except BaseException:
-            sys.modules.pop(name, None)
-            raise
-        loaded[name] = module
+            loaded[name] = module
+    except BaseException:
+        for name, module in previous.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+        raise
     return loaded
 
 

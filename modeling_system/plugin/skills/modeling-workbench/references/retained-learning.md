@@ -56,6 +56,14 @@ observations that already answer the next question.
 
 ## Retrieval and migration
 
+`retrieve_experience(query)` returns authority passages first, then matching
+records. Each retained review or lesson match leads with `public`: the scoped
+review judgment, the lesson and a condition comparison against the supplied
+context, exactly the deliberately public projection used in session feedback.
+`evidence_count` follows, then the complete record in `excerpt` with its pinned
+evidence and private provenance. Read `public` to decide relevance; expand the
+record only when its evidence matters.
+
 The default query uses the current public situation and offered work descriptions.
 An explicit `RetainedContext` can add source passages or custom queries. Dedicated
 review/lesson records remain available even if its old projector accepts only a

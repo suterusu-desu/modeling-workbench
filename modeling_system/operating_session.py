@@ -658,6 +658,57 @@ class OperatingSession(WorkQueue):
         self._recover_controller(entry)
         return deepcopy(result)
 
+    def settle_reconciled(self, task, *, expected_handle):
+        """Settle an uncertain task as failed from its evidence-backed reconciliation.
+
+        A capability can raise after its inner effect (for example a wrapper error
+        after a completed native job), leaving no qualified return for recover()
+        or repair_report(). Once the owner has reconciled the original operation
+        with actual evidence as resolved_failed or confirmed_not_applied, this
+        records that disposition in the queue so the session can continue with a
+        corrected revision. It never dispatches the capability or reports success;
+        dependents see a failed prerequisite.
+        """
+        if (self.directory / 'controller' / 'controller.lock').exists():
+            raise ValueError('Stop or reconcile the live controller before settling a task')
+        entry = self.record['results'][task]
+        if entry['status'] not in ('running', 'needs_reconciliation'):
+            raise ValueError('Task is not awaiting reconciliation')
+        handle = entry.get('operation_handle')
+        if not handle or handle != expected_handle:
+            raise ValueError('Original operation handle differs')
+        folder = self.service.store.root / 'calls' / handle
+        intent = read_json(folder / 'intent.json')
+        if (intent.get('episode') != self.episode or
+                fingerprint(intent['arguments']['task']) != entry['definition']):
+            raise ValueError('Settlement requires the exact original task operation')
+        resolution_path = folder / 'resolution.json'
+        if not resolution_path.is_file():
+            raise ValueError('Reconcile the original operation with actual effect evidence first')
+        observed = read_json(resolution_path).get('observed', {})
+        effect = observed.get('effect_status')
+        if effect == 'confirmed_returned':
+            raise ValueError('A confirmed return is restored with recover() or repair_report(), not settled as failed')
+        if effect not in ('resolved_failed', 'confirmed_not_applied'):
+            raise ValueError('Settlement requires an evidence-backed failed or not-applied reconciliation')
+        link = pin_link(self.service, {'kind': 'file', 'path': str(resolution_path),
+                                       'role': 'Evidence-backed reconciliation of the original operation'})
+        profile = intent['arguments']['task'].get('workbench', {}).get('profile')
+        summary = ('The original operation was reconciled as ' + effect + ' from its actual effect evidence; '
+                   'no qualified return exists. Offer a corrected revision instead of repeating it.')
+        result = self.service._run_episode_callback(self.episode, 'settle_reconciled_task',
+            {'original_handle': handle, 'task': task, 'resolution': link},
+            lambda: {'status': 'failed', 'original_operation_handle': handle, 'effects_replayed': False,
+                     'reconciliation': {'effect_status': effect, 'basis': observed.get('basis'), 'evidence': link},
+                     'workbench': {'checks': {}, 'report_needs_repair': False, 'qualification': 'needs evidence',
+                                   'findings': [{'kind': 'failure', 'scope': 'task settlement', 'summary': summary}],
+                                   'missing': list(PROFILES.get(profile, {'outputs': []})['outputs']),
+                                   'appearance_acceptance': 'not implied', 'method_benefit': 'not implied'}})
+        entry.update(status='failed', result=result)
+        write_json(self.path, self.record)
+        self._recover_controller(entry)
+        return deepcopy(result)
+
     def _recover_controller(self, entry):
         path = self.directory / 'controller' / 'controller.json'
         if not path.exists():

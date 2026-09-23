@@ -1,4 +1,4 @@
-# Planar metrics for nonuniform meshes
+# Planar and surface metrics for nonuniform meshes
 
 Use `planar_fem_metric` through `ArrayPreparation`, or import it from
 `modeling_system.metric_fitting`, when a qualified fit needs a differential
@@ -75,3 +75,27 @@ quantity: displacement smoothing and final-surface fitting differ. Metric and
 affine tests do not approve target correspondence, native realization or visible
 quality. See [preparation](preparation-and-bootstrap.md) and
 [connected-patch correspondence](surface-correspondence.md).
+
+## Surface metric on recorded 3D triangles
+
+A planar chart measures lengths in its projection. Where the surface is steep
+or folds relative to that plane, projected distances shrink and the operator
+no longer describes the material. `surface_fem_metric(positions, triangles,
+units=..., frame=..., relative_area_tolerance=...)` assembles the same outputs
+from `(N,3)` positions: each element is the planar element in its own triangle
+plane, so stiffness and lumped mass are intrinsic to the recorded surface. It is
+also registered for `ArrayPreparation` under the same name.
+
+Use it when a correction smooths or interpolates material over curved or steep
+regions, for example redistributing a displacement from rest across a corner,
+and use `planar_fem_metric` when the fit is genuinely posed in a qualified chart.
+A flat patch in any orientation reproduces the planar metric; an isometric fold
+leaves it unchanged. Winding does not affect intrinsic stiffness, so mixed
+winding is reported (`inconsistently_wound_edges`) rather than refused;
+nonmanifold edges, duplicates and degenerate triangles refuse.
+
+Linear functions of ambient coordinates are harmonic only on a flat patch.
+Their interior load is the discrete mean-curvature normal, reported as
+`interior_mean_curvature_max` (inverse length), not as a reproduction error.
+The metric qualifies no correspondence, tangential material coordinates or
+appearance; state which quantity a fit regularizes and which vertices are held.
