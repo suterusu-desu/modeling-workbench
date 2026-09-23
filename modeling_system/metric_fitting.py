@@ -188,3 +188,66 @@ def surface_fem_metric(positions, triangles, *, units, frame, relative_area_tole
             'relative_area_tolerance': float(relative_area_tolerance),
             'sign': 'Positive semidefinite stiffness: integrated surface gradient dot gradient'},
         'limits': 'Recorded piecewise-linear surface only; no smooth-surface, anatomical or correspondence qualification. Boundary stiffness rows include flux. Ambient-coordinate loads measure discrete curvature, not error. Obtuse elements can give signed weights; reproduction checks and orientation do not approve appearance.'}
+
+
+def relax_displacement(reference, deformed, triangles, held, *, units, frame, relative_area_tolerance,
+                       compressed_below=.5):
+    """Replace the free vertices' displacement by the minimum-bending interpolation of the held set.
+
+    The displacement deformed - reference of every free vertex is replaced by the field that
+    minimizes the squared intrinsic surface Laplacian (reference metric, interior rows) with every
+    held vertex fixed. Crowded material spreads into the smoothest field the held boundary allows.
+    No guide is fitted: moving material across a curved surface changes its depth, so follow this
+    with a guide or retained-surface depth fit, and hold material the pose leaves static or motion
+    spreads into it. Free vertices must be interior to the supplied patch; hold its boundary.
+    """
+    from scipy.sparse import coo_matrix, diags
+    from scipy.sparse.linalg import spsolve
+    from .construction_diagnostics import compare_stretch
+
+    rest, posed, tri = np.asarray(reference), np.asarray(deformed), np.asarray(triangles)
+    mask = np.asarray(held)
+    if (rest.shape != posed.shape or rest.ndim != 2 or rest.shape[1:] != (3,) or not np.isfinite(posed).all()
+            or mask.shape != (len(rest),) or mask.dtype.kind not in 'biu'):
+        raise ValueError('Corresponding finite reference/deformed positions and one held flag per vertex required')
+    if not (np.isfinite(compressed_below) and 0 < compressed_below < 1):
+        raise ValueError('Require 0 < compressed_below < 1')
+    if tri.ndim != 2 or tri.shape[1:] != (3,) or tri.dtype.kind not in 'iu' or not len(tri) or tri.min() < 0 or tri.max() >= len(rest):
+        raise ValueError('Patch triangles must index the supplied vertices')
+    # The patch may be a region of a larger mesh: work on its own vertices, report in the input indexing.
+    n = len(rest); tri = tri.astype(np.int64); used = np.unique(tri)
+    local = np.full(n, -1, dtype=np.int64); local[used] = np.arange(len(used))
+    metric = surface_fem_metric(rest[used], local[tri], units=units, frame=frame, relative_area_tolerance=relative_area_tolerance)
+    held_local = mask.astype(bool)[used]
+    free = np.flatnonzero(~held_local); fixed = np.flatnonzero(held_local)
+    if not len(free) or not len(fixed):
+        raise ValueError('Both free and held vertices are required in the patch')
+    boundary = np.zeros(len(used), bool); boundary[np.asarray(metric['boundary_vertices'], dtype=np.int64)] = True
+    if boundary[free].any():
+        raise ValueError('Free vertices must be interior to the patch; hold its boundary (two rings keep slope continuity)')
+    stiffness = coo_matrix((metric['stiffness_values'], (metric['stiffness_rows'], metric['stiffness_columns'])),
+                           shape=metric['stiffness_shape']).tocsr()
+    rows = np.asarray(metric['interior_vertices'], dtype=np.int64)
+    bending = (stiffness[rows, :].T @ diags(1 / metric['lumped_mass'][rows]) @ stiffness[rows, :]).tocsr()
+    displacement = (posed[used] - rest[used]).astype(float); relaxed_displacement = displacement.copy()
+    system = bending[free][:, free].tocsc(); coupling = bending[free][:, fixed]
+    for k in range(3):
+        relaxed_displacement[free, k] = spsolve(system, -(coupling @ displacement[fixed, k]))
+    if not np.isfinite(relaxed_displacement).all():
+        raise ValueError('Relaxation solve did not produce finite displacements; qualify the held set')
+    # Only free vertices receive recomputed positions; held and unused ones keep their exact bytes.
+    relaxed = posed.astype(float).copy(); relaxed[used[free]] = rest[used[free]] + relaxed_displacement[free]
+    delta = relaxed - posed
+    before = compare_stretch(rest, posed, tri, compressed_below=compressed_below, limit=1)['all']
+    after = compare_stretch(rest, relaxed, tri, compressed_below=compressed_below, limit=1)['all']
+    free, fixed = used[free], used[fixed]
+    metrics = {'free_vertices': int(len(free)), 'held_vertices': int(len(fixed)),
+               'max_displacement_change': float(np.linalg.norm(delta, axis=1).max()),
+               'smallest_stretch_q01_before': before['smallest_stretch_q01'], 'smallest_stretch_q01_after': after['smallest_stretch_q01'],
+               'smallest_stretch_q05_before': before['smallest_stretch_q05'], 'smallest_stretch_q05_after': after['smallest_stretch_q05'],
+               'compressed_before': before['compressed'], 'compressed_after': after['compressed'],
+               'normal_reversals_before': before['normal_reversals'], 'normal_reversals_after': after['normal_reversals']}
+    return {'delta': delta, 'relaxed': relaxed, 'free_vertices': free, 'held_vertices': fixed, 'public_metrics': metrics,
+            'objective': 'Squared intrinsic Laplacian of the displacement from reference on interior rows; held vertices exact',
+            'limits': 'Construction repair of material distribution only: no guide, depth, anatomical or appearance qualification. '
+                      'Depth changes wherever material slides over curvature; the held set is an explicit owner choice.'}

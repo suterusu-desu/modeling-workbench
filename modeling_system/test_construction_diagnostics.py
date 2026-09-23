@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from .construction_diagnostics import compare_bends, sample_residuals
+from .construction_diagnostics import compare_bends, compare_stretch, sample_residuals
 from .geometry import plane_sections, compare
 
 
@@ -123,6 +123,51 @@ class ConstructionDiagnosticsTests(unittest.TestCase):
             self.assertEqual(result['coplanar_triangles_excluded'],coplanar)
         tangent = dict(co=np.array([[0.,0,0],[1,1,0],[1,0,1]]),tri=np.array([[0,1,2]]))
         self.assertEqual(plane_sections(tangent,0,0)['segment_count'],0)
+
+
+class MaterialStretchTests(unittest.TestCase):
+    def grid(self):
+        x, y = np.meshgrid(np.arange(4.), np.arange(3.), indexing='ij')
+        co = np.c_[x.ravel(), y.ravel(), np.zeros(12)]
+        index = np.arange(12).reshape(4, 3); tri = []
+        for i in range(3):
+            for j in range(2):
+                a, b, c, d = index[i, j], index[i+1, j], index[i+1, j+1], index[i, j+1]
+                tri += [[a, b, c], [a, c, d]]
+        return co, np.array(tri)
+
+    def test_identity_rigid_motion_and_uniform_compression_are_measured_exactly(self):
+        co, tri = self.grid()
+        same = compare_stretch(co, co, tri)
+        self.assertAlmostEqual(same['all']['smallest_stretch_minimum'], 1.)
+        self.assertEqual(same['all']['compressed'], 0)
+        angle = .7; rotation = np.array([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1.]])
+        moved = compare_stretch(co, co @ rotation.T + [3, -2, 5], tri)
+        self.assertAlmostEqual(moved['all']['smallest_stretch_minimum'], 1., places=12)
+        self.assertAlmostEqual(moved['all']['largest_stretch_q99'], 1., places=12)
+        crowded = co * [.4, 1, 1]
+        result = compare_stretch(co, crowded, tri)
+        self.assertAlmostEqual(result['all']['smallest_stretch_minimum'], .4, places=12)
+        self.assertEqual(result['all']['compressed'], len(tri))
+        self.assertEqual(result['all']['normal_reversals'], 0)
+
+    def test_folded_triangle_reports_a_normal_reversal_and_tags_split_the_domain(self):
+        co, tri = self.grid()
+        folded = co.copy(); folded[4] = [3.2, 1.5, 0]   # interior vertex pushed across its neighbors
+        result = compare_stretch(co, folded, tri, tagged_triangles=np.array([0, 1]))
+        self.assertGreater(result['all']['normal_reversals'], 0)
+        self.assertEqual(result['tagged']['count'], 2); self.assertEqual(result['untagged']['count'], len(tri) - 2)
+        self.assertLessEqual(len(result['worst_compressed']), 12)
+        self.assertIn(4, result['worst_compressed'][0]['vertices'])
+
+    def test_degenerate_reference_or_invalid_thresholds_refuse(self):
+        co, tri = self.grid()
+        flat = np.array([[0., 0, 0], [1, 0, 0], [2, 0, 0]])
+        with self.assertRaisesRegex(ValueError, 'Degenerate'): compare_stretch(flat, flat, [[0, 1, 2]])
+        for kwargs in ({'compressed_below': 1.2}, {'stretched_above': .9}, {'limit': 0}):
+            with self.assertRaises(ValueError): compare_stretch(co, co, tri, **kwargs)
+        collapsed = co.copy(); collapsed[:, 0] = 0
+        self.assertEqual(compare_stretch(co, collapsed, tri)['all']['smallest_stretch_minimum'], 0.)
 
 
 if __name__ == '__main__': unittest.main()

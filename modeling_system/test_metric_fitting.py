@@ -6,7 +6,7 @@ import tempfile
 import unittest
 import numpy as np
 from scipy.sparse import coo_matrix, diags
-from .metric_fitting import planar_fem_metric, surface_fem_metric
+from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement
 from .preparation import ArrayPreparation
 
 
@@ -214,6 +214,74 @@ class SurfaceMetricTests(unittest.TestCase):
             self.assertEqual(detail['metric']['type'], 'intrinsic_surface_p1')
             with np.load(result['prepared']['arrays.npz']['path'], allow_pickle=False) as arrays:
                 np.testing.assert_allclose(arrays['lumped_mass'], surface_fem_metric(positions, triangles, **self.parameters)['lumped_mass'])
+
+
+class RelaxDisplacementTests(unittest.TestCase):
+    parameters = {'units': 'm', 'frame': 'recorded world frame', 'relative_area_tolerance': 1e-12}
+
+    def patch(self, n=9, curved=True):
+        chart, triangles, index = SurfaceMetricTests.grid(n, n, (.1, .1), jitter=(.012, -.008))
+        rest = np.c_[chart, .15 * chart[:, 0] ** 2 if curved else np.zeros(len(chart))]   # gently curved sheet
+        rings = np.zeros(len(rest), bool)
+        rings[index[:2].ravel()] = rings[index[-2:].ravel()] = rings[index[:, :2].ravel()] = rings[index[:, -2:].ravel()] = True
+        return rest, triangles, index, rings
+
+    def test_affine_displacement_on_a_flat_patch_is_reproduced_and_held_vertices_stay_exact(self):
+        # Ambient affine fields are harmonic on a flat patch in any orientation; on a curved patch
+        # the surface Laplacian of ambient coordinates is the curvature normal, so only approximately.
+        rest, triangles, _, held = self.patch(curved=False)
+        rotation = np.linalg.qr(np.array([[.3, -.8, .5], [.9, .2, -.1], [.1, .6, .8]]))[0]
+        rest = rest @ rotation.T
+        matrix = np.array([[.9, .1, 0], [-.05, 1.1, .02], [.03, 0, 1.]])
+        posed = rest @ matrix.T + [.2, -.1, .05]
+        result = relax_displacement(rest, posed, triangles, held, **self.parameters)
+        np.testing.assert_allclose(result['relaxed'], posed, atol=1e-10)
+        np.testing.assert_array_equal(result['delta'][held], 0)
+
+    def test_crowded_interior_is_relieved_without_moving_held_material(self):
+        rest, triangles, index, held = self.patch()
+        posed = rest.copy(); centre = index[4, 4]
+        # Crowd the interior toward one station: a sharp tangential pinch, the boundary unchanged.
+        distance = np.linalg.norm(rest[:, :2] - rest[centre, :2], axis=1)
+        pull = .85 * np.exp(-(distance / .15) ** 2)[:, None] * (rest[centre] - rest)
+        posed[~held] += pull[~held]
+        result = relax_displacement(rest, posed, triangles, held, **self.parameters)
+        metrics = result['public_metrics']
+        self.assertLess(metrics['compressed_after'], metrics['compressed_before'])
+        self.assertGreater(metrics['smallest_stretch_q01_after'], metrics['smallest_stretch_q01_before'])
+        np.testing.assert_array_equal(result['relaxed'][held], posed[held])
+
+    def test_region_of_a_larger_mesh_leaves_other_vertices_untouched(self):
+        rest, triangles, index, held = self.patch()
+        extra = np.array([[5., 5, 5], [6, 5, 5], [5, 6, 5]])
+        full_rest, full_posed = np.vstack([rest, extra]), np.vstack([rest * 1.01, extra + .3])
+        mask = np.r_[held, np.zeros(3, bool)]                      # unused vertices need no flag value
+        result = relax_displacement(full_rest, full_posed, triangles, mask, **self.parameters)
+        np.testing.assert_array_equal(result['delta'][-3:], 0)
+        self.assertTrue(np.all(np.isin(result['free_vertices'], np.unique(triangles))))
+
+    def test_free_boundary_vertex_refuses(self):
+        rest, triangles, index, held = self.patch()
+        loose = held.copy(); loose[index[0, 4]] = False
+        with self.assertRaisesRegex(ValueError, 'interior'):
+            relax_displacement(rest, rest, triangles, loose, **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'held flag'):
+            relax_displacement(rest, rest, triangles, held[:-1], **self.parameters)
+
+    def test_preparation_route_relaxes_with_a_held_array(self):
+        rest, triangles, index, held = self.patch()
+        posed = rest.copy(); posed[index[4, 4]] += [.03, 0, 0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / 'source.npz'
+            np.savez(source, reference=rest, deformed=posed, triangles=triangles, held=held.astype(np.int8))
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            item = {'reads': {'geometry': digest}, 'workbench': {'profile': 'analysis'},
+                'payload': {'operation': 'relax_displacement', 'parameters': self.parameters,
+                    'inputs': {name: {'path': str(source), 'sha256': digest, 'array': name}
+                               for name in ('reference', 'deformed', 'triangles', 'held')}}}
+            result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
+            self.assertEqual(result['status'], 'completed')
+            self.assertIn('compressed_after', result['summary'])
 
 
 if __name__ == '__main__': unittest.main()

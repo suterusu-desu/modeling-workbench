@@ -22,6 +22,26 @@ An unwelded preview insert has a display perimeter. Identify it separately from 
 
 For exact cuts, use the existing `geometry.plane_sections(arrays, axis, value, selection)` or the recorded-geometry section query. The existing cutter retains exact vertex-on-plane hits and deduplicates endpoints within each triangle. A plane along an edge produces that segment; an isolated tangent point produces no segment. Coplanar triangles are counted and excluded rather than silently turned into curves. Shared segments can have multiple triangle owners. This function uses an absolute 1e-12 coordinate tolerance; extremely small features or near-plane degeneracies require a declared scale/tolerance study, not automatic gap interpretation. It returns full segments, so retain them privately and use existing bounded record reads for agent summaries. Tests cover exact vertex crossings, on-plane edges, tangency and coplanarity. These planar cuts do not prove global three-dimensional connectivity.
 
+## Material crowding behind persistent creases
+
+When creases persist after a depth or slope fit, especially creases that radiate from a
+corner or run across rows of material, measure tangential strain before fitting again:
+
+```python
+from modeling_system.construction_diagnostics import compare_stretch
+crowding = compare_stretch(rest_xyz, posed_xyz, pose_triangles,
+    compressed_below=.5, stretched_above=2., tagged_triangles=corner_rows, limit=12)
+```
+
+Each triangle's smallest and largest principal stretch compares its reference and deformed
+shape in their own planes; `normal_reversals` counts triangles whose normal turns over. A
+surface compressed well below its reference length buckles, and no depth objective removes
+that: the material has to move. Compare baseline and candidate on the same triangles and
+report `compressed`, the low quantiles and the worst examples. Closing lids and deliberate
+folds compress legitimately, so thresholds are diagnostic choices, and a relieved tail does
+not approve appearance. `metric_fitting.relax_displacement` is one supported remedy; see
+[metric fitting](metric-fitting.md).
+
 ## Select the tessellation for the measured pose
 
 Native quad diagonals can change between poses while vertex identities and polygon loops remain stable. For an exact native triangle comparison, obtain both recordings at the measured pose, validate their triangulation, then derive selected rows from those records:

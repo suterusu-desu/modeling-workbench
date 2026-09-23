@@ -99,3 +99,30 @@ Their interior load is the discrete mean-curvature normal, reported as
 `interior_mean_curvature_max` (inverse length), not as a reproduction error.
 The metric qualifies no correspondence, tangential material coordinates or
 appearance; state which quantity a fit regularizes and which vertices are held.
+
+## Relax crowded material
+
+`relax_displacement(reference, deformed, triangles, held, units=..., frame=...,
+relative_area_tolerance=...)` (also an `ArrayPreparation` operation) replaces the
+displacement from `reference` of every free vertex in the patch by the field that
+minimizes the squared intrinsic Laplacian with all held vertices fixed. Use it when
+[crowding](construction-diagnostics.md) is the cause of a crease. The patch may be
+a region of a larger mesh; free vertices must be interior to it, and held vertices
+keep their exact coordinates. It reports principal-stretch tails before and after.
+
+Choose the held set from evidence, and say why each part is held:
+
+- Attachment-sampled rows (for example a lid rim that a lash samples) exactly,
+  without a surrounding ring when that ring is the crowded material.
+- Guide-supported or separately fitted material, and returns or pockets that the
+  guide does not represent, each with one ring for slope continuity.
+- Material the pose leaves static. Otherwise the interpolation spreads the moving
+  boundary's motion into skin that should not move.
+- The patch edge, with two rings.
+
+The result fits no guide. Moving material across a curved surface changes its depth,
+so follow it with a depth fit. In a retained configuration whose depth came from a
+coupled whole-region registration, fit that retained surface rather than refitting
+the guide locally: a local refit inside the region can add a ring where it meets the
+held surroundings. Affine displacements are reproduced exactly on flat patches, and
+only approximately on curved ones.
