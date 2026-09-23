@@ -147,6 +147,12 @@ rotations and a sparse solve, started from the free vertices' `initial` position
 - Hold the patch edge and everything whose position is established, as for
   `relax_displacement`. Negative cotangent weights of obtuse elements are clamped to
   a small positive value and counted.
+- A hard held boundary between rest-shaped free material and a differently shaped achieved
+  surround concentrates the mismatch into a crease along that boundary. Optional soft
+  targets (`targets=`, `target_weights=`) pull free vertices toward an achieved shape with
+  a weight relative to each vertex's cotangent degree: zero on and near the material being
+  replaced, rising with distance from it. A soft pull toward a shape that is itself folded
+  brings the fold back, so measure the distance from the folded material, not from a point.
 - It fits no guide. Follow it with a guide depth fit, joined to the held surroundings.
 
 A twist of an interior handle inside a fixed boundary needs shear, not rotation; there

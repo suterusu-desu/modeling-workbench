@@ -317,6 +317,24 @@ class RigidDeformTests(unittest.TestCase):
         self.assertGreater(crowded['compressed_after'], 0); self.assertEqual(metrics['compressed_after'], 0)
         self.assertTrue(metrics['converged']); self.assertLess(result['energies'][-1], result['energies'][0])
 
+    def test_soft_targets_pull_free_vertices_and_zero_weight_changes_nothing(self):
+        rest, triangles, held, initial = self.folded_sheet(90)
+        plain = rigid_deform(rest, initial, triangles, held, iterations=40, **self.parameters)['deformed']
+        zero = rigid_deform(rest, initial, triangles, held, iterations=40, targets=rest, target_weights=np.zeros(len(rest)),
+                            **self.parameters)['deformed']
+        np.testing.assert_allclose(zero, plain, atol=1e-12)
+        goal = rest + [0, 0, .05]
+        pulled = rigid_deform(rest, initial, triangles, held, iterations=60, targets=goal, target_weights=np.full(len(rest), 1e6),
+                              **self.parameters)
+        free = ~held
+        np.testing.assert_allclose(pulled['deformed'][free], goal[free], atol=1e-4)
+        np.testing.assert_array_equal(pulled['deformed'][held], initial[held])
+        self.assertEqual(pulled['public_metrics']['soft_target_vertices'], int(free.sum()))
+        with self.assertRaisesRegex(ValueError, 'both targets'):
+            rigid_deform(rest, initial, triangles, held, targets=goal, **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'nonnegative weight'):
+            rigid_deform(rest, initial, triangles, held, targets=goal, target_weights=-np.ones(len(rest)), **self.parameters)
+
     def test_region_of_a_larger_mesh_and_invalid_inputs(self):
         rest, triangles, index, held = RelaxDisplacementTests().patch()
         extra = np.array([[5., 5, 5], [6, 5, 5], [5, 6, 5]])
