@@ -246,7 +246,8 @@ def relax_displacement(reference, deformed, triangles, held, *, units, frame, re
                'smallest_stretch_q01_before': before['smallest_stretch_q01'], 'smallest_stretch_q01_after': after['smallest_stretch_q01'],
                'smallest_stretch_q05_before': before['smallest_stretch_q05'], 'smallest_stretch_q05_after': after['smallest_stretch_q05'],
                'compressed_before': before['compressed'], 'compressed_after': after['compressed'],
-               'normal_reversals_before': before['normal_reversals'], 'normal_reversals_after': after['normal_reversals']}
+               'normal_reversals_before': before['normal_reversals'], 'normal_reversals_after': after['normal_reversals'],
+               'local_reversals_before': before['local_reversals'], 'local_reversals_after': after['local_reversals']}
     return {'delta': delta, 'relaxed': relaxed, 'free_vertices': free, 'held_vertices': fixed, 'public_metrics': metrics,
             'objective': 'Squared intrinsic Laplacian of the displacement from reference on interior rows; held vertices exact',
             'limits': 'Construction repair of material distribution only: no guide, depth, anatomical or appearance qualification. '
@@ -354,7 +355,8 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
                'compressed_before': before['compressed'], 'compressed_after': after['compressed'],
                'stretched_before': before['stretched'], 'stretched_after': after['stretched'],
                'smallest_stretch_q01_before': before['smallest_stretch_q01'], 'smallest_stretch_q01_after': after['smallest_stretch_q01'],
-               'normal_reversals_before': before['normal_reversals'], 'normal_reversals_after': after['normal_reversals']}
+               'normal_reversals_before': before['normal_reversals'], 'normal_reversals_after': after['normal_reversals'],
+               'local_reversals_before': before['local_reversals'], 'local_reversals_after': after['local_reversals']}
     return {'delta': deformed - start, 'deformed': deformed, 'free_vertices': free_ids, 'held_vertices': fixed_ids,
             'energies': energies, 'public_metrics': metrics,
             'objective': 'As-rigid-as-possible energy of the reference shape with intrinsic cotangent weights, plus optional '

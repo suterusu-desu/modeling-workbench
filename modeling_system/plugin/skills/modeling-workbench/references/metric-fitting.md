@@ -154,8 +154,13 @@ rotations and a sparse solve, started from the free vertices' `initial` position
   replaced, rising with distance from it. A soft pull toward a shape that is itself folded
   brings the fold back, so measure the distance from the folded material, not from a point.
 - It fits no guide. Follow it with a guide depth fit, joined to the held surroundings.
+- A rest reference also undoes the large rotations the pose makes on purpose: a lid margin
+  that rolls under as the lid closes comes back as an open-eye bulge if it is free. Hold or
+  soft-target material whose posed turn is intended, and keep the free set to the defect.
 
 A twist of an interior handle inside a fixed boundary needs shear, not rotation; there
 the rigid solve can leave more compressed triangles than the linear one. Compare the
 stretch tails of both. A normal reversal against the reference means a fold only for
-material that should not turn past 90 degrees; a closing lid legitimately does.
+material that should not turn past 90 degrees; a closing lid legitimately does, so judge
+folds with `local_reversals_before/after` (flips against the local rotation) and creases
+with `construction_diagnostics.compare_bends`, not with the reference-relative count.

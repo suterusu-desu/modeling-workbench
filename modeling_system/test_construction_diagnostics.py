@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from .construction_diagnostics import compare_bends, compare_stretch, sample_residuals
+from .construction_diagnostics import compare_bends, compare_stretch, local_reversals, sample_residuals
 from .geometry import plane_sections, compare
 
 
@@ -145,6 +145,7 @@ class MaterialStretchTests(unittest.TestCase):
         moved = compare_stretch(co, co @ rotation.T + [3, -2, 5], tri)
         self.assertAlmostEqual(moved['all']['smallest_stretch_minimum'], 1., places=12)
         self.assertAlmostEqual(moved['all']['largest_stretch_q99'], 1., places=12)
+        self.assertEqual(same['all']['local_reversals'], 0); self.assertEqual(moved['all']['local_reversals'], 0)
         crowded = co * [.4, 1, 1]
         result = compare_stretch(co, crowded, tri)
         self.assertAlmostEqual(result['all']['smallest_stretch_minimum'], .4, places=12)
@@ -156,9 +157,32 @@ class MaterialStretchTests(unittest.TestCase):
         folded = co.copy(); folded[4] = [3.2, 1.5, 0]   # interior vertex pushed across its neighbors
         result = compare_stretch(co, folded, tri, tagged_triangles=np.array([0, 1]))
         self.assertGreater(result['all']['normal_reversals'], 0)
+        self.assertGreater(result['all']['local_reversals'], 0)            # flipped against its own neighbours
         self.assertEqual(result['tagged']['count'], 2); self.assertEqual(result['untagged']['count'], len(tri) - 2)
         self.assertLessEqual(len(result['worst_compressed']), 12)
         self.assertIn(4, result['worst_compressed'][0]['vertices'])
+
+    def test_material_turning_coherently_is_not_a_local_reversal(self):
+        # A strip rolled onto a cylinder through 200 degrees (a closing lid margin rolls like this) and a patch
+        # turned over rigidly: their normals oppose the reference direction, but no triangle is flipped
+        # relative to its own neighbourhood.
+        x, y = np.meshgrid(np.arange(3.), np.arange(15.) * .25, indexing='ij')
+        flat = np.c_[x.ravel(), y.ravel(), np.zeros(x.size)]
+        index = np.arange(x.size).reshape(x.shape); tri = []
+        for i in range(x.shape[0] - 1):
+            for j in range(x.shape[1] - 1):
+                a, b, c, d = index[i, j], index[i+1, j], index[i+1, j+1], index[i, j+1]
+                tri += [[a, b, c], [a, c, d]]
+        tri = np.array(tri); theta = flat[:, 1] * (np.radians(200) / flat[:, 1].max())
+        rolled = np.c_[flat[:, 0], np.sin(theta), 1 - np.cos(theta)]
+        result = compare_stretch(flat, rolled, tri)
+        self.assertGreater(result['all']['normal_reversals'], len(tri) // 3)
+        self.assertEqual(result['all']['local_reversals'], 0)
+        half_turn = flat * [1, -1, -1] + [0, 0, 2]                       # 180 degrees about the x axis
+        turned = compare_stretch(flat, half_turn, tri)
+        self.assertEqual(turned['all']['normal_reversals'], len(tri))
+        self.assertEqual(turned['all']['local_reversals'], 0)
+        np.testing.assert_array_equal(local_reversals(flat, flat, tri), np.zeros(len(tri), bool))
 
     def test_degenerate_reference_or_invalid_thresholds_refuse(self):
         co, tri = self.grid()

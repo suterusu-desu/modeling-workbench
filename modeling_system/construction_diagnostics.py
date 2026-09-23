@@ -162,6 +162,34 @@ def triangle_stretches(reference, deformed, triangles):
     return singular[:, 0], singular[:, 1], cosine
 
 
+def local_reversals(reference, deformed, triangles):
+    """Triangles whose deformed normal opposes their neighbourhood's best-fit rotation of the reference normal.
+
+    Each vertex gets the proper rotation that best maps its reference 1-ring edge vectors onto
+    the deformed ones (the local step of as-rigid-as-possible fitting); a triangle uses the
+    rotation fitted to its three vertices' rings together. Material that turns coherently, a
+    closing lid margin rolling past 90 degrees or a patch turned over rigidly, is not flagged:
+    only triangles flipped relative to their own surroundings are (pleats, tucks, a vertex
+    pushed through its neighbours). A wide flap folded back over a crease is flagged along the
+    crease, not in its interior, because a mirror image of a flat patch is a half turn; measure
+    the crease lines themselves with `compare_bends`.
+    """
+    before, after = _points(reference), _points(deformed)
+    tri = np.asarray(triangles).astype(np.int64)
+    edges = np.unique(np.sort(np.r_[tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]], axis=1), axis=0)
+    covariance = np.zeros((len(before), 3, 3))
+    for a, b in ((0, 1), (1, 0)):
+        i, j = edges[:, a], edges[:, b]
+        np.add.at(covariance, i, np.einsum('ki,kj->kij', after[j] - after[i], before[j] - before[i]))
+    joint = covariance[tri[:, 0]] + covariance[tri[:, 1]] + covariance[tri[:, 2]]
+    u, _, vt = np.linalg.svd(joint)
+    fix = np.ones((len(tri), 3)); fix[:, 2] = np.where(np.linalg.det(u @ vt) < 0, -1., 1.)
+    rotation = u @ (fix[:, :, None] * vt)
+    n0 = np.cross(before[tri[:, 1]] - before[tri[:, 0]], before[tri[:, 2]] - before[tri[:, 0]])
+    n1 = np.cross(after[tri[:, 1]] - after[tri[:, 0]], after[tri[:, 2]] - after[tri[:, 0]])
+    return np.einsum('ki,ki->k', np.einsum('kij,kj->ki', rotation, n0), n1) < 0
+
+
 def compare_stretch(reference, deformed, triangles, *, compressed_below=.5, stretched_above=2.,
                     tagged_triangles=(), limit=12):
     """Tangential material strain between two states of the same triangles.
@@ -171,12 +199,16 @@ def compare_stretch(reference, deformed, triangles, *, compressed_below=.5, stre
     Measure the smallest and largest principal stretch per triangle (reference -> deformed),
     the tails under the declared thresholds and triangles whose normal reverses. Thresholds are
     diagnostic choices, not anatomical limits; deliberate folds and closing lids compress.
+    `normal_reversals` compares each normal with its reference direction, so material that
+    rotates coherently past 90 degrees counts; `local_reversals` counts only triangles flipped
+    relative to their own neighbourhood (see `local_reversals`).
     """
     _limit(limit)
     if not (np.isfinite(compressed_below) and np.isfinite(stretched_above) and 0 < compressed_below < 1 < stretched_above):
         raise ValueError('Require 0 < compressed_below < 1 < stretched_above')
     largest, smallest, cosine = triangle_stretches(reference, deformed, triangles)
     tri = np.asarray(triangles).astype(np.int64)
+    flipped = local_reversals(reference, deformed, tri)
     tagged = np.zeros(len(tri), bool)
     if len(tagged_triangles):
         index = np.asarray(tagged_triangles)
@@ -187,21 +219,23 @@ def compare_stretch(reference, deformed, triangles, *, compressed_below=.5, stre
     def stats(mask):
         if not mask.any():
             return dict(count=0, smallest_stretch_q01=None, smallest_stretch_q05=None, smallest_stretch_minimum=None,
-                        largest_stretch_q99=None, compressed=0, stretched=0, normal_reversals=0)
+                        largest_stretch_q99=None, compressed=0, stretched=0, normal_reversals=0, local_reversals=0)
         return dict(count=int(mask.sum()), smallest_stretch_q01=float(np.quantile(smallest[mask], .01)),
                     smallest_stretch_q05=float(np.quantile(smallest[mask], .05)),
                     smallest_stretch_minimum=float(smallest[mask].min()),
                     largest_stretch_q99=float(np.quantile(largest[mask], .99)),
                     compressed=int(np.count_nonzero(smallest[mask] < compressed_below)),
                     stretched=int(np.count_nonzero(largest[mask] > stretched_above)),
-                    normal_reversals=int(np.count_nonzero(cosine[mask] < 0)))
+                    normal_reversals=int(np.count_nonzero(cosine[mask] < 0)),
+                    local_reversals=int(np.count_nonzero(flipped[mask])))
 
     order = np.argsort(smallest, kind='stable')[:limit]
     return dict(input_revision=_revision(_points(reference), _points(deformed), tri),
                 thresholds=dict(compressed_below=float(compressed_below), stretched_above=float(stretched_above)),
                 all=stats(np.ones(len(tri), bool)), tagged=stats(tagged), untagged=stats(~tagged),
                 worst_compressed=[dict(triangle=int(i), vertices=tri[i].tolist(), smallest=float(smallest[i]),
-                                       largest=float(largest[i]), normal_cosine=float(cosine[i]), tagged=bool(tagged[i]))
+                                       largest=float(largest[i]), normal_cosine=float(cosine[i]),
+                                       locally_reversed=bool(flipped[i]), tagged=bool(tagged[i]))
                                   for i in order],
                 omitted_triangles=max(0, len(tri) - limit),
                 interpretation='Principal stretches of corresponding triangles in their own planes; crowding predicts buckling '

@@ -44,6 +44,20 @@ not approve appearance. `metric_fitting.relax_displacement` is one supported rem
 [metric fitting](metric-fitting.md). A normal reversal marks a fold only where the material should not
 have turned past 90 degrees from its reference.
 
+Count folds with `local_reversals`, not `normal_reversals`, wherever the motion turns material
+a long way. `normal_reversals` compares each normal with its reference direction, so a closing
+lid margin that rolls smoothly past 90 degrees counts, band after band, while nothing is
+folded. `local_reversals` fits each triangle's neighbourhood with its best rotation first (the
+local step of as-rigid-as-possible fitting) and counts only triangles flipped against their
+own surroundings: pleats, tucks, a vertex pushed through its neighbours. In real use a rolled
+margin strip made up most of a corner's reversal count; minimizing that count steered the
+corrections toward un-rolling the margin, which reviews saw as a bulge, while the actual
+defect was a local crease. A wide flap folded back over a crease is a half turn of that
+flap, so it is flagged along the crease rather than across its interior; measure the crease
+lines, and any visible pinch, with `compare_bends` and compare the counts by chart region
+before choosing what a correction has to change. `construction_diagnostics.local_reversals`
+returns the per-triangle flags.
+
 ## Select the tessellation for the measured pose
 
 Native quad diagonals can change between poses while vertex identities and polygon loops remain stable. For an exact native triangle comparison, obtain both recordings at the measured pose, validate their triangulation, then derive selected rows from those records:
