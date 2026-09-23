@@ -251,3 +251,95 @@ def relax_displacement(reference, deformed, triangles, held, *, units, frame, re
             'objective': 'Squared intrinsic Laplacian of the displacement from reference on interior rows; held vertices exact',
             'limits': 'Construction repair of material distribution only: no guide, depth, anatomical or appearance qualification. '
                       'Depth changes wherever material slides over curvature; the held set is an explicit owner choice.'}
+
+
+def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_area_tolerance,
+                 iterations=50, tolerance=1e-9, compressed_below=.5):
+    """As-rigid-as-possible deformation of a patch: free vertices keep the reference shape up to local rotations.
+
+    Held vertices take their `initial` positions exactly (moved handles and preserved material alike). Every free
+    vertex minimizes the as-rigid-as-possible energy (Sorkine and Alexa 2007) with the intrinsic cotangent weights
+    of the reference surface, alternating per-vertex best rotations with a sparse global solve, starting from its
+    `initial` position. Unlike the linear interpolation of relax_displacement, material may rotate, so large handle
+    moves bend the patch instead of folding or creasing it. The reference must itself be fold-free: preserving a
+    folded shape preserves its folds. Negative cotangent weights (obtuse elements) are clamped to a small positive
+    value and counted. Free vertices must be interior to the supplied patch; hold its boundary.
+    """
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.linalg import factorized
+    from .construction_diagnostics import compare_stretch
+
+    rest, start, tri = np.asarray(reference), np.asarray(initial), np.asarray(triangles)
+    mask = np.asarray(held)
+    if (rest.shape != start.shape or rest.ndim != 2 or rest.shape[1:] != (3,) or not np.isfinite(start).all()
+            or not np.isfinite(rest).all() or mask.shape != (len(rest),) or mask.dtype.kind not in 'biu'):
+        raise ValueError('Corresponding finite reference/initial positions and one held flag per vertex required')
+    if not (int(iterations) >= 1 and np.isfinite(tolerance) and tolerance >= 0 and 0 < compressed_below < 1):
+        raise ValueError('Require iterations >= 1, a finite nonnegative tolerance and 0 < compressed_below < 1')
+    if tri.ndim != 2 or tri.shape[1:] != (3,) or tri.dtype.kind not in 'iu' or not len(tri) or tri.min() < 0 or tri.max() >= len(rest):
+        raise ValueError('Patch triangles must index the supplied vertices')
+    n = len(rest); tri = tri.astype(np.int64); used = np.unique(tri)
+    local = np.full(n, -1, dtype=np.int64); local[used] = np.arange(len(used))
+    metric = surface_fem_metric(rest[used], local[tri], units=units, frame=frame, relative_area_tolerance=relative_area_tolerance)
+    held_local = mask.astype(bool)[used]
+    free = np.flatnonzero(~held_local); fixed = np.flatnonzero(held_local)
+    if not len(free) or not len(fixed):
+        raise ValueError('Both free and held vertices are required in the patch')
+    boundary = np.zeros(len(used), bool); boundary[np.asarray(metric['boundary_vertices'], dtype=np.int64)] = True
+    if boundary[free].any():
+        raise ValueError('Free vertices must be interior to the patch; hold its boundary')
+    # Cotangent edge weights are the negated off-diagonal P1 stiffness entries of the reference surface.
+    rows, cols, values = (np.asarray(metric[k]) for k in ('stiffness_rows', 'stiffness_columns', 'stiffness_values'))
+    off = rows != cols
+    i, j, w = rows[off].astype(np.int64), cols[off].astype(np.int64), -values[off].astype(float)
+    positive = w[w > 0]
+    floor = 1e-3 * float(positive.mean()) if len(positive) else 1e-12
+    clamped = int((w < floor).sum()); w = np.maximum(w, floor)
+    m = len(used); p = rest[used].astype(float); x = start[used].astype(float).copy()
+    degree = np.bincount(i, weights=w, minlength=m)
+    laplacian = (coo_matrix((-w, (i, j)), shape=(m, m)) + coo_matrix((degree, (np.arange(m), np.arange(m))), shape=(m, m))).tocsr()
+    solve = factorized(laplacian[free][:, free].tocsc()); coupling = laplacian[free][:, fixed]
+    edges = p[i] - p[j]
+    energies = []
+
+    def rotations(y):
+        covariance = np.zeros((m, 3, 3))
+        np.add.at(covariance, i, w[:, None, None] * edges[:, :, None] * (y[i] - y[j])[:, None, :])
+        u, _, vt = np.linalg.svd(covariance)
+        r = np.einsum('nji,nkj->nik', vt, u)
+        flip = np.linalg.det(r) < 0
+        if flip.any():
+            u = u.copy(); u[flip, :, -1] *= -1; r[flip] = np.einsum('nji,nkj->nik', vt[flip], u[flip])
+        return r
+
+    def energy(y, r):
+        return float((w * np.sum(((y[i] - y[j]) - np.einsum('nab,nb->na', r[i], edges)) ** 2, axis=1)).sum())
+
+    converged = False
+    for _ in range(int(iterations)):
+        r = rotations(x)
+        right = np.zeros((m, 3)); np.add.at(right, i, .5 * w[:, None] * np.einsum('nab,nb->na', r[i] + r[j], edges))
+        for k in range(3):
+            x[free, k] = solve(right[free, k] - coupling @ x[fixed, k])
+        energies.append(energy(x, rotations(x)))
+        if len(energies) > 1 and abs(energies[-2] - energies[-1]) <= tolerance * max(energies[-2], 1e-300):
+            converged = True; break
+    if not np.isfinite(x).all():
+        raise ValueError('Rigid deformation did not produce finite positions; qualify the held set')
+    # Only free vertices receive recomputed positions; held and unused ones keep their exact bytes.
+    deformed = start.astype(float).copy(); deformed[used[free]] = x[free]
+    before = compare_stretch(rest, start, tri, compressed_below=compressed_below, limit=1)['all']
+    after = compare_stretch(rest, deformed, tri, compressed_below=compressed_below, limit=1)['all']
+    free_ids, fixed_ids = used[free], used[fixed]
+    metrics = {'free_vertices': int(len(free_ids)), 'held_vertices': int(len(fixed_ids)), 'iterations': len(energies),
+               'converged': converged, 'energy_first': energies[0], 'energy_last': energies[-1], 'clamped_weights': clamped,
+               'max_position_change': float(np.linalg.norm(deformed - start, axis=1).max()),
+               'compressed_before': before['compressed'], 'compressed_after': after['compressed'],
+               'stretched_before': before['stretched'], 'stretched_after': after['stretched'],
+               'smallest_stretch_q01_before': before['smallest_stretch_q01'], 'smallest_stretch_q01_after': after['smallest_stretch_q01'],
+               'normal_reversals_before': before['normal_reversals'], 'normal_reversals_after': after['normal_reversals']}
+    return {'delta': deformed - start, 'deformed': deformed, 'free_vertices': free_ids, 'held_vertices': fixed_ids,
+            'energies': energies, 'public_metrics': metrics,
+            'objective': 'As-rigid-as-possible energy of the reference shape with intrinsic cotangent weights; held vertices exact',
+            'limits': 'Shape preservation of the chosen reference only: no guide, depth, anatomical or appearance qualification. '
+                      'A folded reference keeps its folds; local minima depend on the initial positions; the held set is an explicit owner choice.'}

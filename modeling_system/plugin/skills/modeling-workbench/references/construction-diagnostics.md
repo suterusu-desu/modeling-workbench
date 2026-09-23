@@ -39,8 +39,10 @@ surface compressed well below its reference length buckles, and no depth objecti
 that: the material has to move. Compare baseline and candidate on the same triangles and
 report `compressed`, the low quantiles and the worst examples. Closing lids and deliberate
 folds compress legitimately, so thresholds are diagnostic choices, and a relieved tail does
-not approve appearance. `metric_fitting.relax_displacement` is one supported remedy; see
-[metric fitting](metric-fitting.md).
+not approve appearance. `metric_fitting.relax_displacement` is one supported remedy, and
+`metric_fitting.rigid_deform` when held material moves or turns a long way; see
+[metric fitting](metric-fitting.md). A normal reversal marks a fold only where the material should not
+have turned past 90 degrees from its reference.
 
 ## Select the tessellation for the measured pose
 

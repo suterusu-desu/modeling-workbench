@@ -126,3 +126,30 @@ coupled whole-region registration, fit that retained surface rather than refitti
 the guide locally: a local refit inside the region can add a ring where it meets the
 held surroundings. Affine displacements are reproduced exactly on flat patches, and
 only approximately on curved ones.
+
+## Move handles and keep the shape
+
+A linear displacement interpolation cannot rotate material. When held handles move a
+long way relative to their neighbours, or turn the material (a lid margin carried over
+a corner, a sheet that has to bend), it shortens chords, crowds the transition and can
+fold it. `rigid_deform(reference, initial, triangles, held, units=..., frame=...,
+relative_area_tolerance=..., iterations=50, tolerance=1e-9)` (also an `ArrayPreparation`
+operation) is the as-rigid-as-possible alternative: held vertices take their `initial`
+positions exactly, and every free vertex keeps the `reference` shape up to local
+rotations (intrinsic cotangent weights of the reference surface, alternating best
+rotations and a sparse solve, started from the free vertices' `initial` positions).
+
+- Choose a fold-free reference. It is the shape being preserved: the material's rest
+  shape when the current pose is itself folded, since preserving a folded pose keeps
+  its folds.
+- Start from a sensible initial state, for example the linear result; the energy has
+  local minima. The report gives iterations, convergence and first and last energy.
+- Hold the patch edge and everything whose position is established, as for
+  `relax_displacement`. Negative cotangent weights of obtuse elements are clamped to
+  a small positive value and counted.
+- It fits no guide. Follow it with a guide depth fit, joined to the held surroundings.
+
+A twist of an interior handle inside a fixed boundary needs shear, not rotation; there
+the rigid solve can leave more compressed triangles than the linear one. Compare the
+stretch tails of both. A normal reversal against the reference means a fold only for
+material that should not turn past 90 degrees; a closing lid legitimately does.

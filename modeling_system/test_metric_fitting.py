@@ -6,7 +6,7 @@ import tempfile
 import unittest
 import numpy as np
 from scipy.sparse import coo_matrix, diags
-from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement
+from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform
 from .preparation import ArrayPreparation
 
 
@@ -282,6 +282,68 @@ class RelaxDisplacementTests(unittest.TestCase):
             result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
             self.assertEqual(result['status'], 'completed')
             self.assertIn('compressed_after', result['summary'])
+
+
+class RigidDeformTests(unittest.TestCase):
+    parameters = RelaxDisplacementTests.parameters
+
+    def folded_sheet(self, degrees):
+        """A flat sheet whose held boundary is folded along x = median by the given angle (a closing lid)."""
+        rest, triangles, index, held = RelaxDisplacementTests().patch(n=13, curved=False)
+        middle = np.median(rest[:, 0]); angle = np.radians(degrees)
+        folded = rest.copy(); right = rest[:, 0] > middle; lever = rest[right, 0] - middle
+        folded[right, 0] = middle + lever * np.cos(angle); folded[right, 2] = lever * np.sin(angle)
+        initial = rest.copy(); initial[held] = folded[held]
+        return rest, triangles, held, initial
+
+    def test_rigid_motion_of_all_handles_is_followed_exactly(self):
+        rest, triangles, _, held = RelaxDisplacementTests().patch()
+        rotation = np.linalg.qr(np.array([[.3, -.8, .5], [.9, .2, -.1], [.1, .6, .8]]))[0]
+        moved = rest @ rotation.T + [.2, -.1, .05]
+        initial = rest.copy(); initial[held] = moved[held]
+        result = rigid_deform(rest, initial, triangles, held, iterations=400, **self.parameters)
+        np.testing.assert_allclose(result['deformed'], moved, atol=1e-6)
+        np.testing.assert_array_equal(result['deformed'][held], initial[held])
+        self.assertLess(result['public_metrics']['energy_last'], 1e-10)
+
+    def test_folding_handles_bend_the_sheet_where_linear_interpolation_crowds(self):
+        # The fold rotates the right half by 150 degrees: the linear displacement interpolation
+        # shortens the chord across the bend, the rotation-aware solve keeps lengths.
+        rest, triangles, held, initial = self.folded_sheet(150)
+        linear = relax_displacement(rest, initial, triangles, held, **self.parameters)
+        result = rigid_deform(rest, linear['relaxed'], triangles, held, iterations=300, **self.parameters)
+        metrics, crowded = result['public_metrics'], linear['public_metrics']
+        self.assertGreater(metrics['smallest_stretch_q01_after'], crowded['smallest_stretch_q01_after'] + .3)
+        self.assertGreater(crowded['compressed_after'], 0); self.assertEqual(metrics['compressed_after'], 0)
+        self.assertTrue(metrics['converged']); self.assertLess(result['energies'][-1], result['energies'][0])
+
+    def test_region_of_a_larger_mesh_and_invalid_inputs(self):
+        rest, triangles, index, held = RelaxDisplacementTests().patch()
+        extra = np.array([[5., 5, 5], [6, 5, 5], [5, 6, 5]])
+        full_rest, full_initial = np.vstack([rest, extra]), np.vstack([rest, extra + .3])
+        result = rigid_deform(full_rest, full_initial, triangles, np.r_[held, np.zeros(3, bool)], **self.parameters)
+        np.testing.assert_array_equal(result['deformed'][-3:], full_initial[-3:])
+        loose = held.copy(); loose[index[0, 4]] = False
+        with self.assertRaisesRegex(ValueError, 'interior'):
+            rigid_deform(rest, rest, triangles, loose, **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'held flag'):
+            rigid_deform(rest, rest, triangles, held[:-1], **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'iterations'):
+            rigid_deform(rest, rest, triangles, held, iterations=0, **self.parameters)
+
+    def test_preparation_route_deforms_with_a_held_array(self):
+        rest, triangles, held, initial = self.folded_sheet(60)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / 'source.npz'
+            np.savez(source, reference=rest, initial=initial, triangles=triangles, held=held.astype(np.int8))
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            item = {'reads': {'geometry': digest}, 'workbench': {'profile': 'analysis'},
+                'payload': {'operation': 'rigid_deform', 'parameters': dict(self.parameters, iterations=40),
+                    'inputs': {name: {'path': str(source), 'sha256': digest, 'array': name}
+                               for name in ('reference', 'initial', 'triangles', 'held')}}}
+            result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
+            self.assertEqual(result['status'], 'completed')
+            self.assertIn('energy_last', result['summary'])
 
 
 if __name__ == '__main__': unittest.main()
