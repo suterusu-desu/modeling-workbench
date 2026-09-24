@@ -164,3 +164,6 @@ stretch tails of both. A normal reversal against the reference means a fold only
 material that should not turn past 90 degrees; a closing lid legitimately does, so judge
 folds with `local_reversals_before/after` (flips against the local rotation) and creases
 with `construction_diagnostics.compare_bends`, not with the reference-relative count.
+
+When both end poses of a motion are established and only the in-between poses are wrong, build the in-betweens from
+the two poses with [motion paths](motion-paths.md) (pace, rolled or hinged paths) instead of fitting further keys.

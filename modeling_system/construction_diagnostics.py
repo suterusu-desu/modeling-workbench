@@ -240,3 +240,91 @@ def compare_stretch(reference, deformed, triangles, *, compressed_below=.5, stre
                 omitted_triangles=max(0, len(tri) - limit),
                 interpretation='Principal stretches of corresponding triangles in their own planes; crowding predicts buckling '
                                'that depth objectives cannot remove, but no appearance, intended-fold or causal judgment')
+
+
+def section_turns(reference, poses, triangles, *, origin, normal, min_turn_degrees=4., window=3, limit=12):
+    """Material sections through a moving surface, and how each one bends in every pose.
+
+    Where the reference surface crosses the plane (origin, normal) every crossing keeps its edge and edge parameter, so
+    the same material is followed into each pose; crossings chain into sections through shared triangles. Each pose's
+    section is projected onto the plane and its signed turning summed over `window` consecutive corners; an inflection
+    is a change of turning direction between windows that turn at least `min_turn_degrees`. Material that rolls over a
+    round obstacle keeps its turning direction; an S across a moving band (sunk behind its edge, bulged at it) adds
+    inflections. Compare poses and candidates on the same sections; thresholds are diagnostic choices, and deliberate
+    creases and folds also turn.
+    """
+    _limit(limit)
+    rest = _points(reference); tri = np.asarray(triangles).astype(np.int64)
+    states = np.asarray(poses, float)
+    if states.ndim == 2: states = states[None]
+    if states.ndim != 3 or states.shape[1:] != rest.shape or not np.isfinite(states).all():
+        raise ValueError('Poses must be finite positions of every reference point')
+    if tri.ndim != 2 or tri.shape[1:] != (3,) or not len(tri) or tri.min() < 0 or tri.max() >= len(rest):
+        raise ValueError('Triangles must index the supplied points')
+    o, n = np.asarray(origin, float), np.asarray(normal, float)
+    if o.shape != (3,) or n.shape != (3,) or not np.isfinite(o).all() or not np.isfinite(n).all() or np.linalg.norm(n) < 1e-12:
+        raise ValueError('A finite plane origin and nonzero normal are required')
+    if not (np.isfinite(min_turn_degrees) and min_turn_degrees > 0 and int(window) >= 1):
+        raise ValueError('Require a positive turn threshold and window >= 1')
+    n = n / np.linalg.norm(n)
+    side = (rest - o) @ n; side = np.where(side == 0, 1e-300, side)
+    crossings, segments = {}, []
+    for t, (a, b, c) in enumerate(tri):
+        hit = []
+        for i, j in ((a, b), (b, c), (c, a)):
+            if (side[i] > 0) != (side[j] > 0):
+                key = (min(i, j), max(i, j))
+                if key not in crossings:
+                    p, q = key; crossings[key] = side[p] / (side[p] - side[q])
+                hit.append(key)
+        if len(hit) == 2: segments.append(tuple(hit))
+    ends = {}
+    for s, (k0, k1) in enumerate(segments):
+        ends.setdefault(k0, []).append(s); ends.setdefault(k1, []).append(s)
+    used, chains = set(), []
+    for s0 in range(len(segments)):
+        if s0 in used: continue
+        used.add(s0); chain = list(segments[s0])
+        for forward in (True, False):
+            while True:
+                tip = chain[-1] if forward else chain[0]
+                nxt = [s for s in ends.get(tip, ()) if s not in used]
+                if not nxt: break
+                s = nxt[0]; used.add(s); k0, k1 = segments[s]; far = k1 if k0 == tip else k0
+                if forward: chain.append(far)
+                else: chain.insert(0, far)
+        if len(chain) >= 3: chains.append(chain)
+    e1 = np.cross(n, [1., 0., 0.]) if abs(n[0]) < .9 else np.cross(n, [0., 1., 0.]); e1 /= np.linalg.norm(e1); e2 = np.cross(n, e1)
+
+    def bend(points):
+        uv = np.c_[(points - o) @ e1, (points - o) @ e2]; d = np.diff(uv, axis=0); keep = np.linalg.norm(d, axis=1) > 1e-12
+        d = d[keep]
+        if len(d) < 2: return 0, 0., 0.
+        turn = np.arctan2(d[:-1, 0] * d[1:, 1] - d[:-1, 1] * d[1:, 0], np.sum(d[:-1] * d[1:], axis=1))
+        w = min(int(window), len(turn)); summed = np.convolve(turn, np.ones(w), mode='valid')
+        signs = np.sign(summed[np.abs(summed) >= np.radians(min_turn_degrees)])
+        flips = int(np.count_nonzero(signs[1:] != signs[:-1])) if len(signs) > 1 else 0
+        return flips, float(np.degrees(np.abs(turn).sum())), float(np.degrees(np.abs(summed).max(initial=0)))
+
+    all_states = np.concatenate([rest[None], states])
+    edge_pairs, params, owner, rows = [], [], [], []
+    for c, chain in enumerate(chains):
+        pairs = np.array(chain, dtype=np.int64); u = np.array([crossings[k] for k in chain])
+        points = (1 - u)[None, :, None] * all_states[:, pairs[:, 0]] + u[None, :, None] * all_states[:, pairs[:, 1]]
+        measured = [bend(p) for p in points]
+        rows.append(dict(section=c, crossings=len(chain), inflections=[m[0] for m in measured],
+                         total_turn_degrees=[m[1] for m in measured], largest_window_turn_degrees=[m[2] for m in measured]))
+        edge_pairs.append(pairs); params.append(u); owner.append(np.full(len(chain), c))
+    added = [int(sum(max(0, r['inflections'][p] - r['inflections'][0]) for r in rows)) for p in range(1, len(all_states))]
+    order = sorted(rows, key=lambda r: -max(r['inflections'][1:] or [0]))[:limit]
+    return dict(input_revision=_revision(rest, tri, *states),
+                edge_pairs=np.concatenate(edge_pairs) if edge_pairs else np.zeros((0, 2), np.int64),
+                edge_parameters=np.concatenate(params) if params else np.zeros(0), section_index=np.concatenate(owner) if owner else np.zeros(0, np.int64),
+                section_points=np.stack([(1 - np.concatenate(params))[:, None] * s[np.concatenate(edge_pairs)[:, 0]] +
+                                         np.concatenate(params)[:, None] * s[np.concatenate(edge_pairs)[:, 1]] for s in all_states])
+                if edge_pairs else np.zeros((len(all_states), 0, 3)),
+                sections=len(rows), reference_inflections=int(sum(r['inflections'][0] for r in rows)),
+                inflections_per_pose=[int(sum(r['inflections'][p] for r in rows)) for p in range(1, len(all_states))],
+                added_inflections_per_pose=added, worst_sections=order, omitted_sections=max(0, len(rows) - limit),
+                interpretation='Material sections followed from the reference crossing into each pose, projected on the '
+                               'cut plane; inflections count turning-direction changes, not appearance or intent')

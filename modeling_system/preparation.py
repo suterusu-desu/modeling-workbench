@@ -10,6 +10,8 @@ from .result_reporting import json_data, compact_summary
 from .triangle_contact import projected_triangle_contact
 from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform
 from .correction_scope import correction_scope
+from .motion_paths import motion_pace, path_positions, hinge_motion
+from .construction_diagnostics import section_turns
 
 
 def active_vertex_coverage(vertex_count, faces, driven):
@@ -97,7 +99,9 @@ ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric'
     'fit_landmark_field': material_operations.fit_landmark_field,
     'material_trajectory': material_operations.material_trajectory,
     'attachment_motion': material_operations.attachment_motion,
-    'projected_triangle_contact': projected_triangle_contact}
+    'projected_triangle_contact': projected_triangle_contact,
+    'motion_pace': motion_pace, 'path_positions': path_positions, 'hinge_motion': hinge_motion,
+    'section_turns': section_turns}
 
 
 def prepare_arrays(operation, *, inputs, parameters=None, operations=None):

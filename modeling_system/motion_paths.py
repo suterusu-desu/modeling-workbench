@@ -1,0 +1,219 @@
+"""In-between poses built directly from two established poses: pace, path and coherent pieces.
+
+A blend shape moves every point along its straight chord from a reference pose to an end pose, all at the same pace.
+That is enough when nothing lies behind the moving surface. Where material passes over a convex obstacle (a lid over a
+round eye) the chord cuts into it, and keys fitted separately at intermediate phases plus correction fields stacked on
+top bend the in-between sections instead (an S across a moving band: sunk behind its edge, bulged at it). These
+operations construct in-between poses from the two end poses themselves:
+
+- `motion_pace`: when each point moves, measured as progress along its own chord in an existing motion, smoothed over
+  the surface and weighted by travel, so points that barely move take the pace of the material around them.
+- `path_positions`: where each point is at its pace: on its chord, or rolled about a hinge axis (angle and distance
+  interpolated, no sideways drift) where the material passes over a round obstacle.
+- `hinge_motion`: a part that must move as one piece (a flap swinging back about a corner) turns rigidly about a fixed
+  pivot by the best rotation between its two poses, carrying its non-rigid residual linearly.
+
+None of them fits a guide or judges appearance; both end poses are taken as established.
+"""
+import numpy as np
+
+
+def _pair(reference, end):
+    rest, final = np.asarray(reference, float), np.asarray(end, float)
+    if (rest.ndim != 2 or rest.shape[1:] != (3,) or rest.shape != final.shape or not len(rest)
+            or not np.isfinite(rest).all() or not np.isfinite(final).all()):
+        raise ValueError('Corresponding finite reference and end positions required')
+    return rest, final
+
+
+def _pace(pace, n):
+    a = np.asarray(pace, float)
+    if a.ndim not in (1, 2) or a.shape[-1] != n or not np.isfinite(a).all() or (a < 0).any() or (a > 1).any():
+        raise ValueError('Pace must be finite values in [0, 1], one per point (optionally per phase)')
+    return a
+
+
+def motion_pace(reference, end, samples, *, sigma, cutoff=None, travel_scale=None, minimum_travel=0.):
+    """Progress of every point along its own reference -> end chord in an existing motion, smoothed and monotone.
+
+    `samples` holds the existing motion's positions at increasing phases, shape (phases, points, 3); the first and last
+    phases are taken as 0 and 1. The raw pace of a point is the projection of its displacement onto its own chord,
+    divided by the chord length squared, clipped to [0, 1]. Each point's pace is then replaced by a Gaussian average
+    (`sigma`, neighbours within `cutoff`, default 3 sigma, found in the reference pose) in which every neighbour counts
+    with min(1, travel / travel_scale)^2: points that barely move take the pace of the material around them, and a
+    point whose own travel is below `minimum_travel` contributes nothing. travel_scale defaults to the 90th percentile
+    travel. The result is made monotone (running maximum over phases), with the first phase 0 and the last 1.
+    """
+    from scipy.sparse import coo_matrix
+    from scipy.spatial import cKDTree
+
+    rest, final = _pair(reference, end)
+    seq = np.asarray(samples, float)
+    if seq.ndim != 3 or seq.shape[1:] != rest.shape or len(seq) < 2 or not np.isfinite(seq).all():
+        raise ValueError('Samples must be finite positions of every point at two or more phases')
+    if not (np.isfinite(sigma) and sigma > 0) or (cutoff is not None and not (np.isfinite(cutoff) and cutoff > 0)):
+        raise ValueError('A positive smoothing sigma (and cutoff) is required')
+    if not (np.isfinite(minimum_travel) and minimum_travel >= 0):
+        raise ValueError('Minimum travel must be finite and nonnegative')
+    chord = final - rest; travel = np.linalg.norm(chord, axis=1); length2 = travel ** 2
+    moving = travel > max(minimum_travel, 1e-12)
+    raw = np.einsum('gnk,nk->gn', seq - rest, chord) / np.where(moving, length2, 1)
+    overshoot = int(np.count_nonzero(((raw < -1e-9) | (raw > 1 + 1e-9)) & moving))
+    raw = np.where(moving, np.clip(raw, 0, 1), 0.)
+    scale = float(travel_scale) if travel_scale is not None else float(np.quantile(travel[moving], .9)) if moving.any() else 1.
+    if not (np.isfinite(scale) and scale > 0):
+        raise ValueError('Travel scale must be positive')
+    weight = np.where(moving, np.minimum(1., travel / scale) ** 2, 0.)
+    reach = 3 * sigma if cutoff is None else float(cutoff)
+    pairs = cKDTree(rest).query_pairs(reach, output_type='ndarray')
+    i = np.r_[pairs[:, 0], pairs[:, 1], np.arange(len(rest))]; j = np.r_[pairs[:, 1], pairs[:, 0], np.arange(len(rest))]
+    kernel = np.exp(-.5 * (np.linalg.norm(rest[i] - rest[j], axis=1) / sigma) ** 2)
+    W = coo_matrix((kernel * weight[j], (i, j)), shape=(len(rest), len(rest))).tocsr()
+    total = np.asarray(W.sum(axis=1)).ravel(); covered = total > 1e-12
+    smoothed = np.empty_like(raw)
+    fallback = (raw * weight).sum(axis=1) / max(weight.sum(), 1e-12)
+    for g in range(len(raw)):
+        smoothed[g] = np.where(covered, (W @ raw[g]) / np.where(covered, total, 1), fallback[g])
+    monotone = np.maximum.accumulate(np.clip(smoothed, 0, 1), axis=0); monotone[0] = 0; monotone[-1] = 1
+    metrics = {'phases': int(len(seq)), 'points': int(len(rest)), 'moving_points': int(moving.sum()),
+               'uncovered_points': int((~covered).sum()), 'overshoot_samples_clipped': overshoot,
+               'travel_scale': scale, 'smoothing_change_max': float(np.abs(smoothed - raw).max()),
+               'monotone_change_max': float(np.abs(monotone - np.clip(smoothed, 0, 1)).max())}
+    return {'pace': monotone, 'raw_pace': raw, 'travel_weight': weight, 'public_metrics': metrics,
+            'objective': 'Projection of each point displacement on its own reference-end chord, travel-weighted Gaussian '
+                         'average over reference-pose neighbours, running maximum over phases',
+            'limits': 'Timing only: it keeps when the existing motion moves each region, not its path or shape, and no '
+                      'guide, contact or appearance qualification. Coupled attachments that follow their own schedule '
+                      'need their host to keep that schedule.'}
+
+
+def path_positions(reference, end, pace, *, pivot=None, axis=None, roll_weight=None):
+    """Positions at the given pace on clean paths between two established poses.
+
+    `pace` is one value in [0, 1] per point, or one row per phase. Without a pivot every point lies on its chord,
+    (1 - a) reference + a end. With a pivot and an `axis` the path rolls about that hinge line: the angle about the axis
+    and the distance from it are interpolated linearly and the position along it moves straight, so a band turning over
+    a round obstacle keeps its distance from the hinge between the two end values instead of cutting the chord through
+    the obstacle, and gains no sideways drift. With a pivot alone the direction from the pivot is interpolated on the
+    sphere (slerp); a great-circle route swings points off the central meridian sideways, so give the hinge axis when
+    the motion has one. `roll_weight` (one value in [0, 1] per point, default 1) blends the rolled path with the chord:
+    keep chords (0) for material beside the obstacle, where a roll about its centre swings it the wrong way. Pace 0 and
+    1 reproduce the two poses exactly.
+    """
+    rest, final = _pair(reference, end)
+    a = _pace(pace, len(rest)); single = a.ndim == 1; a = np.atleast_2d(a)
+    chord = (1 - a)[..., None] * rest + a[..., None] * final
+    if pivot is None:
+        if roll_weight is not None or axis is not None:
+            raise ValueError('A roll weight or axis needs a pivot')
+        out = chord; deviation = np.zeros(len(a)); inside = 0
+    else:
+        centre = np.asarray(pivot, float)
+        if centre.shape != (3,) or not np.isfinite(centre).all():
+            raise ValueError('A finite 3D pivot is required')
+        blend = np.ones(len(rest)) if roll_weight is None else np.asarray(roll_weight, float)
+        if blend.shape != (len(rest),) or not np.isfinite(blend).all() or (blend < 0).any() or (blend > 1).any():
+            raise ValueError('Roll weights must be one value in [0, 1] per point')
+        v0, v1 = rest - centre, final - centre
+        if axis is not None:
+            k = np.asarray(axis, float)
+            if k.shape != (3,) or not np.isfinite(k).all() or np.linalg.norm(k) < 1e-12:
+                raise ValueError('A finite nonzero hinge axis is required')
+            k = k / np.linalg.norm(k); h0, h1 = v0 @ k, v1 @ k
+            p0, p1 = v0 - h0[:, None] * k, v1 - h1[:, None] * k
+            r0, r1 = np.linalg.norm(p0, axis=1), np.linalg.norm(p1, axis=1)
+            degenerate = (r0 < 1e-12) | (r1 < 1e-12)
+            e = p0 / np.where(degenerate, 1, r0)[:, None]; f = np.cross(k, e)
+            turn = np.arctan2(np.sum(p1 * f, 1), np.sum(p1 * e, 1))
+            if np.any(~degenerate & (np.abs(turn) > np.pi - 1e-6)):
+                raise ValueError('A half turn about the axis has no unique roll; move the pivot')
+            phi = a * turn; radius = (1 - a) * r0 + a * r1; height = (1 - a) * h0 + a * h1
+            rolled = centre + height[..., None] * k + radius[..., None] * (np.cos(phi)[..., None] * e + np.sin(phi)[..., None] * f)
+        else:
+            r0, r1 = np.linalg.norm(v0, axis=1), np.linalg.norm(v1, axis=1)
+            degenerate = (r0 < 1e-12) | (r1 < 1e-12)
+            u0 = v0 / np.where(degenerate, 1, r0)[:, None]; u1 = v1 / np.where(degenerate, 1, r1)[:, None]
+            omega = np.arccos(np.clip((u0 * u1).sum(1), -1, 1))
+            if np.any(~degenerate & (omega > np.pi - 1e-6)):
+                raise ValueError('Opposite directions about the pivot have no unique roll; move the pivot')
+            so = np.sin(omega); straight = degenerate | (so < 1e-9); s = np.where(straight, 1, so)
+            c0 = np.where(straight, 1 - a, np.sin((1 - a) * omega) / s); c1 = np.where(straight, a, np.sin(a * omega) / s)
+            d = c0[..., None] * u0 + c1[..., None] * u1; d /= np.maximum(np.linalg.norm(d, axis=-1, keepdims=True), 1e-300)
+            rolled = centre + ((1 - a) * r0 + a * r1)[..., None] * d
+        rolled = np.where(degenerate[None, :, None], chord, rolled)
+        out = blend[None, :, None] * rolled + (1 - blend)[None, :, None] * chord
+        deviation = np.linalg.norm(out - chord, axis=-1).max(axis=1)
+        # chord points that come closer to the pivot (or hinge line) than both end poses: what the roll prevents
+        rel = chord - centre
+        near = np.linalg.norm(rel - (rel @ k)[..., None] * k, axis=-1) if axis is not None else np.linalg.norm(rel, axis=-1)
+        inside = int(np.count_nonzero(near < np.minimum(r0, r1)[None, :] - 1e-12))
+    metrics = {'phases': int(len(a)), 'points': int(len(rest)), 'max_deviation_from_chord_per_phase': deviation.tolist(),
+               'chord_points_closer_to_pivot_than_both_ends': inside}
+    return {'positions': out[0] if single else out, 'public_metrics': metrics,
+            'objective': 'Chord interpolation, or a roll about a hinge axis (angle, distance and axial position '
+                         'interpolated) or about a pivot (slerp), blended per point',
+            'limits': 'Rolling keeps each distance from the hinge between its two end values; it does not know the '
+                      "obstacle's actual surface, so check clearance against the real obstacle mesh. No guide, contact "
+                      'or appearance qualification.'}
+
+
+def hinge_motion(reference, end, members, pivot, pace, *, base=None, weights=None):
+    """Move a part as one rigid piece about a fixed pivot, then blend it into the surrounding motion.
+
+    The best rotation about `pivot` taking the `members`' reference positions to their end positions (Kabsch with the
+    pivot fixed, members weighted by travel) defines an axis and angle. At pace a every point turns by a times that
+    angle about the same axis through the pivot and carries a times its own residual (end minus the rotated reference),
+    so pace 0 and 1 reproduce both poses exactly and the piece keeps its shape in between as far as its two poses allow.
+    `pace` is one value per point, or one row per phase (usually one value for the whole piece). `weights` (one value
+    in [0, 1] per point) blend the hinged positions with `base` positions of the same shape (default: the chords): 1
+    inside the piece, falling to 0 where it joins material that moves differently.
+    """
+    rest, final = _pair(reference, end)
+    idx = np.asarray(members)
+    if idx.ndim != 1 or idx.dtype.kind not in 'iu' or len(idx) < 3 or idx.min() < 0 or idx.max() >= len(rest):
+        raise ValueError('At least three member indices of the supplied points are required')
+    centre = np.asarray(pivot, float)
+    if centre.shape != (3,) or not np.isfinite(centre).all():
+        raise ValueError('A finite 3D pivot is required')
+    a = _pace(pace, len(rest)); single = a.ndim == 1; a = np.atleast_2d(a)
+    X, Y = rest[idx] - centre, final[idx] - centre
+    w = np.linalg.norm(final[idx] - rest[idx], axis=1); w = w if w.sum() > 1e-12 else np.ones(len(idx))
+    H = (X * w[:, None]).T @ Y; U, S, Vt = np.linalg.svd(H)
+    D = np.diag([1, 1, np.sign(np.linalg.det(Vt.T @ U.T)) or 1.]); R = Vt.T @ D @ U.T
+    angle = float(np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1)))
+    if angle > 1e-12:
+        axis = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+        if np.linalg.norm(axis) < 1e-9:                                   # half turn: axis from the symmetric part
+            vals, vecs = np.linalg.eigh(R + R.T); axis = vecs[:, np.argmax(vals)]
+        axis = axis / np.linalg.norm(axis)
+    else:
+        axis = np.array([1., 0., 0.])
+    residual = final - (rest - centre) @ R.T - centre
+    v = rest - centre; kv = np.cross(axis, v); kd = v @ axis
+    out = np.empty((len(a), len(rest), 3))
+    for g in range(len(a)):                                                 # Rodrigues turn by pace * angle, per point
+        c, s = np.cos(a[g] * angle)[:, None], np.sin(a[g] * angle)[:, None]
+        out[g] = v * c + kv * s + axis[None] * kd[:, None] * (1 - c) + centre + a[g][:, None] * residual
+    if base is None:
+        base_arr = (1 - a)[..., None] * rest + a[..., None] * final
+    else:
+        base_arr = np.asarray(base, float)
+        base_arr = base_arr[None] if base_arr.ndim == 2 else base_arr
+        if base_arr.shape != out.shape or not np.isfinite(base_arr).all():
+            raise ValueError('Base positions must match the points (and phases)')
+    blend = np.ones(len(rest)) if weights is None else np.asarray(weights, float)
+    if blend.shape != (len(rest),) or not np.isfinite(blend).all() or (blend < 0).any() or (blend > 1).any():
+        raise ValueError('Weights must be one value in [0, 1] per point')
+    result = blend[None, :, None] * out + (1 - blend)[None, :, None] * base_arr
+    travel = np.linalg.norm(final[idx] - rest[idx], axis=1)
+    member_residual = np.linalg.norm(residual[idx], axis=1)
+    metrics = {'members': int(len(idx)), 'angle_degrees': float(np.degrees(angle)), 'axis': axis.tolist(),
+               'residual_rms': float(np.sqrt(np.mean(member_residual ** 2))), 'residual_max': float(member_residual.max()),
+               'member_travel_rms': float(np.sqrt(np.mean(travel ** 2))),
+               'rigid_share': float(1 - np.sqrt(np.mean(member_residual ** 2)) / max(np.sqrt(np.mean(travel ** 2)), 1e-300))}
+    return {'positions': result[0] if single else result, 'rotation': R, 'residual': residual, 'public_metrics': metrics,
+            'objective': 'Travel-weighted best rotation about the fixed pivot; pace-scaled turn plus pace-scaled residual, '
+                         'blended with the base motion',
+            'limits': 'A piece whose two poses are far from rigid (low rigid_share) is mostly carried by its residual, '
+                      'i.e. linearly. The members, pivot and blend weights are owner choices; no guide, contact or '
+                      'appearance qualification.'}

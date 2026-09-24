@@ -137,3 +137,11 @@ question; it still does not provide anatomical or whole-motion acceptance.
 ## Retain the limited result
 
 Save exact originals, scripts, graph/source pins, diagnostic parameters and revised artifacts privately. Keep numerical observations, visual judgment, changed mechanisms and causal uncertainty distinct. Use existing `record_outcome` and the [method integration procedure](method-integration.md) to link the diagnostic lesson and any unresolved character result. An improved surface plus a corrected cap can support a bounded trial while full profile, actual native fit, joins and motion remain unresolved. Source regression success does not close those judgments. Coordinate native changes and installation/operator pickup with the sole owner; this procedure does not reopen a completed tools prerequisite.
+
+## Bends of a moving band
+
+When the end poses look right and the in-between poses crease, cut each moving band with
+`section_turns(reference, poses, triangles, origin=..., normal=...)` on several planes along it: the same material is
+followed into every pose and inflections are counted per pose. An S across a band (turning one way above its edge and
+the other way at it) is a construction defect of the in-between, not of either end pose. The remedy is usually a clean
+path between the two poses rather than another fitted key; see [motion paths](motion-paths.md).

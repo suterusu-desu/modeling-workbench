@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from .construction_diagnostics import compare_bends, compare_stretch, local_reversals, sample_residuals
+from .construction_diagnostics import compare_bends, compare_stretch, local_reversals, sample_residuals, section_turns
 from .geometry import plane_sections, compare
 
 
@@ -195,3 +195,32 @@ class MaterialStretchTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class SectionTurnTests(unittest.TestCase):
+    def strip(self, nu=25, nx=4):
+        u, x = np.meshgrid(np.linspace(0, 1, nu), np.linspace(-.1, .1, nx))
+        rest = np.c_[x.ravel(), np.zeros(u.size), u.ravel()]
+        tri = []
+        for j in range(nx - 1):
+            for i in range(nu - 1):
+                a = j * nu + i; tri += [[a, a + 1, a + nu + 1], [a, a + nu + 1, a + nu]]
+        return rest, np.array(tri), u.ravel()
+
+    def test_rolled_band_keeps_its_turning_direction_and_an_s_adds_an_inflection(self):
+        rest, tri, u = self.strip()
+        arc = rest.copy(); angle = u * np.pi * .8; arc[:, 1] = -(1 - np.cos(angle)) / 2; arc[:, 2] = np.sin(angle) / 2
+        s_shape = rest.copy(); s_shape[:, 1] = .08 * np.sin(2 * np.pi * u)
+        result = section_turns(rest, np.stack([arc, s_shape]), tri, origin=[0., 0., 0.], normal=[1., 0., 0.])
+        self.assertEqual(result['sections'], 1); self.assertEqual(result['reference_inflections'], 0)
+        self.assertEqual(result['inflections_per_pose'][0], 0)
+        self.assertGreaterEqual(result['inflections_per_pose'][1], 1)
+        self.assertEqual(result['added_inflections_per_pose'], [0, result['inflections_per_pose'][1]])
+        self.assertEqual(result['section_points'].shape[0], 3)            # reference plus both poses, same material
+        np.testing.assert_allclose(result['section_points'][0][:, 0], 0, atol=1e-12)
+
+    def test_refuses_bad_plane(self):
+        rest, tri, _ = self.strip(5, 3)
+        with self.assertRaisesRegex(ValueError, 'nonzero normal'):
+            section_turns(rest, rest[None], tri, origin=[0, 0, 0], normal=[0, 0, 0])
+
