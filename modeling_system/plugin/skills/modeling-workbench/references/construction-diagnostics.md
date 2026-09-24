@@ -16,6 +16,17 @@ result = compare_bends(before_xyz, after_xyz, same_triangles,
 
 Supply integer vertex-index pairs; an absent edge refuses. The threshold is a diagnostic choice, not a universal crease limit. The paired objective arguments declare a comparable lower-is-better objective. Inspect its contradiction flag, local count/max/p95, tagged versus other edges, and worst added bends. A lower integral can coexist with more severe localized folds. Deliberate folds can also be valid: inspect identity references, exact sections and matched close/whole/profile views before judging form. Changing representation and support constraints together does not isolate either mechanism's effect.
 
+`worst_added` names the largest changes, and a surface that turns a long way on purpose (a closing lid's margin
+rolling under) fills it before a crease elsewhere shows. To see where bends are, pass `edge_values=True`: the result
+then carries NumPy arrays over every measured edge (`edges`, unsigned `before`/`after` and `before_signed`/
+`after_signed`). The signed angle is positive at a ridge and negative at a valley, relative to the side the triangle
+winding makes the normal point to, so it needs consistently wound triangles (inconsistent edges are not measured) and
+a declared normal side. Map `after_signed - before_signed` over a chart or a projection of the surface with
+`edge_values_at_vertices(edges, values, vertex_count)`, which gives each vertex the value of largest magnitude among
+its edges; count new valleys by chart region from the edge arrays themselves. Keep these arrays out of JSON reports.
+A per-vertex curvature proxy (the normal part of an umbrella Laplacian over squared edge length) mixes edge length
+into the bend and is not needed for this.
+
 Boundary, nonmanifold, inconsistently wound and explicit excluded edge counts remain visible. An empty measured domain returns null extrema, not proof of smoothness. Degenerate triangles refuse. `worst_added` returns at most 20 examples; `omitted_edges` reports the remaining measured domain. Full pinned arrays remain the source for further selection. Each helper limits inputs to 100,000 samples/triangles and returns an input-array revision; pin parameters and original source provenance alongside it. The revision does not certify live freshness or include authored parameter choices.
 
 An unwelded preview insert has a display perimeter. Identify it separately from real interior geometry; exclude a perimeter only for a declared diagnostic question, and review the actual eventual join. A continuous preview cannot establish native boundary continuity.

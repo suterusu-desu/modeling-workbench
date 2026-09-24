@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
-from .construction_diagnostics import compare_bends, compare_stretch, local_reversals, sample_residuals, section_turns
+from .construction_diagnostics import (compare_bends, compare_stretch, edge_values_at_vertices, local_reversals,
+                                       sample_residuals, section_turns)
 from .geometry import plane_sections, compare
 
 
@@ -94,6 +95,35 @@ class ConstructionDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result['omitted_samples'],37)
         self.assertTrue(sample_residuals(observed,observed.copy(),1e-6)['sampled_match'])
         self.assertIn('no graph completeness',result['interpretation'])
+
+    def test_edge_values_sign_valleys_and_ridges_against_the_winding_normal(self):
+        # Two triangles meeting along the y axis, wound so both normals are +z when flat.
+        flat = np.array([[0.,0,0],[0,1,0],[-1,.5,0],[1,.5,0]])
+        tri = np.array([[0,1,2],[1,0,3]])
+        valley, ridge = flat.copy(), flat.copy()
+        valley[[2,3],2] = 1.; ridge[[2,3],2] = -1.       # folded toward / away from the normal side
+        for bent, sign in ((valley,-1.),(ridge,1.)):
+            for order in (tri, tri[::-1]):               # the sign does not depend on which face comes first
+                r = compare_bends(flat,bent,order,tagged_edges=[(0,1)],edge_values=True)
+                ev = r['edge_values']
+                np.testing.assert_array_equal(ev['edges'],[[0,1]])
+                self.assertAlmostEqual(float(ev['after'][0]),90.)
+                self.assertAlmostEqual(float(ev['after_signed'][0]),sign*90.)
+                self.assertAlmostEqual(float(ev['before_signed'][0]),0.)
+                self.assertTrue(bool(ev['tagged'][0]))
+                self.assertAlmostEqual(r['after']['maximum'],90.)
+        plain = compare_bends(flat,valley,tri)
+        self.assertNotIn('edge_values',plain)
+        import json; json.dumps(plain)                  # the default report stays JSON
+        with self.assertRaises(ValueError): compare_bends(flat,valley,tri,edge_values=1)
+
+    def test_edge_values_at_vertices_keeps_the_largest_magnitude(self):
+        edges = np.array([[0,1],[1,2],[2,3]])
+        out = edge_values_at_vertices(edges,[5.,-7.,2.],5)
+        np.testing.assert_array_equal(out,[5.,-7.,-7.,2.,0.])
+        with self.assertRaises(ValueError): edge_values_at_vertices(edges,[1.,2.],5)
+        with self.assertRaises(ValueError): edge_values_at_vertices(edges,[1.,2.,3.],3)
+        with self.assertRaises(ValueError): edge_values_at_vertices(edges,[1.,np.nan,3.],5)
 
     def test_bends_report_unmeasured_nonmanifold_and_winding(self):
         co = np.array([[0.,0,0],[1,0,0],[0,1,0],[0,-1,0],[0,0,1]])

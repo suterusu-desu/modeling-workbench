@@ -47,13 +47,22 @@ def sample_residuals(expected, actual, tolerance, limit=12):
 
 
 def compare_bends(before, after, triangles, *, excluded_edges=(), tagged_edges=(),
-                  threshold_degrees=10., objective_before=None, objective_after=None, limit=12):
+                  threshold_degrees=10., objective_before=None, objective_after=None, limit=12,
+                  edge_values=False):
     """Compare shared-edge normal angles on an explicitly identical triangle chart.
 
     Edges are vertex-index pairs. Exclusions and tags are caller evidence, never
     inferred anatomy. Output includes aggregate tails and bounded worst deltas.
+    With `edge_values=True` the result also carries `edge_values`, NumPy arrays over
+    every measured edge (for maps and region counts, not for a JSON report): `edges`
+    (sorted vertex pairs), unsigned `before`/`after` angles, `before_signed`/
+    `after_signed` (degrees, positive where the surface turns away from its winding
+    normal side at the edge, a ridge; negative where it turns toward it, a valley)
+    and the `tagged` mask.
     """
     _limit(limit)
+    if type(edge_values) is not bool:
+        raise ValueError('edge_values must be True or False')
     before, after = _points(before), _points(after)
     tri = np.asarray(triangles)
     validate(dict(co=before, tri=tri))
@@ -116,7 +125,20 @@ def compare_bends(before, after, triangles, *, excluded_edges=(), tagged_edges=(
                          lower_is_better_declared=True,
                          improved_with_more_large_bends=bool(objective_after < objective_before and np.count_nonzero(new > threshold_degrees) > np.count_nonzero(old > threshold_degrees)))
     order = np.argsort(-(new - old), kind='stable')[:limit]
-    return dict(input_revision=_revision(before, after, tri), threshold_degrees=float(threshold_degrees),
+    values = None
+    if edge_values:
+        pairs = np.array([e for e, _, _ in edges], dtype=np.int64).reshape(-1, 2)
+        first = np.array([a for _, a, _ in edges], dtype=np.int64); second = np.array([b for _, _, b in edges], dtype=np.int64)
+        # the vertex of the second face that is not on the edge; with consistent winding its side of the
+        # first face's plane tells a valley (toward the normal) from a ridge (away from it)
+        opposite = tri[second].sum(1) - pairs.sum(1)
+        signed = []
+        for points, n in zip((before, after), normals):
+            side = np.einsum('ij,ij->i', n[first], points[opposite] - points[pairs[:, 0]]) if len(pairs) else np.zeros(0)
+            signed.append(np.where(side > 0, -1., 1.))
+        values = dict(edges=pairs, before=old, after=new, before_signed=old * signed[0], after_signed=new * signed[1],
+                      tagged=mask.copy())
+    result = dict(input_revision=_revision(before, after, tri), threshold_degrees=float(threshold_degrees),
                 measured_edges=len(edges), excluded_edge_counts=counts,
                 declared_tagged_edges=len(tagged), before=stats(old), after=stats(new),
                 tagged=dict(before=stats(old[mask]), after=stats(new[mask])),
@@ -125,6 +147,29 @@ def compare_bends(before, after, triangles, *, excluded_edges=(), tagged_edges=(
                                   delta=float(new[i]-old[i]), tagged=bool(mask[i])) for i in order],
                 omitted_edges=max(0, len(edges)-limit),
                 interpretation='Unsigned shared-triangle normal angles on this chart; no smoothness acceptance, intended-fold classification or causal attribution')
+    if values is not None:
+        result['edge_values'] = values
+    return result
+
+
+def edge_values_at_vertices(edges, values, vertex_count):
+    """Per-vertex value of largest magnitude among the edges at each vertex (0 where no measured edge).
+
+    Spreads per-edge values (for example `compare_bends(..., edge_values=True)`
+    signed angles or their change) onto vertices for a map; a crease line appears
+    on the vertices of the edges along it. Presentation only: a vertex map loses
+    which edge carried the value.
+    """
+    pairs = np.asarray(edges, dtype=np.int64); v = np.asarray(values, dtype=np.float64)
+    if pairs.ndim != 2 or pairs.shape[1:] != (2,) or v.shape != (len(pairs),) or not np.isfinite(v).all():
+        raise ValueError('Edges must be (N, 2) vertex pairs with one finite value each')
+    if type(vertex_count) is not int or vertex_count < 1 or (len(pairs) and (pairs.min() < 0 or pairs.max() >= vertex_count)):
+        raise ValueError('Edges must index the declared vertex count')
+    ends, both = pairs.ravel(), np.repeat(v, 2)
+    largest = np.zeros(vertex_count); np.maximum.at(largest, ends, np.abs(both))
+    out = np.zeros(vertex_count); hit = np.abs(both) == largest[ends]
+    out[ends[hit]] = both[hit]                              # ties of equal magnitude keep one of their values
+    return out
 
 
 def triangle_stretches(reference, deformed, triangles):
