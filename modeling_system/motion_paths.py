@@ -217,3 +217,57 @@ def hinge_motion(reference, end, members, pivot, pace, *, base=None, weights=Non
             'limits': 'A piece whose two poses are far from rigid (low rigid_share) is mostly carried by its residual, '
                       'i.e. linearly. The members, pivot and blend weights are owner choices; no guide, contact or '
                       'appearance qualification.'}
+
+
+def keep_clearance(positions, obstacle, centre, clearance, *, angular_radius_degrees=2., soft=0.):
+    """Keep moving points outside a star-shaped obstacle seen from `centre` (an eye from its middle).
+
+    The obstacle's outer envelope in a direction is its largest distance from the centre among obstacle points within
+    `angular_radius_degrees` of that direction (isotropic; choose it at least the obstacle's vertex spacing as seen
+    from the centre). A point closer to the centre than the envelope plus its `clearance` (one value per point or a
+    scalar; a negative value leaves the point alone) is moved outward along its own direction from the centre. With
+    `soft` > 0 the push ramps in smoothly over that width (none `soft` outside the limit, full `soft` inside it), so
+    pushed and unpushed neighbours join without a crease. Directions with no obstacle point nearby are left alone.
+    `envelope` returns the measured envelope distance per point (NaN where uncovered), so a caller can take each point's
+    clearance at its established poses (distance from the centre minus envelope) and require it in between.
+    """
+    from scipy.spatial import cKDTree
+
+    pts = np.asarray(positions, float); obs = np.asarray(obstacle, float); c = np.asarray(centre, float)
+    single = pts.ndim == 2; P = pts[None] if single else pts
+    if P.ndim != 3 or P.shape[-1] != 3 or not np.isfinite(P).all():
+        raise ValueError('Finite point positions (optionally per phase) are required')
+    if obs.ndim != 2 or obs.shape[1:] != (3,) or len(obs) < 4 or not np.isfinite(obs).all():
+        raise ValueError('At least four finite obstacle points are required')
+    if c.shape != (3,) or not np.isfinite(c).all():
+        raise ValueError('A finite 3D centre is required')
+    if not (np.isfinite(angular_radius_degrees) and 0 < angular_radius_degrees <= 30 and np.isfinite(soft) and soft >= 0):
+        raise ValueError('Require 0 < angular_radius_degrees <= 30 and soft >= 0')
+    need = np.broadcast_to(np.asarray(clearance, float), P.shape[1:2]).copy()
+    if not np.isfinite(need).all():
+        raise ValueError('Clearance must be finite')
+    vo = obs - c; ro = np.linalg.norm(vo, axis=1); keep = ro > 1e-12
+    tree = cKDTree(vo[keep] / ro[keep, None]); ro = ro[keep]
+    chord = 2 * np.sin(np.radians(angular_radius_degrees) / 2)
+    v = P - c; r = np.linalg.norm(v, axis=-1); u = v / np.maximum(r, 1e-300)[..., None]
+    env = np.full(r.shape, -np.inf)
+    for g in range(len(P)):
+        for k, hits in enumerate(tree.query_ball_point(u[g], chord)):
+            if hits: env[g, k] = ro[hits].max()
+    covered = np.isfinite(env) & (need[None] >= 0)
+    depth = np.where(covered, env + need[None] - r, -np.inf)                # > 0: inside the required distance
+    if soft > 0:
+        push = np.where(depth > soft, depth, np.where(depth > -soft, (depth + soft) ** 2 / (4 * soft), 0.))
+    else:
+        push = np.maximum(depth, 0.)
+    out = P + (push / np.maximum(r, 1e-300))[..., None] * v
+    metrics = {'phases': int(len(P)), 'points': int(P.shape[1]), 'pushed_per_phase': [int(k) for k in (push > 0).sum(axis=1)],
+               'max_push_per_phase': [float(m) for m in push.max(axis=1)], 'uncovered_points': int((~np.isfinite(env)).sum())}
+    envelope = np.where(np.isfinite(env), env, np.nan)                     # measured envelope distance per point
+    return {'positions': out[0] if single else out, 'push': push[0] if single else push,
+            'envelope': envelope[0] if single else envelope, 'public_metrics': metrics,
+            'objective': 'Radial distance from the centre kept at least the obstacle envelope plus clearance, with an '
+                         'optional C1 ramp',
+            'limits': 'Star-shaped obstacle seen from the centre; the angular radius is an owner choice; pushes are radial '
+                      'and per point, so check the result with section and stretch diagnostics and renders. No guide, '
+                      'contact certification or appearance qualification.'}

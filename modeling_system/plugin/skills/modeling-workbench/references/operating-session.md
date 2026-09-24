@@ -74,7 +74,10 @@ columns, output)` arranges the actual renders in a labeled grid, pins each sourc
 evidence and reports missing images or differing image sizes (an unmatched comparison) instead of hiding them;
 `review_sheets.rows_from_frames(frames, views=..., poses=..., states=...)` builds the rows from recorded frames.
 It arranges images only: look at every one, and keep the overlap view (character solid, guide wire) as the
-guide comparison.
+guide comparison. Blender's Workbench final render draws an object whose display type is Wire as a solid surface,
+so a guide set to Wire hides the character instead of overlapping it; render the guide's edges with a temporary
+Wireframe modifier (replace mode, a thickness well below the features being compared) and remove it afterwards,
+then check that the character actually shows between the wires before using the image.
 
 Read the exact review basis and inspect linked images before submitting:
 

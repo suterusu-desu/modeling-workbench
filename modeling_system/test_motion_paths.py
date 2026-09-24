@@ -1,7 +1,7 @@
 """In-between construction from two established poses: pace, rolled paths and rigid pieces (synthetic, no IO)."""
 import unittest
 import numpy as np
-from .motion_paths import motion_pace, path_positions, hinge_motion
+from .motion_paths import motion_pace, path_positions, hinge_motion, keep_clearance
 from .preparation import ARRAY_OPERATIONS
 
 
@@ -122,8 +122,44 @@ class HingeMotionTests(unittest.TestCase):
             hinge_motion(rest, rest + 1, np.arange(4), [0, 0, 0], np.zeros(len(rest)), weights=np.full(len(rest), 2.))
 
     def test_registered_as_array_preparation_operations(self):
-        for name in ('motion_pace', 'path_positions', 'hinge_motion'):
+        for name in ('motion_pace', 'path_positions', 'hinge_motion', 'keep_clearance'):
             self.assertIn(name, ARRAY_OPERATIONS)
+
+
+
+class ClearanceTests(unittest.TestCase):
+    def setUp(self):
+        u = np.random.default_rng(3).normal(size=(6000, 3)); self.sphere = u / np.linalg.norm(u, axis=1, keepdims=True)
+
+    def test_points_inside_are_pushed_out_along_their_direction_and_others_keep_their_bytes(self):
+        pts = np.array([[0, 0, .5], [0, 0, 1.2], [.6, .6, 0], [0, 0, .99]])
+        result = keep_clearance(pts, self.sphere, [0, 0, 0], .05, angular_radius_degrees=4.)
+        np.testing.assert_allclose(np.linalg.norm(result['positions'][[0, 2, 3]], axis=1), 1.05, atol=1e-9)
+        np.testing.assert_array_equal(result['positions'][1], pts[1])
+        np.testing.assert_allclose(np.cross(result['positions'][2], pts[2]), 0, atol=1e-12)     # radial push
+        self.assertEqual(result['public_metrics']['pushed_per_phase'], [3])
+        np.testing.assert_allclose(result['envelope'], 1, atol=1e-12)          # the unit sphere's measured envelope
+
+    def test_soft_ramp_is_continuous_and_negative_clearance_opts_out(self):
+        r = np.linspace(.95, 1.15, 81); pts = np.c_[np.zeros_like(r), np.zeros_like(r), r]
+        out = np.linalg.norm(keep_clearance(pts, self.sphere, [0, 0, 0], .05, angular_radius_degrees=4., soft=.02)['positions'], axis=1)
+        self.assertTrue(np.all(np.diff(out) >= -1e-12)); self.assertTrue(np.all(out >= 1.05 - 1e-12))
+        np.testing.assert_allclose(out[r >= 1.07 + 1e-9], r[r >= 1.07 + 1e-9])
+        skip = keep_clearance(pts, self.sphere, [0, 0, 0], -np.ones(len(r)), angular_radius_degrees=4.)['positions']
+        np.testing.assert_array_equal(skip, pts)
+
+    def test_directions_the_obstacle_does_not_cover_are_left_alone(self):
+        cap = self.sphere[self.sphere[:, 2] > .5]
+        pts = np.array([[0, 0, .5], [0, 0, -.5]])
+        result = keep_clearance(pts, cap, [0, 0, 0], .0, angular_radius_degrees=4.)
+        self.assertGreater(np.linalg.norm(result['positions'][0]), .99); np.testing.assert_array_equal(result['positions'][1], pts[1])
+        self.assertEqual(result['public_metrics']['uncovered_points'], 1); self.assertTrue(np.isnan(result['envelope'][1]))
+
+    def test_refuses_bad_inputs(self):
+        with self.assertRaisesRegex(ValueError, 'four finite obstacle'):
+            keep_clearance(np.zeros((1, 3)), np.zeros((2, 3)), [0, 0, 0], .1)
+        with self.assertRaisesRegex(ValueError, 'angular_radius'):
+            keep_clearance(np.zeros((1, 3)), self.sphere, [0, 0, 0], .1, angular_radius_degrees=0)
 
 
 if __name__ == '__main__':

@@ -59,6 +59,9 @@ back at a corner). Per-point paths shear such a part into streaks or a flap, and
 displacement but cannot rotate material, so spreading a large swing with it creases the corner. Pick the members from
 the part's closed-pose travel, pivot it where it stays attached (the corner), and blend it over a band wide enough that
 the joining material bends rather than folds; check with `section_turns`, `compare_stretch` and matched renders.
+Read `rigid_share` before relying on the turn: in real use a lid's outer crescent that tucks back in the closed pose
+had a share of about 0.05, a slide rather than a swing, and the hinge then mostly gave that part one shared pace
+(which removed shear streaks) on near-straight paths. Keep the part's blend away from rows an attachment follows.
 
 ## Measure the bend of a moving band
 
@@ -68,3 +71,18 @@ window=3)` cuts the reference surface with a plane, follows the same material in
 obstacle keeps its turning direction; an S adds inflections. Compare candidates on the same planes (several along the
 band), and read `section_points` to plot the sections. Deliberate creases and folds also turn: counts are diagnostic
 choices, not an approval.
+
+## Keep the moving surface outside the obstacle
+
+`keep_clearance(positions, obstacle, centre, clearance, angular_radius_degrees=2., soft=0.)` keeps points (one pose or
+one row per phase) outside a star-shaped obstacle seen from `centre`: its envelope in each direction is the largest
+obstacle distance within the angular radius, and a point closer than envelope plus its `clearance` moves outward along
+its own direction, with an optional smooth ramp (`soft`) so pushed and unpushed neighbours join without a crease. The
+result's `envelope` gives each point's measured envelope, so a caller can take the clearance a point has at its two
+established poses and require the smaller one in between. Moving obstacles (an eye that turns during a blink) should
+be sampled at the same phase as the surface. It is not a contact certification: check sections, stretch and renders.
+
+Clearance fixes penetration, not every gap that shows the obstacle. In real use, eye visible at a lid corner came from
+the opening's own end staying open while the rims' paces differed, not from the lid passing through the eye: measure
+the gap between the two rims near the corner through the motion before choosing between a clearance push and a
+timing change (a pace floor that closes the corner first).
