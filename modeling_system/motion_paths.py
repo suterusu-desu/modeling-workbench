@@ -12,6 +12,8 @@ operations construct in-between poses from the two end poses themselves:
   interpolated, no sideways drift) where the material passes over a round obstacle.
 - `hinge_motion`: a part that must move as one piece (a flap swinging back about a corner) turns rigidly about a fixed
   pivot by the best rotation between its two poses, carrying its non-rigid residual linearly.
+- `keep_clearance` and `end_clearance`: points stay outside an obstacle behind them (an eye behind a lid) by at least
+  the clearance they have in their two poses, capped at the margin that matters, with a smooth envelope and push.
 
 None of them fits a guide or judges appearance; both end poses are taken as established.
 """
@@ -219,20 +221,51 @@ def hinge_motion(reference, end, members, pivot, pace, *, base=None, weights=Non
                       'appearance qualification.'}
 
 
-def keep_clearance(positions, obstacle, centre, clearance, *, angular_radius_degrees=2., soft=0.):
-    """Keep moving points outside a star-shaped obstacle seen from `centre` (an eye from its middle).
-
-    The obstacle's outer envelope in a direction is its largest distance from the centre among obstacle points within
-    `angular_radius_degrees` of that direction (isotropic; choose it at least the obstacle's vertex spacing as seen
-    from the centre). A point closer to the centre than the envelope plus its `clearance` (one value per point or a
-    scalar; a negative value leaves the point alone) is moved outward along its own direction from the centre. With
-    `soft` > 0 the push ramps in smoothly over that width (none `soft` outside the limit, full `soft` inside it), so
-    pushed and unpushed neighbours join without a crease. Directions with no obstacle point nearby are left alone.
-    `envelope` returns the measured envelope distance per point (NaN where uncovered), so a caller can take each point's
-    clearance at its established poses (distance from the centre minus envelope) and require it in between.
-    """
+def _envelope(directions, obstacle, centre, angular_radius_degrees, envelope):
+    """Obstacle envelope distance per unit direction (NaN where uncovered) and a coverage fade in [0, 1]."""
     from scipy.spatial import cKDTree
 
+    if envelope not in ('smooth', 'max'):
+        raise ValueError("Envelope must be 'smooth' or 'max'")
+    vo = obstacle - centre; ro = np.linalg.norm(vo, axis=1); keep = ro > 1e-12
+    uo = vo[keep] / ro[keep, None]; ro = ro[keep]; tree = cKDTree(uo)
+    chord = 2 * np.sin(np.radians(angular_radius_degrees) / 2)
+    env = np.full(len(directions), np.nan); fade = np.zeros(len(directions))
+    if envelope == 'max':
+        for k, hits in enumerate(tree.query_ball_point(directions, chord)):
+            if hits: env[k] = ro[hits].max(); fade[k] = 1.
+        return env, fade
+    top = ro.max()
+
+    def sums(u, skip_self=False):
+        m = cKDTree(u).sparse_distance_matrix(tree, chord, output_type='coo_matrix')
+        w = (1 - (m.data / chord) ** 2) ** 3                               # compact C2 kernel over the cone
+        if skip_self: w = np.where(m.row == m.col, 0., w)
+        return np.bincount(m.row, w, len(u)), np.bincount(m.row, w * (ro[m.col] / top) ** 16, len(u))
+
+    reference = float(np.median(sums(uo, skip_self=True)[0]))              # the obstacle's own interior coverage
+    S, M = sums(directions); ok = S > 1e-12
+    env[ok] = top * (M[ok] / S[ok]) ** (1 / 16)                            # weighted power mean: a smooth near-maximum
+    t = np.clip(S / max(.25 * reference, 1e-300), 0, 1); fade = t * t * (3 - 2 * t)
+    return env, fade
+
+
+def keep_clearance(positions, obstacle, centre, clearance, *, angular_radius_degrees=2., soft=0., envelope='smooth'):
+    """Keep moving points outside a star-shaped obstacle seen from `centre` (an eye from its middle).
+
+    The obstacle's outer envelope in a direction is measured from the obstacle points within `angular_radius_degrees`
+    of that direction (isotropic; choose it at least twice the obstacle's vertex spacing as seen from the centre). With
+    `envelope='smooth'` (default) it is a weighted power mean (p = 16, a smooth near-maximum) of their distances under a
+    compact C2 kernel, so it varies smoothly with direction, and pushes fade out smoothly where the obstacle's coverage
+    (kernel sum) falls below a quarter of its interior value, at its edge. `envelope='max'` takes the largest distance,
+    which steps whenever an obstacle point enters or leaves the cone: pushes then step across the surface too, which in
+    real use rippled lid skin pressed toward an eye. A point closer to the centre than the envelope plus its
+    `clearance` (one value per point or a scalar; a negative value leaves the point alone) moves outward along its own
+    direction from the centre. With `soft` > 0 the push ramps in smoothly over that width (none `soft` outside the
+    limit, full `soft` inside it), so pushed and unpushed neighbours join without a crease. Directions with no obstacle
+    point nearby are left alone. `envelope` in the result is the measured envelope distance per point (NaN where
+    uncovered); `end_clearance` turns it into the clearance to keep between two established poses.
+    """
     pts = np.asarray(positions, float); obs = np.asarray(obstacle, float); c = np.asarray(centre, float)
     single = pts.ndim == 2; P = pts[None] if single else pts
     if P.ndim != 3 or P.shape[-1] != 3 or not np.isfinite(P).all():
@@ -246,28 +279,58 @@ def keep_clearance(positions, obstacle, centre, clearance, *, angular_radius_deg
     need = np.broadcast_to(np.asarray(clearance, float), P.shape[1:2]).copy()
     if not np.isfinite(need).all():
         raise ValueError('Clearance must be finite')
-    vo = obs - c; ro = np.linalg.norm(vo, axis=1); keep = ro > 1e-12
-    tree = cKDTree(vo[keep] / ro[keep, None]); ro = ro[keep]
-    chord = 2 * np.sin(np.radians(angular_radius_degrees) / 2)
     v = P - c; r = np.linalg.norm(v, axis=-1); u = v / np.maximum(r, 1e-300)[..., None]
-    env = np.full(r.shape, -np.inf)
+    env = np.full(r.shape, np.nan); fade = np.zeros(r.shape)
     for g in range(len(P)):
-        for k, hits in enumerate(tree.query_ball_point(u[g], chord)):
-            if hits: env[g, k] = ro[hits].max()
+        env[g], fade[g] = _envelope(u[g], obs, c, angular_radius_degrees, envelope)
     covered = np.isfinite(env) & (need[None] >= 0)
-    depth = np.where(covered, env + need[None] - r, -np.inf)                # > 0: inside the required distance
+    depth = np.where(covered, np.nan_to_num(env) + need[None] - r, -np.inf)  # > 0: inside the required distance
     if soft > 0:
         push = np.where(depth > soft, depth, np.where(depth > -soft, (depth + soft) ** 2 / (4 * soft), 0.))
     else:
         push = np.maximum(depth, 0.)
+    push = push * fade
     out = P + (push / np.maximum(r, 1e-300))[..., None] * v
-    metrics = {'phases': int(len(P)), 'points': int(P.shape[1]), 'pushed_per_phase': [int(k) for k in (push > 0).sum(axis=1)],
+    metrics = {'phases': int(len(P)), 'points': int(P.shape[1]), 'envelope': envelope,
+               'pushed_per_phase': [int(k) for k in (push > 0).sum(axis=1)],
                'max_push_per_phase': [float(m) for m in push.max(axis=1)], 'uncovered_points': int((~np.isfinite(env)).sum())}
-    envelope = np.where(np.isfinite(env), env, np.nan)                     # measured envelope distance per point
     return {'positions': out[0] if single else out, 'push': push[0] if single else push,
-            'envelope': envelope[0] if single else envelope, 'public_metrics': metrics,
+            'envelope': env[0] if single else env, 'public_metrics': metrics,
             'objective': 'Radial distance from the centre kept at least the obstacle envelope plus clearance, with an '
                          'optional C1 ramp',
             'limits': 'Star-shaped obstacle seen from the centre; the angular radius is an owner choice; pushes are radial '
                       'and per point, so check the result with section and stretch diagnostics and renders. No guide, '
                       'contact certification or appearance qualification.'}
+
+
+def end_clearance(reference, end, obstacle_reference, obstacle_end, centre, *, cap=None, angular_radius_degrees=2.,
+                  envelope='smooth'):
+    """The clearance each point should keep between two established poses, for `keep_clearance`.
+
+    A point's clearance in a pose is its distance from `centre` minus the obstacle envelope in its direction (the
+    obstacle sampled in that pose). The requirement is the smaller of its two clearances, capped at `cap`; a point
+    inside the envelope or uncovered in either pose gets -1 (left alone). Cap it at the margin that matters (for a lid,
+    about the smallest clearance of the rows that ride on the eye): uncapped, material far from the obstacle has to
+    keep its whole end distance, so it is pushed wherever its chord dips toward the centre or the envelope estimate
+    varies, which in real use wrinkled the skin beside an eye corner that never came near the eye.
+    """
+    rest, final = _pair(reference, end)
+    if cap is not None and not (np.isfinite(cap) and cap >= 0):
+        raise ValueError('The cap must be finite and nonnegative')
+    k = dict(angular_radius_degrees=angular_radius_degrees, envelope=envelope)
+    env0 = keep_clearance(rest, obstacle_reference, centre, -1., **k)['envelope']
+    env1 = keep_clearance(final, obstacle_end, centre, -1., **k)['envelope']
+    c = np.asarray(centre, float)
+    c0 = np.linalg.norm(rest - c, axis=1) - env0; c1 = np.linalg.norm(final - c, axis=1) - env1
+    ok = np.isfinite(c0) & np.isfinite(c1) & (c0 > 0) & (c1 > 0)
+    need = np.minimum(np.nan_to_num(c0), np.nan_to_num(c1))
+    capped = int(np.count_nonzero(ok & (need > cap))) if cap is not None else 0
+    if cap is not None: need = np.minimum(need, cap)
+    need = np.where(ok, need, -1.)
+    metrics = {'points': int(len(rest)), 'required': int(ok.sum()), 'capped': capped, 'cap': cap, 'envelope': envelope,
+               'inside_or_uncovered': int((~ok).sum()),
+               'required_quantiles': [float(q) for q in np.quantile(need[ok], [.1, .5, .9])] if ok.any() else []}
+    return {'clearance': need, 'reference_clearance': c0, 'end_clearance': c1, 'public_metrics': metrics,
+            'objective': "Smaller of each point's clearances in its two established poses, capped",
+            'limits': 'The cap is an owner choice about the margin that matters; envelopes are measured as in '
+                      'keep_clearance. No contact certification or appearance qualification.'}

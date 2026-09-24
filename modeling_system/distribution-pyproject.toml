@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modeling-workbench"
-version = "0.2.49"
+version = "0.2.50"
 description = "Numerical scene reasoning and exact-view character modeling workflows"
 requires-python = ">=3.12"
 dependencies = ["anyio>=4,<5", "mcp>=2.2,<3", "numpy>=2,<3", "scipy>=1.16,<2", "Pillow>=12,<13", "imageio-ffmpeg>=0.6,<1"]

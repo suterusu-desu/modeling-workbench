@@ -74,15 +74,28 @@ choices, not an approval.
 
 ## Keep the moving surface outside the obstacle
 
-`keep_clearance(positions, obstacle, centre, clearance, angular_radius_degrees=2., soft=0.)` keeps points (one pose or
-one row per phase) outside a star-shaped obstacle seen from `centre`: its envelope in each direction is the largest
-obstacle distance within the angular radius, and a point closer than envelope plus its `clearance` moves outward along
-its own direction, with an optional smooth ramp (`soft`) so pushed and unpushed neighbours join without a crease. The
-result's `envelope` gives each point's measured envelope, so a caller can take the clearance a point has at its two
-established poses and require the smaller one in between. Moving obstacles (an eye that turns during a blink) should
-be sampled at the same phase as the surface. It is not a contact certification: check sections, stretch and renders.
+`keep_clearance(positions, obstacle, centre, clearance, angular_radius_degrees=2., soft=0., envelope='smooth')` keeps
+points (one pose or one row per phase) outside a star-shaped obstacle seen from `centre`: a point closer than the
+obstacle's envelope in its direction plus its `clearance` moves outward along its own direction, with an optional smooth
+ramp (`soft`) so pushed and unpushed neighbours join without a crease. The envelope is measured from the obstacle points
+within the angular radius (at least twice their spacing as seen from the centre). The default `smooth` envelope is a
+kernel-weighted near-maximum that varies smoothly with direction, and pushes fade out smoothly at the obstacle's edge.
+`envelope='max'` (the largest distance in the cone, the 0.2.49 behaviour) steps whenever an obstacle point enters or
+leaves the cone and the pushes step with it: in real use that rippled lid skin into fine parallel wrinkles. The result's
+`envelope` gives each point's measured envelope. Moving obstacles (an eye that turns during a blink) should be sampled
+at the same phase as the surface.
 
-Clearance fixes penetration, not every gap that shows the obstacle. In real use, eye visible at a lid corner came from
-the opening's own end staying open while the rims' paces differed, not from the lid passing through the eye: measure
-the gap between the two rims near the corner through the motion before choosing between a clearance push and a
-timing change (a pace floor that closes the corner first).
+`end_clearance(reference, end, obstacle_reference, obstacle_end, centre, cap=None, angular_radius_degrees=2.,
+envelope='smooth')` gives each point the clearance to keep between two established poses: the smaller of its clearances
+in the two poses (the obstacle sampled in each), capped at `cap`, and -1 (left alone) where either pose is inside the
+envelope or uncovered. Cap it at the margin that matters, for a lid about the smallest clearance of the rows that ride
+on the eye. Uncapped, material far from the obstacle has to keep its whole end distance and is pushed sideways wherever
+its chord dips toward the centre or the envelope estimate varies: in real use the skin beside an eye's outer corner,
+which never came near the eye, was pushed and wrinkled at the end of the blink. Capping at just under the rim rows'
+smallest clearance removed the wrinkles, and a screen with the eye drawn showed it did not let the eye through.
+
+Clearance is not a contact certification: check sections, stretch and renders with the obstacle drawn (a view without
+it cannot show the obstacle coming through). It also fixes penetration, not every gap that shows the obstacle. In real
+use, eye visible at a lid corner came from the opening's own end staying open while the rims' paces differed, not from
+the lid passing through the eye: measure the gap between the two rims near the corner through the motion before choosing
+between a clearance push and a timing change (a pace floor that closes the corner first).

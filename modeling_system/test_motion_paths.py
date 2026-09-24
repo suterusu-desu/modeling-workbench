@@ -1,7 +1,7 @@
 """In-between construction from two established poses: pace, rolled paths and rigid pieces (synthetic, no IO)."""
 import unittest
 import numpy as np
-from .motion_paths import motion_pace, path_positions, hinge_motion, keep_clearance
+from .motion_paths import motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance
 from .preparation import ARRAY_OPERATIONS
 
 
@@ -122,44 +122,106 @@ class HingeMotionTests(unittest.TestCase):
             hinge_motion(rest, rest + 1, np.arange(4), [0, 0, 0], np.zeros(len(rest)), weights=np.full(len(rest), 2.))
 
     def test_registered_as_array_preparation_operations(self):
-        for name in ('motion_pace', 'path_positions', 'hinge_motion', 'keep_clearance'):
+        for name in ('motion_pace', 'path_positions', 'hinge_motion', 'keep_clearance', 'end_clearance'):
             self.assertIn(name, ARRAY_OPERATIONS)
 
 
 
+def fibonacci_sphere(n):
+    k = np.arange(n) + .5; z = 1 - 2 * k / n; t = np.pi * (1 + 5 ** .5) * k; s = np.sqrt(1 - z * z)
+    return np.c_[s * np.cos(t), s * np.sin(t), z]
+
+
+def arc(start_deg, stop_deg, n, radius=1.):
+    """Points in the x-z plane at the given angles from +z towards +x."""
+    a = np.radians(np.linspace(start_deg, stop_deg, n))
+    return radius * np.c_[np.sin(a), np.zeros(n), np.cos(a)]
+
+
 class ClearanceTests(unittest.TestCase):
     def setUp(self):
-        u = np.random.default_rng(3).normal(size=(6000, 3)); self.sphere = u / np.linalg.norm(u, axis=1, keepdims=True)
+        self.sphere = fibonacci_sphere(6000)
 
     def test_points_inside_are_pushed_out_along_their_direction_and_others_keep_their_bytes(self):
         pts = np.array([[0, 0, .5], [0, 0, 1.2], [.6, .6, 0], [0, 0, .99]])
-        result = keep_clearance(pts, self.sphere, [0, 0, 0], .05, angular_radius_degrees=4.)
-        np.testing.assert_allclose(np.linalg.norm(result['positions'][[0, 2, 3]], axis=1), 1.05, atol=1e-9)
-        np.testing.assert_array_equal(result['positions'][1], pts[1])
-        np.testing.assert_allclose(np.cross(result['positions'][2], pts[2]), 0, atol=1e-12)     # radial push
-        self.assertEqual(result['public_metrics']['pushed_per_phase'], [3])
-        np.testing.assert_allclose(result['envelope'], 1, atol=1e-12)          # the unit sphere's measured envelope
+        for envelope in ('smooth', 'max'):
+            with self.subTest(envelope=envelope):
+                result = keep_clearance(pts, self.sphere, [0, 0, 0], .05, angular_radius_degrees=4., envelope=envelope)
+                np.testing.assert_allclose(np.linalg.norm(result['positions'][[0, 2, 3]], axis=1), 1.05, atol=1e-9)
+                np.testing.assert_array_equal(result['positions'][1], pts[1])
+                np.testing.assert_allclose(np.cross(result['positions'][2], pts[2]), 0, atol=1e-12)     # radial push
+                self.assertEqual(result['public_metrics']['pushed_per_phase'], [3])
+                np.testing.assert_allclose(result['envelope'], 1, atol=1e-12)  # the unit sphere's measured envelope
 
     def test_soft_ramp_is_continuous_and_negative_clearance_opts_out(self):
         r = np.linspace(.95, 1.15, 81); pts = np.c_[np.zeros_like(r), np.zeros_like(r), r]
-        out = np.linalg.norm(keep_clearance(pts, self.sphere, [0, 0, 0], .05, angular_radius_degrees=4., soft=.02)['positions'], axis=1)
-        self.assertTrue(np.all(np.diff(out) >= -1e-12)); self.assertTrue(np.all(out >= 1.05 - 1e-12))
-        np.testing.assert_allclose(out[r >= 1.07 + 1e-9], r[r >= 1.07 + 1e-9])
-        skip = keep_clearance(pts, self.sphere, [0, 0, 0], -np.ones(len(r)), angular_radius_degrees=4.)['positions']
-        np.testing.assert_array_equal(skip, pts)
+        for envelope in ('smooth', 'max'):
+            with self.subTest(envelope=envelope):
+                out = np.linalg.norm(keep_clearance(pts, self.sphere, [0, 0, 0], .05, angular_radius_degrees=4., soft=.02,
+                                                    envelope=envelope)['positions'], axis=1)
+                self.assertTrue(np.all(np.diff(out) >= -1e-12)); self.assertTrue(np.all(out >= 1.05 - 1e-12))
+                np.testing.assert_allclose(out[r >= 1.07 + 1e-9], r[r >= 1.07 + 1e-9])
+                skip = keep_clearance(pts, self.sphere, [0, 0, 0], -np.ones(len(r)), angular_radius_degrees=4.,
+                                      envelope=envelope)['positions']
+                np.testing.assert_array_equal(skip, pts)
 
     def test_directions_the_obstacle_does_not_cover_are_left_alone(self):
         cap = self.sphere[self.sphere[:, 2] > .5]
         pts = np.array([[0, 0, .5], [0, 0, -.5]])
-        result = keep_clearance(pts, cap, [0, 0, 0], .0, angular_radius_degrees=4.)
-        self.assertGreater(np.linalg.norm(result['positions'][0]), .99); np.testing.assert_array_equal(result['positions'][1], pts[1])
-        self.assertEqual(result['public_metrics']['uncovered_points'], 1); self.assertTrue(np.isnan(result['envelope'][1]))
+        for envelope in ('smooth', 'max'):
+            with self.subTest(envelope=envelope):
+                result = keep_clearance(pts, cap, [0, 0, 0], .0, angular_radius_degrees=4., envelope=envelope)
+                self.assertGreater(np.linalg.norm(result['positions'][0]), .99)
+                np.testing.assert_array_equal(result['positions'][1], pts[1])
+                self.assertEqual(result['public_metrics']['uncovered_points'], 1); self.assertTrue(np.isnan(result['envelope'][1]))
+
+    def test_smooth_envelope_has_no_steps_where_the_maximum_jumps(self):
+        # A lumpy obstacle: the largest distance in a cone jumps as its points enter and leave; pushes follow the jumps.
+        lumpy = self.sphere * (1 + .02 * np.random.default_rng(5).uniform(-1, 1, len(self.sphere)))[:, None]
+        pts = arc(-10, 10, 4001, .9)                                        # inside it: every point is pushed
+        steps = {}
+        for envelope in ('smooth', 'max'):
+            out = keep_clearance(pts, lumpy, [0, 0, 0], .01, angular_radius_degrees=4., envelope=envelope)
+            steps[envelope] = np.abs(np.diff(out['envelope'])).max()
+            self.assertEqual(out['public_metrics']['pushed_per_phase'], [len(pts)])
+        self.assertGreater(steps['max'], 2e-3)                              # a visible step at this sampling
+        self.assertLess(steps['smooth'], 2e-4)                              # continuous: tiny change per .005 degree
+
+    def test_smooth_pushes_fade_out_continuously_at_the_obstacles_edge(self):
+        cap = self.sphere[self.sphere[:, 2] > np.cos(np.radians(30))]       # a 30-degree cap of the unit sphere
+        steps = {}
+        for n in (2001, 4001):                                              # the same crossing of its edge, twice as fine
+            pts = arc(20, 40, n, .9)
+            push = {e: keep_clearance(pts, cap, [0, 0, 0], .05, angular_radius_degrees=4., envelope=e)['push'] for e in ('smooth', 'max')}
+            self.assertAlmostEqual(push['smooth'][0], .15, places=9); self.assertEqual(push['smooth'][-1], 0.)
+            steps[n] = {e: np.abs(np.diff(v)).max() for e, v in push.items()}
+        self.assertLess(steps[2001]['smooth'], .01)                          # fades over the kernel's reach
+        self.assertLess(steps[4001]['smooth'], .6 * steps[2001]['smooth'])  # continuous: finer sampling, smaller steps
+        self.assertGreater(min(steps[2001]['max'], steps[4001]['max']), .1)  # the maximum drops the whole push at once
+
+    def test_end_clearance_is_the_smaller_capped_end_value_and_skips_inside_or_uncovered(self):
+        moved = self.sphere + [0, 0, .02]                                    # the obstacle moves between the poses
+        rest = np.array([[0, 0, 1.03], [0, 0, 1.2], [0, 0, .9], [0, 0, -1.3]])
+        end = np.array([[0, 0, 1.06], [0, 0, 1.1], [0, 0, 1.1], [0, 0, -1.3]])
+        cap_half = self.sphere[self.sphere[:, 2] > 0]
+        out = end_clearance(rest, end, cap_half, cap_half + [0, 0, .02], [0, 0, 0], angular_radius_degrees=4.)
+        np.testing.assert_allclose(out['reference_clearance'][:3], [.03, .2, -.1], atol=1e-9)
+        np.testing.assert_allclose(out['end_clearance'][:3], [.04, .08, .08], atol=1e-3)
+        np.testing.assert_allclose(out['clearance'][:2], [.03, .08], atol=1e-3)
+        self.assertEqual(list(out['clearance'][2:]), [-1., -1.])            # inside at rest; uncovered
+        capped = end_clearance(rest, end, self.sphere, moved, [0, 0, 0], cap=.05, angular_radius_degrees=4.)
+        np.testing.assert_allclose(capped['clearance'][:2], [.03, .05], atol=1e-3)
+        self.assertEqual(capped['public_metrics']['capped'], 2)             # the far points keep only the margin
+        with self.assertRaisesRegex(ValueError, 'cap must'):
+            end_clearance(rest, end, self.sphere, moved, [0, 0, 0], cap=-1.)
 
     def test_refuses_bad_inputs(self):
         with self.assertRaisesRegex(ValueError, 'four finite obstacle'):
             keep_clearance(np.zeros((1, 3)), np.zeros((2, 3)), [0, 0, 0], .1)
         with self.assertRaisesRegex(ValueError, 'angular_radius'):
             keep_clearance(np.zeros((1, 3)), self.sphere, [0, 0, 0], .1, angular_radius_degrees=0)
+        with self.assertRaisesRegex(ValueError, "Envelope must"):
+            keep_clearance(np.ones((1, 3)), self.sphere, [0, 0, 0], .1, envelope='mean')
 
 
 if __name__ == '__main__':
