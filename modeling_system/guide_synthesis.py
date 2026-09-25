@@ -120,12 +120,18 @@ def remove_thin_relief(depth, *, size, front='min'):
             'limits': 'Morphological: removes every thin forward part, wanted or not; it does not know what a lash is.'}
 
 
-def stationary_offset(target, source, support, *, window, cell, stride=4, smoothing=1e-3, max_samples=6000):
+def stationary_offset(target, source, support, *, window, cell, stride=4, smoothing=1e-3, max_samples=6000, trim=None,
+                      trim_floor=0., trim_rounds=4):
     """Smooth offset field that makes `source` match `target` where the surface is known not to move.
 
     Fits a smoothed thin-plate spline to (target - source) on `support` cells (every `stride`-th), and evaluates it
     everywhere. Use it to remove the smooth depth offsets between generator runs (support: skin the pose leaves still)
     or a generator's whole-area shift. `smoothing` is per sample, in squared depth units.
+
+    With `trim` (a multiple of the robust spread), the fit is repeated up to `trim_rounds` times on the support cells
+    whose residual lies within max(trim * 1.4826 * MAD, trim_floor) of the median residual, so parts of the declared
+    support that moved after all leave it (a cell can come back when a later fit explains it). `support_used` is the
+    support of the returned offset.
     """
     from scipy.interpolate import RBFInterpolator
     window, cell, shape = _window(window, cell)
@@ -135,24 +141,44 @@ def stationary_offset(target, source, support, *, window, cell, stride=4, smooth
         raise ValueError('A boolean support map of the chart shape is required')
     if type(stride) is not int or stride < 1 or not (np.isfinite(smoothing) and smoothing >= 0):
         raise ValueError('Positive integer stride and nonnegative smoothing required')
+    if trim is not None and not (np.isfinite(trim) and trim > 0 and np.isfinite(trim_floor) and trim_floor >= 0
+                                 and type(trim_rounds) is int and trim_rounds >= 1):
+        raise ValueError('A positive trim, a nonnegative trim_floor and an integer trim_rounds >= 1 required')
     A, B = _grid(window, cell, shape)
     ok = support & np.isfinite(target) & np.isfinite(source)
     grid = np.zeros(shape, bool); grid[::stride, ::stride] = True
-    use = ok & grid
-    count = int(use.sum())
-    if count < 10:
-        raise ValueError('Fewer than 10 supported samples: widen the support or lower the stride')
-    if count > max_samples:
-        raise ValueError(f'{count} samples exceed max_samples={max_samples}: raise the stride')
-    field = RBFInterpolator(np.c_[A[use], B[use]], (target - source)[use], kernel='thin_plate_spline',
-                            smoothing=smoothing * count, degree=1)
-    offset = field(np.c_[A.ravel(), B.ravel()]).reshape(shape)
-    before = np.abs(target - source)[ok]; after = np.abs(target - source - offset)[ok]
-    return {'offset': offset,
-            'public_metrics': {'support_samples': count, 'support_mad_before': float(np.median(before)),
-                               'support_mad_after': float(np.median(after))},
-            'objective': 'Smoothed thin-plate spline through (target - source) on the declared still support',
-            'limits': 'Assumes the declared support does not move; a moving part inside it is averaged into the offset.'}
+    diff = target - source; kept = ok.copy(); rounds = []
+    for _ in range(1 if trim is None else trim_rounds):
+        use = kept & grid
+        count = int(use.sum())
+        if count < 10:
+            raise ValueError('Fewer than 10 supported samples: widen the support or lower the stride')
+        if count > max_samples:
+            raise ValueError(f'{count} samples exceed max_samples={max_samples}: raise the stride')
+        field = RBFInterpolator(np.c_[A[use], B[use]], diff[use], kernel='thin_plate_spline',
+                                smoothing=smoothing * count, degree=1)
+        offset = field(np.c_[A.ravel(), B.ravel()]).reshape(shape)
+        if trim is None:
+            break
+        res = diff - offset; med = float(np.median(res[kept])); mad = 1.4826 * float(np.median(np.abs(res[kept] - med)))
+        threshold = max(trim * mad, trim_floor); new = ok & (np.abs(res - med) <= threshold)
+        rounds.append({'cells': int(kept.sum()), 'threshold': threshold})
+        if np.array_equal(new, kept):
+            break
+        kept = new
+    used = kept
+    before = np.abs(diff)[ok]; after = np.abs(diff - offset)[used]
+    metrics = {'support_samples': count, 'support_mad_before': float(np.median(before)),
+               'support_mad_after': float(np.median(after))}
+    if trim is not None:
+        metrics.update({'trim_rounds': len(rounds), 'support_kept_share': float(used.sum() / max(ok.sum(), 1)),
+                        'trim_threshold': rounds[-1]['threshold']})
+    return {'offset': offset, 'support_used': used, 'public_metrics': metrics,
+            'objective': 'Smoothed thin-plate spline through (target - source) on the declared still support'
+                         + (', refitted without outlying support cells' if trim is not None else ''),
+            'limits': 'Assumes the declared support does not move; a moving part inside it is averaged into the offset '
+                      'unless trimming removes it, and trimming cannot tell a moved part from a generator\'s local shape '
+                      'difference.'}
 
 
 def pose_change(rest_maps, pose_maps, support, *, window, cell, reference=None, stride=4, smoothing=1e-3, behind=None,

@@ -22,8 +22,12 @@ neutral, and say at every place how far it can be trusted.
   strokes the generator sculpted) with a grey closing over a `size`-cell square. Slopes are kept; a form curved toward
   the viewer is flattened by up to its depth curvature times the square's half-diagonal squared, and relief crossing a
   crease is filled with an error up to the slope change times the half-width.
-- `stationary_offset(target, source, support, ...)`: a smoothed thin-plate offset through the difference on skin that
-  does not move (per-run alignment, or removing a generator's whole-area shift).
+- `stationary_offset(target, source, support, ..., trim=None, trim_floor=0., trim_rounds=4)`: a smoothed thin-plate
+  offset through the difference on skin that does not move (per-run alignment, or removing a generator's whole-area
+  shift). With `trim`, the fit is repeated without support cells whose residual is an outlier (more than `trim` times the
+  robust spread from the median, at least `trim_floor`): parts of the declared support that moved after all.
+  `support_used` is the support of the returned offset. Trimming needs a smoothed fit; an interpolating one
+  (`smoothing=0`) absorbs a moved part and leaves nothing to trim.
 - `pose_change(rest_maps, pose_maps, support, reference=..., behind=...)`: each rest run aligned to the accepted
   neutral map on the still support, each pose run to the rest consensus; the change is the median pose minus the median
   rest, and `spread` combines both sets' median absolute deviations. `behind` empties cells that show something through
@@ -83,9 +87,36 @@ the guide lies in front of the obstacle it is valid both ways. Measure the resul
 and the pose over the moving skin; a closing lid that follows a sphere-like eye should not retreat. The margin is a
 design value (the lid's thickness over the eye), not a fitting tolerance.
 
+Where the guide's surface meets the obstacle plus the margin, the exact minimum of the two is a V-shaped groove seen
+from the front (above the crossing the guide recedes toward it, below it the obstacle comes forward again). In real use a
+fit that followed that V made a short hard ridge beside it. A `softness` comparable to the depth change across the
+crossing (a few thousandths at head scale, against .0008 that left the V) rounds it into a trough.
+
+Align the generated pose to the accepted neutral on skin the design keeps still, not on skin the character's current
+construction happens to keep still: in real use the character's own closed pose pulled the skin between brow and lid
+down and back, so a support of "skin the current pose leaves still" lost the brow and temple, the offset was
+extrapolated there, and the guide appeared fuller than it was by about .0014 on the lid. A ring all around the moving
+part with trimmed refits (`trim=3`) kept 92-96 % of the ring and dropped exactly the cells the pose moved.
+
 The volume of a pose guide, not every line in it, is the target. Generated runs sculpt fine grooves and creases (a
 lid crease, a fold line) whose position varies between runs and which a character may carry in texture instead. Fit
 the smooth field, keep its knot spacing wider than those lines, and use the tolerance band to state what it leaves out.
+
+## Fitting a correction to a guide's volume
+
+To bring a surface forward to a guide without ever pulling it back (the guide says the form is fuller; where it lies
+behind, it says nothing the design wants), give each visible point in the zone `band_excess(depth, -inf, target)`: points
+behind the target carry the distance to it, points in front carry 0 and so hold the field there. Fit one smooth field
+through those values with `fit_depth_field` and move the points by it.
+
+Put the zone's limits into the fit as zero `anchors` (every visible point outside the zone: rows an attachment
+samples, the corners, the region's edge), and apply the field itself. In real use the same field multiplied by a zone
+taper instead put the taper's own gradients into the shape: a sawtooth above a held rim, holes around both corners and a
+bump where the taper met the region's edge. Anchored, the field decays at its own knot spacing, so choose the spacing
+wider than any detail the correction must not reproduce. Limit the zone to where the guide is trustworthy: in real use
+the generated heads' corners differed from the accepted neutral, and fitting them made a streak beside the nose and a
+bump at a corner the character tucks back on purpose; the lid body over the eye alone gave a clean, fuller lid. Measure
+the result with `front_retreat` against the rest pose as well as by eye.
 
 ## Using the band in a correction
 

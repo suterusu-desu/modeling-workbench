@@ -102,6 +102,29 @@ class StationaryOffsetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Fewer than 10'):
             stationary_offset(target, source, np.zeros_like(support), window=WINDOW, cell=CELL)
 
+    def test_trimming_drops_support_that_moved(self):
+        A, B = chart(); target = dome(A, B)
+        smooth = .01 + .02 * A - .01 * B ** 2
+        moved = .015 * np.exp(-((A - .2) ** 2 + (B - .8) ** 2) / .004)                   # declared still, but it moved
+        source = target - smooth + moved
+        support = ((A - .5) ** 2 + (B - .5) ** 2) > .12
+        # a smoothed fit (an interpolating one absorbs the moved part and leaves nothing to trim)
+        plain = stationary_offset(target, source, support, window=WINDOW, cell=CELL, stride=2, smoothing=1e-3)
+        trimmed = stationary_offset(target, source, support, window=WINDOW, cell=CELL, stride=2, smoothing=1e-3, trim=3.,
+                                    trim_floor=2e-4)
+        clean = support & (moved < 1e-4)
+        err = lambda r: np.abs(r['offset'] - smooth)[clean].max()
+        self.assertLess(err(trimmed), 1e-3)
+        self.assertLess(err(trimmed), .5 * err(plain))
+        self.assertFalse(trimmed['support_used'][support & (moved > .005)].any())
+        self.assertGreater(trimmed['public_metrics']['support_kept_share'], .8)
+        self.assertNotIn('support_kept_share', plain['public_metrics'])
+        self.assertTrue(np.array_equal(plain['support_used'], support & np.isfinite(target) & np.isfinite(source)))
+        with self.assertRaisesRegex(ValueError, 'trim'):
+            stationary_offset(target, source, support, window=WINDOW, cell=CELL, trim=-1.)
+        with self.assertRaisesRegex(ValueError, 'trim'):
+            stationary_offset(target, source, support, window=WINDOW, cell=CELL, trim=3., trim_rounds=0)
+
 
 class PoseChangeTests(unittest.TestCase):
     def test_recovers_the_common_change_and_reports_the_disagreement(self):

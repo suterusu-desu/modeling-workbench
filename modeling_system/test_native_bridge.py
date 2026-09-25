@@ -29,7 +29,7 @@ class SchemaTests(unittest.TestCase):
                 validate_arguments(name, args)
 
     def test_structured_controls_and_region_capture(self):
-        self.assertTrue(validate_arguments('set_controls', {'expected_state':'abc', 'controls':{'blink':.95}, 'guide':'B100_Corner01'}))
+        self.assertTrue(validate_arguments('set_controls', {'expected_state':'abc', 'controls':{'blink':.95}, 'guide':'posed_corner_guide'}))
         self.assertTrue(validate_arguments('capture_view', {'expected_state':'abc', 'viewport':{'window':0,'area':3},
             'crop':[100,80,200,160], 'channels':['sections','viewport_depth']}))
         with self.assertRaises(NativeBridgeError):
