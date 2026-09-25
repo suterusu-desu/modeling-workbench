@@ -80,7 +80,7 @@ def run_retention(arguments, hooks, root):
             or not isinstance(args['transaction_id'], str) or not args['transaction_id'].strip()
             or display.get('mode') != 'GUIDE_WIRE' or pose.get('refresh', False) is not False
             or set(pose)-{'controls', 'guide', 'refresh'}
-            or set(display)-{'mode', 'through', 'parts', 'viewport', 'view'}):
+            or set(display)-{'mode', 'through', 'parts', 'hide', 'viewport', 'view'}):
         raise ValueError('Only fixed controls and GUIDE_WIRE retention are qualified')
     for value in pose.get('controls', {}).values():
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):

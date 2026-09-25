@@ -45,6 +45,22 @@ observation separately; keep parent and child durations distinct. An optional
 telemetry does not change the operation outcome or authorize replay. Measure the
 next useful operation; do not rerun a retained edit solely for a timing sample.
 
+## Parts set aside from view
+
+`set_display` and a retention's `display` accept `hide`: the names of parts a
+review sets aside (for example lashes while the lids are worked on). It is
+presentation only. The adapter hides exactly the listed parts in the viewport,
+shows again the parts an earlier call hid that are no longer listed, refuses a
+name it does not know instead of ignoring it, and reports the current list in its
+live state so the expected-state token covers what the viewer sees. Hidden parts
+stay in the file with their geometry and bindings and keep following the rig;
+trial renders set parts aside through their own arguments. A retention that
+declares `hide` saves the checkpoint with those parts hidden, so whoever opens it
+sees the reviewed view. In real use a live session kept showing the lashes after
+every retention while the reviews hid them, so the visible work did not match the
+reviewed one. A part set aside is not judged and not removed; name it in every
+review that relied on the view.
+
 ## Operator wrappers and worker completion
 
 Read the selected adapter's actual result contract before asserting success. Transport success, operation disposition, saved-artifact verification and review acceptance are separate facts. Do not require a universal `status == "completed"`: an adapter may return an operation-specific status such as `applied_trial` or `saved`. Compact results can point to a durable receipt instead of embedding candidate details. Expand the returned receipt and verify the linked file bytes and operation identity before continuing. An unexpected wrapper assertion after dispatch does not establish that the native action failed; reconcile the original operation before considering any retry.

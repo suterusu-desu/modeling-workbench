@@ -28,6 +28,14 @@ class SchemaTests(unittest.TestCase):
             with self.subTest(operation=name), self.assertRaises(NativeBridgeError):
                 validate_arguments(name, args)
 
+    def test_display_can_set_named_parts_aside(self):
+        self.assertTrue(validate_arguments('set_display', {'expected_state':'abc', 'mode':'GUIDE_WIRE',
+            'hide':['upper lash', 'lower lash']}))
+        self.assertTrue(validate_arguments('set_display', {'expected_state':'abc', 'mode':'GUIDE_WIRE', 'hide':[]}))
+        for hide in (['lash', 'lash'], [''], 'upper lash', [3], ['part'] * 65):
+            with self.subTest(hide=hide), self.assertRaises(NativeBridgeError):
+                validate_arguments('set_display', {'expected_state':'abc', 'mode':'GUIDE_WIRE', 'hide':hide})
+
     def test_structured_controls_and_region_capture(self):
         self.assertTrue(validate_arguments('set_controls', {'expected_state':'abc', 'controls':{'blink':.95}, 'guide':'posed_corner_guide'}))
         self.assertTrue(validate_arguments('capture_view', {'expected_state':'abc', 'viewport':{'window':0,'area':3},

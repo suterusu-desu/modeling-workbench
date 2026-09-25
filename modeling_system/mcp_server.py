@@ -22,7 +22,7 @@ NATIVE_DESCRIPTIONS={
     'prepare_state':'Export complete recorded geometry, references and coverage from the expected native state.',
     'capture_view':'Capture the actual selected viewport perspective, zoom and optional crop with matching state, depth/sections and wider context.',
     'set_controls':'Set declared native pose controls and matching guide, with refreshed workbench evidence.',
-    'set_display':'Choose registered guide/depth/section/material display or exact viewport conditions.',
+    'set_display':'Choose registered guide/depth/section/material display, parts set aside from view or exact viewport conditions.',
     'apply_proposal':'Checkpoint and apply a constrained shape-key or recorded advanced script proposal; requires fresh owner/state.',
     'rollback_trial':'Restore a trial and external registry only when it cannot overwrite a later live edit.',
     'integrate_guide':'Integrate a reviewed registered guide with target registry, fitting, display and semantic provenance.',

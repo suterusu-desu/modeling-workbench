@@ -75,6 +75,8 @@ _EXPECTED = {'expected_state': _S}
 _RETENTION_VIEW = _object({'rotation': {'type': 'array', 'items': _N, 'minItems': 4, 'maxItems': 4},
     'location': _V, 'distance': {'type': 'number', 'exclusiveMinimum': 0},
     'perspective': {'enum': ['PERSP', 'ORTHO', 'CAMERA']}, 'lens': {'type': 'number', 'exclusiveMinimum': 0}})
+# Parts a review sets aside from view (display only; the adapter refuses names it does not know).
+_HIDE = {'type': 'array', 'items': _S, 'uniqueItems': True, 'maxItems': 64}
 _SCHEMAS = {
  'inspect_live': _object({'refresh_scene': _B}),
  'bootstrap': _object({**_EXPECTED, 'expected_file': _PATHREF}, ('expected_state', 'expected_file')),
@@ -83,7 +85,7 @@ _SCHEMAS = {
  'retain_checkpoint': _object({**_EXPECTED, 'transaction_id': _S, 'source': _PATHREF,
     'candidate': _PATHREF, 'reopen': _PATHREF, 'target': _S, 'label': _S,
     'pose': _object({'controls': _CONTROLS, 'guide': _S, 'refresh': {'type': 'boolean', 'const': False}}),
-    'display': _object({'mode': {'const': 'GUIDE_WIRE'}, 'through': _B, 'parts': _B,
+    'display': _object({'mode': {'const': 'GUIDE_WIRE'}, 'through': _B, 'parts': _B, 'hide': _HIDE,
         'viewport': _VIEWPORT, 'view': _RETENTION_VIEW}, ('mode',))},
     ('expected_state', 'transaction_id', 'source', 'candidate', 'reopen', 'target', 'label', 'display')),
  'inspect_feature': _object({'feature': {'enum': ['eyes', 'mouth']}, 'refresh': _B, **_EXPECTED}),
@@ -93,7 +95,7 @@ _SCHEMAS = {
     'channels': {'type': 'array', 'items': {'enum': ['surface', 'sections', 'viewport_depth']}, 'uniqueItems': True}}, ('expected_state',)),
  'set_controls': _object({**_EXPECTED, 'controls': _CONTROLS, 'guide': _S, 'refresh': _B}, ('expected_state',)),
  'set_display': _object({**_EXPECTED, 'mode': {'enum': ['GUIDE_WIRE', 'WORK_WIRE', 'SURFACES', 'DISTANCE', 'SECTION', 'CLAY', 'MATERIALS']},
-    'through': _B, 'parts': _B, 'axis': {'enum': ['HORIZONTAL', 'VERTICAL']}, 'section_value': _N,
+    'through': _B, 'parts': _B, 'hide': _HIDE, 'axis': {'enum': ['HORIZONTAL', 'VERTICAL']}, 'section_value': _N,
     'viewport': _VIEWPORT, 'view': _object({'rotation': {'type': 'array', 'items': _N, 'minItems': 4, 'maxItems': 4},
         'location': _V, 'distance': {'type': 'number', 'exclusiveMinimum': 0},
         'perspective': {'enum': ['PERSP', 'ORTHO', 'CAMERA']}, 'lens': {'type': 'number', 'exclusiveMinimum': 0}})}, ('expected_state',)),

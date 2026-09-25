@@ -167,5 +167,17 @@ class RetentionTransactionTests(unittest.TestCase):
                        {'script': 'arbitrary.py'}, {'display': {'mode': 'GUIDE_WIRE', 'axis': 'VERTICAL'}}):
             with self.assertRaises(NativeBridgeError): validate_arguments('retain_checkpoint', {**public, **change})
 
+    def test_retention_can_save_with_parts_set_aside_from_view(self):
+        self.args['display'] = {'mode': 'GUIDE_WIRE', 'hide': ['upper lash', 'lower lash']}
+        public = {k:v for k,v in self.args.items() if not k.startswith('_')}
+        validate_arguments('retain_checkpoint', public)
+        shown = []
+        self.hooks.set_display = lambda display: shown.append(display) or display
+        result = self.run_transaction()
+        self.assertEqual(result['status'], 'saved')
+        self.assertEqual(shown, [{'mode': 'GUIDE_WIRE', 'hide': ['upper lash', 'lower lash']}])
+        with self.assertRaises(NativeBridgeError):
+            validate_arguments('retain_checkpoint', {**public, 'display': {'mode': 'GUIDE_WIRE', 'hide': 'upper lash'}})
+
 
 if __name__ == '__main__': unittest.main()
