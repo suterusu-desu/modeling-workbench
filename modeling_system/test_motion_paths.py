@@ -1,7 +1,8 @@
 """In-between construction from two established poses: pace, rolled paths and rigid pieces (synthetic, no IO)."""
 import unittest
 import numpy as np
-from .motion_paths import motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance
+from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
+                           shared_schedule, smooth_step)
 from .preparation import ARRAY_OPERATIONS
 
 
@@ -222,6 +223,73 @@ class ClearanceTests(unittest.TestCase):
             keep_clearance(np.zeros((1, 3)), self.sphere, [0, 0, 0], .1, angular_radius_degrees=0)
         with self.assertRaisesRegex(ValueError, "Envelope must"):
             keep_clearance(np.ones((1, 3)), self.sphere, [0, 0, 0], .1, envelope='mean')
+
+
+class ScheduleTests(unittest.TestCase):
+    phases = np.linspace(0, 1, 11)
+
+    def band(self):
+        """Six points along a band: the last two lag (stay put until late), as a corner that closes in the last tenth."""
+        g = self.phases[:, None]
+        early = np.repeat(g, 4, axis=1)
+        late = np.repeat(np.clip((g - .9) / .1, 0, 1), 2, axis=1)
+        return np.hstack([early, late])
+
+    def test_smooth_step_values_endpoints_and_broadcast(self):
+        np.testing.assert_allclose(smooth_step([-1, 0, .25, .5, 1, 2], 0, 1), [0, 0, .15625, .5, 1, 1])
+        onset = np.array([.6, .8]); table = smooth_step(self.phases[:, None], onset - .2, onset)
+        self.assertEqual(table.shape, (11, 2))
+        np.testing.assert_allclose(table[[4, 6, 8], 0], [0, 1, 1], atol=1e-12)
+        np.testing.assert_allclose(table[[6, 8], 1], [0, 1], atol=1e-12)
+        with self.assertRaisesRegex(ValueError, 'start < end'): smooth_step([0.], 1, 1)
+        with self.assertRaisesRegex(ValueError, 'start < end'): smooth_step([np.nan], 0, 1)
+
+    def test_blend_moves_the_weighted_region_onto_the_shared_schedule_and_keeps_the_rest(self):
+        pace = self.band(); common = shared_schedule(pace, [0, 1, 2, 3])
+        np.testing.assert_allclose(common, self.phases)
+        w = np.array([0, 0, 0, 0, .5, 1.])
+        r = schedule_pace(pace, common, w)
+        out = r['pace']
+        np.testing.assert_array_equal(out[:, :4], pace[:, :4])            # weight 0: exact bytes
+        np.testing.assert_allclose(out[:, 5], self.phases)                # weight 1: the schedule
+        np.testing.assert_allclose(out[:, 4], .5 * pace[:, 4] + .5 * self.phases)
+        self.assertTrue((np.diff(out, axis=0) >= 0).all())
+        self.assertEqual(r['public_metrics']['changed_points'], 2)
+        self.assertAlmostEqual(r['public_metrics']['max_change'], .9)
+
+    def test_floor_raises_only_where_the_region_lags_and_never_delays(self):
+        pace = self.band(); late = smooth_step(self.phases, .5, .8)
+        out = schedule_pace(pace, late, np.ones(6), mode='floor')['pace']
+        np.testing.assert_array_equal(out, np.maximum(pace, late[:, None]))
+        np.testing.assert_array_equal(out[:6, :4], pace[:6, :4])          # ahead of the floor until .5
+        np.testing.assert_allclose(out[8:, 4:], 1.)                       # the lagging points closed by .8
+        per_point = smooth_step(self.phases[:, None], np.full(6, .3), np.full(6, .6))
+        np.testing.assert_allclose(schedule_pace(pace, per_point, np.full(6, .5), mode='floor')['pace'][-1], 1.)
+
+    def test_median_and_weighted_mean_schedules_are_monotone(self):
+        pace = self.band()
+        np.testing.assert_allclose(shared_schedule(pace, np.array([True, True, False, False, True, True])),
+                                   np.median(pace[:, [0, 1, 4, 5]], axis=1))
+        mean = shared_schedule(pace, [0, 5], weights=[3., 1.], statistic='mean')
+        np.testing.assert_allclose(mean, .75 * pace[:, 0] + .25 * pace[:, 5])
+        self.assertTrue((np.diff(mean) >= 0).all())
+
+    def test_refuses_bad_inputs(self):
+        pace = self.band(); w = np.ones(6)
+        with self.assertRaisesRegex(ValueError, 'monotone over phases for every point'): schedule_pace(pace[::-1], self.phases, w)
+        with self.assertRaisesRegex(ValueError, 'schedule must be monotone'): schedule_pace(pace, self.phases[::-1], w)
+        with self.assertRaisesRegex(ValueError, 'schedule must be values'): schedule_pace(pace, self.phases * 2, w)
+        with self.assertRaisesRegex(ValueError, 'Weights must'): schedule_pace(pace, self.phases, np.full(6, 1.5))
+        with self.assertRaisesRegex(ValueError, 'Weights must'): schedule_pace(pace, self.phases, np.ones(5))
+        with self.assertRaisesRegex(ValueError, 'mode must'): schedule_pace(pace, self.phases, w, mode='max')
+        with self.assertRaisesRegex(ValueError, 'Members'): shared_schedule(pace, [])
+        with self.assertRaisesRegex(ValueError, 'Members'): shared_schedule(pace, [9])
+        with self.assertRaisesRegex(ValueError, 'statistic'): shared_schedule(pace, [0], statistic='mode')
+        with self.assertRaisesRegex(ValueError, 'Weights must be nonnegative'): shared_schedule(pace, [0, 1], weights=[0, 0], statistic='mean')
+
+    def test_registered_as_array_preparation_operations(self):
+        for name in ('schedule_pace', 'shared_schedule'):
+            self.assertIn(name, ARRAY_OPERATIONS)
 
 
 if __name__ == '__main__':

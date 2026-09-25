@@ -14,6 +14,9 @@ operations construct in-between poses from the two end poses themselves:
   pivot by the best rotation between its two poses, carrying its non-rigid residual linearly.
 - `keep_clearance` and `end_clearance`: points stay outside an obstacle behind them (an eye behind a lid) by at least
   the clearance they have in their two poses, capped at the margin that matters, with a smooth envelope and push.
+- `schedule_pace`, `shared_schedule` and `smooth_step`: re-time a smoothly weighted region, either onto one shared
+  schedule (so a region moves as one piece instead of shearing against its neighbours) or with a pace floor (a part
+  that must reach its end pose by a given phase), with temporal and spatial fades.
 
 None of them fits a guide or judges appearance; both end poses are taken as established.
 """
@@ -334,3 +337,98 @@ def end_clearance(reference, end, obstacle_reference, obstacle_end, centre, *, c
             'objective': "Smaller of each point's clearances in its two established poses, capped",
             'limits': 'The cap is an owner choice about the margin that matters; envelopes are measured as in '
                       'keep_clearance. No contact certification or appearance qualification.'}
+
+
+def smooth_step(values, start, end):
+    """0 at or below `start`, 1 at or above `end`, and the C1 smoothstep 3t^2 - 2t^3 between (arrays broadcast).
+
+    Use it for temporal schedules (phases from start to end) and spatial fades (1 - smooth_step(distance, full, zero)).
+    A fade narrower than the spacing of the material it crosses acts as a hard edge.
+    """
+    v, a, b = (np.asarray(x, float) for x in (values, start, end))
+    if not (np.isfinite(v).all() and np.isfinite(a).all() and np.isfinite(b).all()) or np.any(b <= a):
+        raise ValueError('Finite values with start < end are required')
+    t = np.clip((v - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+def _pace_table(pace):
+    a = np.asarray(pace, float)
+    if a.ndim != 2 or not np.isfinite(a).all() or (a < 0).any() or (a > 1).any():
+        raise ValueError('Pace must be (phases, points) values in [0, 1]')
+    return a
+
+
+def shared_schedule(pace, members, *, weights=None, statistic='median'):
+    """One schedule for a region: the pace of its member points combined per phase, made monotone.
+
+    `pace` is (phases, points) as from `motion_pace`; `members` indexes (or masks) the points whose timing the region
+    should share, for example the part of a moving band next to the region that already moves the way it should.
+    'median' takes the per-phase median; 'mean' the per-phase mean weighted by `weights` (one per member, for example
+    travel). The result is a running maximum over phases.
+    """
+    a = _pace_table(pace)
+    m = np.asarray(members)
+    idx = np.flatnonzero(m) if m.dtype == bool and m.shape == (a.shape[1],) else m.astype(np.int64).ravel()
+    if not len(idx) or idx.min() < 0 or idx.max() >= a.shape[1]:
+        raise ValueError('Members must select at least one of the points')
+    if statistic == 'median':
+        common = np.median(a[:, idx], axis=1)
+    elif statistic == 'mean':
+        w = np.ones(len(idx)) if weights is None else np.asarray(weights, float).ravel()
+        if w.shape != (len(idx),) or not np.isfinite(w).all() or (w < 0).any() or w.sum() <= 0:
+            raise ValueError('Weights must be nonnegative, one per member, not all zero')
+        common = a[:, idx] @ w / w.sum()
+    else:
+        raise ValueError("statistic must be 'median' or 'mean'")
+    return np.maximum.accumulate(common)
+
+
+def schedule_pace(pace, schedule, weights, *, mode='blend'):
+    """Re-time a smoothly weighted region of an existing pace.
+
+    `pace` is (phases, points), monotone per point (as from `motion_pace`). `schedule` is a monotone timing in [0, 1]
+    per phase, shared (phases,) or per point (phases, points): `shared_schedule` of the region's neighbours,
+    `smooth_step(phases, start, end)`, or a per-point onset `smooth_step(phases[:, None], onset - ramp, onset)`.
+    `weights` (points,) in [0, 1] are the spatial fade: 1 where the region takes the schedule, 0 where it keeps its own
+    pace.
+
+    - 'blend': (1 - w) pace + w schedule. The region moves as one piece on the schedule. Use it where material shears
+      because neighbouring parts keep different timings, for example a corner that stays put until late while the part
+      beside it is already half way.
+    - 'floor': max(pace, w schedule). The region is at least as far as the schedule. Use it where a part must reach its
+      end pose by a given phase, for example a corner that closes first, without delaying anything already ahead.
+
+    Both keep every point's pace monotone. Points with weight 0 keep their exact values.
+    """
+    a = _pace_table(pace)
+    if np.any(np.diff(a, axis=0) < -1e-12):
+        raise ValueError('Pace must be monotone over phases for every point')
+    sch = np.asarray(schedule, float)
+    if sch.shape == (len(a),):
+        sch = np.broadcast_to(sch[:, None], a.shape)
+    if sch.shape != a.shape or not np.isfinite(sch).all() or (sch < 0).any() or (sch > 1).any():
+        raise ValueError('The schedule must be values in [0, 1] per phase, shared or per point')
+    if np.any(np.diff(sch, axis=0) < -1e-12):
+        raise ValueError('The schedule must be monotone over phases')
+    w = np.asarray(weights, float)
+    if w.shape != (a.shape[1],) or not np.isfinite(w).all() or (w < 0).any() or (w > 1).any():
+        raise ValueError('Weights must be one value in [0, 1] per point')
+    if mode == 'blend':
+        out = (1 - w[None]) * a + w[None] * sch
+    elif mode == 'floor':
+        out = np.maximum(a, w[None] * sch)
+    else:
+        raise ValueError("mode must be 'blend' or 'floor'")
+    out = np.where(w[None] > 0, out, a)
+    change = np.abs(out - a)
+    metrics = {'phases': int(len(a)), 'points': int(a.shape[1]), 'mode': mode,
+               'weighted_points': int(np.count_nonzero(w > 0)), 'fully_weighted_points': int(np.count_nonzero(w >= 1)),
+               'changed_points': int(np.count_nonzero(change.max(axis=0) > 1e-12)), 'max_change': float(change.max())}
+    return {'pace': out, 'public_metrics': metrics,
+            'objective': "Weighted blend onto, or floor at, a monotone schedule of each point's pace",
+            'limits': 'Timing only: paths, shapes and fitted fields are unchanged, so a field fitted to the old in-between '
+                      'positions no longer matches them (re-time after such fits, or refit them). A fade narrower than the '
+                      'material spacing acts as a hard edge; where two regions meet, share or fade the schedule across the '
+                      'junction. Attachments that follow the host stay in sync only if they move with it. No guide or '
+                      'appearance qualification.'}

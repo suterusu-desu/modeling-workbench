@@ -27,6 +27,32 @@ attachment: in real use a rim that lagged by a few percent opened a gap between 
 the rim that lagged the rim let the eye show through the band. Smooth the pace in radial rows only where no attachment
 depends on it, or move the attachment with it.
 
+## Re-time a region: shared schedules and pace floors
+
+An existing motion's pace can shear where neighbouring parts keep different timings: one part still at rest while the
+part beside it is half way, so the material between them creases or a part stands proud of its neighbour. Re-time a
+smoothly weighted region with `schedule_pace(pace, schedule, weights, mode=...)`:
+
+- `mode='blend'` puts the weighted points on one shared `schedule` ((1 - w) pace + w schedule), so the region moves as
+  one piece. Take the schedule from the material next to it that already moves right, `shared_schedule(pace, members)`
+  (per-phase median, or a weighted mean), or a plain timing `smooth_step(phases, start, end)`.
+- `mode='floor'` raises the weighted points to at least the schedule (max(pace, w schedule)): a part that must reach
+  its end pose by a given phase, for example a corner that closes first. A per-point onset,
+  `smooth_step(phases[:, None], onset - ramp, onset)`, closes a corner progressively from its tip.
+
+`weights` are the spatial fade, usually `1 - smooth_step(distance, full, zero)` from the part. Points at weight 0 keep
+their exact pace; both modes keep every point's pace monotone. In real use (a lid rebuilt from two established poses):
+
+- A floor whose spatial fade spanned only a few rim spacings brought one rim point to its end pose a column before
+  the facing rim met it and left a small notch in the open rim; a fade about twice as wide had none.
+- A floor applied before a depth field fitted to the in-between positions made the fit solve again against the new
+  timing and spread changes into skin that should not move; applied after the fit, the fitted field stayed.
+- Where the two sides of a corner meet (upper and lower lid columns running out of a canthus), a schedule shared by
+  one side only sheared a slash along the junction: fade it before the junction, or share it across both sides.
+
+Re-timing changes when each point moves, not where: paths, clearance and attachments behave as with any pace, so an
+attachment that follows the host's schedule has to move with it.
+
 ## Paths: roll over the obstacle, straight beside it
 
 `path_positions(reference, end, pace, pivot=None, axis=None, roll_weight=None)` places every point at its pace.
