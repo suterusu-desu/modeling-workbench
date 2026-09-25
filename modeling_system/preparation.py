@@ -13,6 +13,8 @@ from .correction_scope import correction_scope
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
                            shared_schedule)
 from .construction_diagnostics import section_turns
+from .guide_synthesis import (front_depth, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
+                              evaluate_depth_field, change_band, band_excess, height_field_mesh)
 
 
 def active_vertex_coverage(vertex_count, faces, driven):
@@ -103,7 +105,10 @@ ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric'
     'projected_triangle_contact': projected_triangle_contact,
     'motion_pace': motion_pace, 'path_positions': path_positions, 'hinge_motion': hinge_motion, 'keep_clearance': keep_clearance,
     'end_clearance': end_clearance, 'section_turns': section_turns, 'schedule_pace': schedule_pace,
-    'shared_schedule': shared_schedule}
+    'shared_schedule': shared_schedule, 'front_depth': front_depth, 'remove_thin_relief': remove_thin_relief,
+    'stationary_offset': stationary_offset, 'pose_change': pose_change, 'fit_depth_field': fit_depth_field,
+    'evaluate_depth_field': evaluate_depth_field, 'change_band': change_band, 'band_excess': band_excess,
+    'height_field_mesh': height_field_mesh}
 
 
 def prepare_arrays(operation, *, inputs, parameters=None, operations=None):
