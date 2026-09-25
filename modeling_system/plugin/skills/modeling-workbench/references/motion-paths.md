@@ -53,6 +53,22 @@ their exact pace; both modes keep every point's pace monotone. In real use (a li
 Re-timing changes when each point moves, not where: paths, clearance and attachments behave as with any pace, so an
 attachment that follows the host's schedule has to move with it.
 
+## Join a rebuilt motion to the existing one
+
+A rebuilt region usually hands over to the existing motion where the existing motion hardly moves the surface: each
+point takes `w * rebuilt + (1 - w) * existing`, with `w` from how far the existing motion moves it. `travel_weight(reference,
+travel, low=..., high=..., sigma=...)` gives that weight. Where the travel is small it is noisy, and a weight taken from
+each point's own travel alternates between neighbours (in real use .05 next to .97 beside a lid's inner corner); any
+difference between the two motions there comes out as fine lines. With `sigma` the travel is averaged over the
+reference surface first and the weight varies smoothly (`neighbour_jump_p99_before/after` measure it).
+
+Two things follow from the blend. A correction applied to the rebuilt motion is scaled by `w`, so it must already be 0
+where `w` falls, or the falling weight turns it into a ramp: anchor correction fields at 0 on the blend edge. And fields
+fitted to the rebuilt motion are often global (a smooth field through many points): if smoothing the weight moves the
+points they are fitted to, they re-solve everywhere. Fit them with the weight and region they were built with and use
+the smoothed weight only to compose the result; points the smoothed weight adds to the region then sit at the existing
+motion while fitting.
+
 ## Paths: roll over the obstacle, straight beside it
 
 `path_positions(reference, end, pace, pivot=None, axis=None, roll_weight=None)` places every point at its pace.

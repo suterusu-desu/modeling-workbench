@@ -17,6 +17,8 @@ operations construct in-between poses from the two end poses themselves:
 - `schedule_pace`, `shared_schedule` and `smooth_step`: re-time a smoothly weighted region, either onto one shared
   schedule (so a region moves as one piece instead of shearing against its neighbours) or with a pace floor (a part
   that must reach its end pose by a given phase), with temporal and spatial fades.
+- `travel_weight`: how much of a rebuilt motion each point takes where it joins the existing one, from the existing
+  motion's travel, smoothed over the surface so barely moving neighbours do not alternate.
 
 None of them fits a guide or judges appearance; both end poses are taken as established.
 """
@@ -350,6 +352,47 @@ def smooth_step(values, start, end):
         raise ValueError('Finite values with start < end are required')
     t = np.clip((v - a) / (b - a), 0, 1)
     return t * t * (3 - 2 * t)
+
+
+def travel_weight(reference, travel, *, low, high, sigma=0., cutoff=None):
+    """How much of a rebuilt motion each point takes, from how far the existing motion moves it.
+
+    `travel` is each point's travel in the existing motion (for example its largest displacement from `reference`
+    over the motion). The weight is smooth_step(travel, low, high): 0 for points that barely move (they keep the
+    existing motion), 1 for points that clearly move (they take the rebuilt one). Where the travel is small it is noisy,
+    and neighbours then alternate between keeping and replacing the motion; any difference between the two motions
+    comes out as fine creases. With `sigma` the travel is first averaged over reference-pose neighbours (Gaussian,
+    within `cutoff`, default 3 sigma), so the weight varies smoothly across the surface. `neighbour_jump_p99_*`
+    compares the weights of neighbours within sigma before and after.
+    """
+    from scipy.spatial import cKDTree
+
+    rest = np.asarray(reference, float); t = np.asarray(travel, float)
+    if (rest.ndim != 2 or rest.shape[1:] != (3,) or t.shape != (len(rest),) or not len(rest)
+            or not np.isfinite(rest).all() or not np.isfinite(t).all()):
+        raise ValueError('Finite reference positions and one travel value per point required')
+    if not (np.isfinite(low) and np.isfinite(high) and high > low) or not (np.isfinite(sigma) and sigma >= 0):
+        raise ValueError('Finite low < high and a nonnegative sigma required')
+    if cutoff is not None and not (np.isfinite(cutoff) and cutoff > 0):
+        raise ValueError('A positive cutoff is required when given')
+    raw = smooth_step(t, low, high); smoothed = t.copy(); pairs = None
+    if sigma > 0:
+        tree = cKDTree(rest)
+        for i, nb in enumerate(tree.query_ball_point(rest, 3 * sigma if cutoff is None else float(cutoff))):
+            k = np.exp(-.5 * (np.linalg.norm(rest[nb] - rest[i], axis=1) / sigma) ** 2)
+            smoothed[i] = (k * t[nb]).sum() / k.sum()
+        pairs = tree.query_pairs(sigma, output_type='ndarray')
+    weight = smooth_step(smoothed, low, high)
+
+    def jump(w):
+        return float(np.quantile(np.abs(w[pairs[:, 0]] - w[pairs[:, 1]]), .99)) if pairs is not None and len(pairs) else None
+    metrics = {'points': int(len(rest)), 'weighted_points': int(np.count_nonzero(weight > 0)),
+               'full_points': int(np.count_nonzero(weight >= 1)), 'max_change_by_smoothing': float(np.abs(weight - raw).max()),
+               'neighbour_jump_p99_before': jump(raw), 'neighbour_jump_p99_after': jump(weight)}
+    return {'weight': weight, 'raw_weight': raw, 'smoothed_travel': smoothed, 'public_metrics': metrics,
+            'objective': "smooth_step of each point's travel, optionally Gaussian-averaged over reference-pose neighbours",
+            'limits': 'The blend of a rebuilt motion into an existing one is only as good as the two motions agree where '
+                      'they meet; a smooth weight removes the alternation, not a real difference between them.'}
 
 
 def _pace_table(pace):

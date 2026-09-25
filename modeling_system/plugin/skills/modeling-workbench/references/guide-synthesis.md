@@ -41,6 +41,11 @@ neutral, and say at every place how far it can be trusted.
   Huber reweighting, for joins and corrections.
 - `band_excess(values, lower, upper)`: how far each value lies outside its interval, 0 inside. Fitting a correction to
   the excesses (with points already inside holding it at 0) moves only what is outside, and only to the band's edge.
+- `fit_band_field(points, lower, upper, knots=..., bending=..., weights=..., pins=..., anchors=..., hold=...)`: the
+  smoothest correction field that brings every point into its own interval (for a band: target - band - value and
+  target + band - value). Points already inside may move anywhere within their interval instead of holding the field at
+  0; `hold` is a small preference for each point's smallest correction. Active-set solve of the squared distance to the
+  intervals plus bending, pins and zero anchors.
 - `height_field_mesh(depth, window=..., cell=..., keep=..., max_step=...)`: the guide as a surface for display and
   fitting; blocks across a cliff are left open.
 - `keep_in_front(depth, obstacle, margin, softness=...)`: the guide kept at least `margin` in front of an obstacle's
@@ -124,3 +129,14 @@ Measure how much of the corrected region lies inside the band per pose (`band_ex
 preservation cell for it before a native trial. A correction fitted to the excesses leaves in-band material where it is,
 so it cannot improve on a shape the guide cannot tell apart; combine it with the construction change that removes the
 visible defect, and judge that change with matched renders and the crease diagnostics.
+
+Fitting only the excesses holds the field at 0 at every point inside the band, so the correction follows the band's
+own edge. Where that edge is steep (the flank of a fold the guides carry near a corner), a correction fitted that way
+with a knot spacing short enough to follow it, and cut off by a taper at its zone limit, reproduced the fold's flank as
+a line: in real use a long line up from a lid's inner corner in three-quarter late in the blink, and an X-shaped pinch
+above the corner in front. `fit_band_field` lets points inside the band take any value within it, so the correction
+can stay smooth and decay gently; with the zone limit as zero anchors (no multiplied taper) the line and the pinch went
+and more of the corner lay inside the band at every guide phase than before. Where the smoothing, not the guide,
+decides the shape (inside a wide band), anchor the field at 0 wherever the construction scales or ends it: in the same
+use the field reached the edge of the region where the rebuilt motion blends into the existing one, was multiplied by
+that falling blend weight and came out as a steep ramp until the blend edge was anchored at 0 too.

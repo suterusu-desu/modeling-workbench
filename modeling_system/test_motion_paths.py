@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
-                           shared_schedule, smooth_step)
+                           shared_schedule, smooth_step, travel_weight)
 from .preparation import ARRAY_OPERATIONS
 
 
@@ -288,8 +288,28 @@ class ScheduleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Weights must be nonnegative'): shared_schedule(pace, [0, 1], weights=[0, 0], statistic='mean')
 
     def test_registered_as_array_preparation_operations(self):
-        for name in ('schedule_pace', 'shared_schedule'):
+        for name in ('schedule_pace', 'shared_schedule', 'travel_weight'):
             self.assertIn(name, ARRAY_OPERATIONS)
+
+
+class TravelWeightTests(unittest.TestCase):
+    def test_smoothed_travel_stops_neighbours_alternating_near_the_threshold(self):
+        points, _ = sheet(nx=31, ny=11, spacing=.01)
+        x = points[:, 0]; noise = np.where((np.arange(len(points)) % 2) == 0, .0004, -.0004)
+        travel = np.clip(.004 * x / x.max(), 0, None) + noise                  # small travel, noisy around the threshold
+        raw = travel_weight(points, travel, low=.0012, high=.0022)
+        smooth = travel_weight(points, travel, low=.0012, high=.0022, sigma=.012)
+        np.testing.assert_allclose(raw['weight'], smooth_step(travel, .0012, .0022))
+        self.assertIsNone(raw['public_metrics']['neighbour_jump_p99_before'])
+        m = smooth['public_metrics']
+        self.assertGreater(m['neighbour_jump_p99_before'], 3 * m['neighbour_jump_p99_after'])
+        self.assertTrue(np.all(smooth['weight'][x < .005] == 0) and np.all(smooth['weight'][x > .27] == 1))
+
+    def test_refusals(self):
+        points, _ = sheet(nx=3, ny=3)
+        with self.assertRaisesRegex(ValueError, 'one travel value'): travel_weight(points, np.zeros(4), low=0., high=1.)
+        with self.assertRaisesRegex(ValueError, 'low < high'): travel_weight(points, np.zeros(9), low=1., high=1.)
+        with self.assertRaisesRegex(ValueError, 'cutoff'): travel_weight(points, np.zeros(9), low=0., high=1., sigma=.1, cutoff=-1.)
 
 
 if __name__ == '__main__':

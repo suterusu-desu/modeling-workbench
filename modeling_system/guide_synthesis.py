@@ -346,6 +346,100 @@ def fit_depth_field(points, values, *, knots, bending, weights=None, box=None, p
     return result
 
 
+def fit_band_field(points, lower, upper, *, knots, bending, weights=None, box=None, pins=None, pin_values=None,
+                   pin_weight=1e3, anchors=None, anchor_weight=1., hold=1e-6, iterations=60, tolerance=1e-6):
+    """The smoothest correction field that brings every point into its interval [lower, upper].
+
+    `lower` and `upper` bound the correction each point may take (for a guide band: target - band - value and
+    target + band - value). A point outside is pulled to the nearest edge; a point already inside may keep 0 or move
+    anywhere within its interval, so, unlike fitting the excesses alone, points inside the band do not hold the field
+    at 0 and it can stay smooth where the band's own edge is steep. The field is a cubic B-spline as in
+    `fit_depth_field` and minimizes
+
+        sum(w_i * (dist(F(p_i), [lower_i, upper_i])^2 + hold * (F(p_i) - m_i)^2)) / sum(w_i) + bending * penalty
+        + pins + zero anchors,
+
+    where m_i is each point's smallest correction (0 when 0 lies in its interval, else the nearer edge): `hold` is how
+    strongly points prefer that smallest correction, a tie-breaker when small. The objective is convex; it is solved by
+    active-set iterations (the points outside their intervals at the current field carry their edge), which stop when
+    the set no longer changes. Points outside sit at their edge only up to the balance of their weight against the
+    bending, so `inside_after` counts points within `tolerance` of their interval.
+    """
+    from scipy import sparse
+    from scipy.sparse.linalg import spsolve
+    lower, upper = np.asarray(lower, float), np.asarray(upper, float)
+    points = np.asarray(points, float)
+    if (points.ndim != 2 or points.shape[1] != 2 or lower.shape != (len(points),) or upper.shape != (len(points),)
+            or not len(points) or not np.isfinite(points).all() or not (np.isfinite(lower).all() and np.isfinite(upper).all())
+            or np.any(upper < lower)):
+        raise ValueError('Nonempty finite (n, 2) points with finite intervals lower <= upper required')
+    if type(iterations) is not int or iterations < 1 or not (np.isfinite(hold) and hold >= 0):
+        raise ValueError('A positive integer iteration count and a nonnegative hold weight required')
+    if not (np.isfinite(tolerance) and tolerance >= 0):
+        raise ValueError('A nonnegative reporting tolerance required')
+    if not (np.isfinite(knots) and knots > 0 and np.isfinite(bending) and bending >= 0):
+        raise ValueError('Positive knot spacing and nonnegative bending weight required')
+    w = np.ones(len(points)) if weights is None else np.asarray(weights, float)
+    if w.shape != (len(points),) or not np.isfinite(w).all() or w.min() < 0 or not w.sum() > 0:
+        raise ValueError('Nonnegative finite sample weights with a positive sum required')
+    mean_w = w.sum() / max(np.count_nonzero(w), 1)
+    extra, extra_v, extra_w = [np.zeros((0, 2))], [np.zeros(0)], [np.zeros(0)]
+    if pins is not None:
+        pins = np.asarray(pins, float); pv = np.zeros(len(pins)) if pin_values is None else np.asarray(pin_values, float)
+        if pins.ndim != 2 or pins.shape[1] != 2 or pv.shape != (len(pins),) or not np.isfinite(pins).all() or not np.isfinite(pv).all():
+            raise ValueError('Finite (m, 2) pins and m pin values required')
+        extra += [pins]; extra_v += [pv]; extra_w += [np.full(len(pins), pin_weight * mean_w)]
+    if anchors is not None:
+        anchors = np.asarray(anchors, float)
+        if anchors.ndim != 2 or anchors.shape[1] != 2 or not np.isfinite(anchors).all():
+            raise ValueError('Finite (m, 2) anchors required')
+        extra += [anchors]; extra_v += [np.zeros(len(anchors))]; extra_w += [np.full(len(anchors), anchor_weight * mean_w)]
+    allp = np.concatenate([points, *extra]); ev, ew = np.concatenate(extra_v), np.concatenate(extra_w); n = len(points)
+    if box is None:
+        box = (allp[:, 0].min(), allp[:, 0].max() + 1e-12, allp[:, 1].min(), allp[:, 1].max() + 1e-12)
+    box = np.asarray(box, float)
+    if box.shape != (4,) or not box[1] > box[0] or not box[3] > box[2]:
+        raise ValueError('Box (a0, a1, b0, b1) with positive extent required')
+    if ((allp[:, 0] < box[0]) | (allp[:, 0] > box[1]) | (allp[:, 1] < box[2]) | (allp[:, 1] > box[3])).any():
+        raise ValueError('Every sample, pin and anchor must lie inside the box')
+    Bm, counts = _bspline_basis(allp, box, knots)
+    if counts[0] * counts[1] > 250_000:
+        raise ValueError('Too many coefficients: use a larger knot spacing or a smaller box')
+    Pen = _bending(counts); PtP = (Pen.T @ Pen) / Pen.shape[0]; scale = 1. / w.sum()
+    least = np.clip(0., lower, upper)
+    active = np.zeros(n, bool); edge = least.copy(); converged = False; done = 0; coefficients = None
+    for done in range(1, iterations + 1):
+        weight = w * (hold + active)
+        target = np.where(active, (edge + hold * least) / np.maximum(1 + hold, 1e-300), least)
+        W = np.concatenate([weight * scale, ew * scale]); V = np.concatenate([target, ev])
+        coefficients = spsolve((Bm.T @ sparse.diags(W) @ Bm + bending * PtP).tocsc(), Bm.T @ (W * V))
+        fitted = Bm[:n] @ coefficients
+        below, above = fitted < lower, fitted > upper
+        new_active = below | above
+        edge = np.where(below, lower, np.where(above, upper, least))
+        if np.array_equal(new_active, active) and done > 1:
+            converged = True
+            break
+        active = new_active
+    fitted = Bm @ coefficients
+    violation = np.maximum(lower - fitted[:n], 0.) + np.maximum(fitted[:n] - upper, 0.)
+    pin_error = None
+    if pins is not None and len(pins):
+        pin_error = float(np.abs(fitted[n:n + len(pins)] - ev[:len(pins)]).max())
+    inside0 = (lower <= 0) & (upper >= 0)
+    return {'coefficients': coefficients.reshape(counts[1], counts[0]), 'box': box, 'knots': float(knots),
+            'fitted': fitted[:n], 'violation': violation,
+            'public_metrics': {'samples': int(n), 'coefficients': int(counts[0] * counts[1]), 'iterations': done,
+                               'converged': converged, 'inside_before': float(inside0.mean()),
+                               'inside_after': float(np.mean(violation <= tolerance)), 'max_violation': float(violation.max()),
+                               'outside_after': int(np.count_nonzero(violation > tolerance)), 'pin_max_abs_error': pin_error},
+            'objective': 'Weighted squared distance of a cubic B-spline field to per-point intervals, a small pull toward '
+                         'each point\'s smallest correction, a bending penalty, soft pins and zero anchors (active set)',
+            'limits': 'A smooth field: where the intervals change faster than about two knots it leaves points outside '
+                      'instead of following the edge, and inside wide intervals the smoothing, not the guide, decides '
+                      'the shape. Anchors or pins must fix what the bending penalty leaves free (an affine tilt).'}
+
+
 def evaluate_depth_field(coefficients, box, knots, points):
     """Values of a field returned by `fit_depth_field` at chart points (clamped to its box)."""
     coefficients, points, box = np.asarray(coefficients, float), np.asarray(points, float), np.asarray(box, float)

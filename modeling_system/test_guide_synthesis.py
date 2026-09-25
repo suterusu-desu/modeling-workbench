@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from .guide_synthesis import (front_depth, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
                               evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
-                              front_retreat)
+                              front_retreat, fit_band_field)
 from .preparation import ARRAY_OPERATIONS
 
 WINDOW, CELL = (0., 1., 0., 1.), .02          # a 50 x 50 chart
@@ -210,6 +210,42 @@ class BandTests(unittest.TestCase):
         self.assertEqual(result['public_metrics']['inside_share'], .5)
 
 
+class BandFieldTests(unittest.TestCase):
+    def setUp(self):
+        g = np.linspace(.02, .98, 25); X, Y = np.meshgrid(g, g); self.points = np.c_[X.ravel(), Y.ravel()]
+        x = self.points[:, 0]
+        # left of x = .5 every point must come forward by at least .01; right of it anything in [-.02, .01] will do
+        self.lower = np.where(x < .5, -.03, -.02); self.upper = np.where(x < .5, -.01, .01)
+        self.anchors = np.c_[np.ones(25) * .999, g]
+
+    def slope_at_step(self, fitted):
+        order = np.argsort(self.points[:, 0]); x = self.points[:, 0]
+        row = np.abs(self.points[:, 1] - .5) < .03
+        xs, fs = x[row], fitted[row]; k = np.argsort(xs); xs, fs = xs[k], fs[k]
+        near = (xs[1:] > .4) & (xs[:-1] < .6)
+        return float(np.abs(np.diff(fs) / np.diff(xs))[near].max())
+
+    def test_points_inside_move_within_their_band_so_the_field_stays_smooth(self):
+        kw = dict(knots=.05, bending=1e-3, box=(0, 1, 0, 1), anchors=self.anchors, anchor_weight=5.)
+        edge = fit_depth_field(self.points, np.clip(0., self.lower, self.upper), **kw)
+        band = fit_band_field(self.points, self.lower, self.upper, **kw)
+        self.assertGreater(self.slope_at_step(edge['fitted']), 3 * self.slope_at_step(band['fitted']))
+        m = band['public_metrics']
+        self.assertTrue(m['converged']); self.assertLess(m['max_violation'], 1e-3); self.assertGreater(m['inside_after'], .9)
+        held = fit_band_field(self.points, self.lower, self.upper, hold=1., **kw)      # a strong hold keeps inside points near 0
+        self.assertGreater(self.slope_at_step(held['fitted']), self.slope_at_step(band['fitted']))
+        again = evaluate_depth_field(band['coefficients'], band['box'], band['knots'], self.points)['values']
+        np.testing.assert_allclose(again, band['fitted'], atol=1e-12)
+
+    def test_refusals(self):
+        with self.assertRaisesRegex(ValueError, 'intervals'):
+            fit_band_field(self.points, self.upper, self.lower, knots=.1, bending=0.)
+        with self.assertRaisesRegex(ValueError, 'iteration'):
+            fit_band_field(self.points, self.lower, self.upper, knots=.1, bending=0., iterations=0)
+        with self.assertRaisesRegex(ValueError, 'hold'):
+            fit_band_field(self.points, self.lower, self.upper, knots=.1, bending=0., hold=-1.)
+
+
 class HeightFieldTests(unittest.TestCase):
     def test_mesh_skips_empty_cells_and_cliffs(self):
         depth = np.zeros((3, 3)); window = (0., .3, 0., .3)
@@ -293,7 +329,7 @@ class RegistrationTests(unittest.TestCase):
     def test_operations_are_available_for_array_preparation(self):
         for name in ('front_depth', 'remove_thin_relief', 'stationary_offset', 'pose_change', 'fit_depth_field',
                      'evaluate_depth_field', 'change_band', 'band_excess', 'height_field_mesh', 'keep_in_front',
-                     'front_retreat'):
+                     'front_retreat', 'fit_band_field'):
             self.assertIn(name, ARRAY_OPERATIONS)
 
 
