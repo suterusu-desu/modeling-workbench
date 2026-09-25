@@ -366,13 +366,18 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
 
 
 def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis=1, depth_samples=None, depth_map=None,
-                    window=None, cell=None, depth_smoothing=0., reference=None, compressed_below=.5):
+                    window=None, cell=None, depth_smoothing=0., reference=None, compressed_below=.5, layout='harmonic',
+                    depth_blur=0., iterations=60):
     """Re-lay collapsed material in a projection plane and give it depth from its surroundings or a guide.
 
-    The free vertices take the uniform harmonic (Tutte) layout of the patch in the plane of `plane_axes`, every other
-    patch vertex held where it is: each free vertex at the mean of its patch neighbours. Their depth along `depth_axis`
-    then comes either from a smoothed thin-plate field through the depth of the `depth_samples` vertices (for example the
-    retained surface around the block) or from a front depth map over `window`/`cell` (for example a guide surface).
+    With layout='harmonic' the free vertices take the uniform harmonic (Tutte) layout of the patch in the plane of
+    `plane_axes`, every other patch vertex held where it is: each free vertex at the mean of its patch neighbours. With
+    layout='rigid' they keep the `reference` layout (for example the rest pose) up to local rotations instead:
+    `rigid_deform` of the positions projected into the plane, every other patch vertex held; use it where the material
+    has to turn (a fan around a corner) and uniform weights would even out its uneven spacing. Their depth along
+    `depth_axis` then comes either from a smoothed thin-plate field through the depth of the `depth_samples` vertices
+    (for example the retained surface around the block) or from a front depth map over `window`/`cell` (for example a
+    guide surface, or the retained surface itself), optionally low-passed by a Gaussian of `depth_blur` cells.
     Use it where a pose has squeezed material into parallel rows or columns (collapsed quads) and the projection plane
     shows that block unfolded. Free vertices must be interior to the patch; hold the rows an attachment samples.
     """
@@ -398,6 +403,12 @@ def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis
         mask[free_in] = True
     if (depth_samples is None) == (depth_map is None):
         raise ValueError('Give exactly one depth source: depth_samples or depth_map')
+    if layout not in ('harmonic', 'rigid'):
+        raise ValueError("layout must be 'harmonic' or 'rigid'")
+    if layout == 'rigid' and reference is None:
+        raise ValueError('A rigid layout needs the reference positions whose layout it keeps')
+    if not (np.isfinite(depth_blur) and depth_blur >= 0):
+        raise ValueError('A nonnegative depth_blur (cells) is required')
     tri = tri.astype(np.int64); used = np.unique(tri)
     if not mask.any() or not np.isin(np.flatnonzero(mask), used).all():
         raise ValueError('Free vertices must belong to the patch')
@@ -414,8 +425,22 @@ def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis
     L = (coo_matrix((degree, (np.arange(n), np.arange(n))), shape=(n, n)) - A).tocsr()
     f = np.flatnonzero(mask); h = np.setdiff1d(used, f)
     out = P.copy()
-    for k in axes[:2]:
-        out[f, k] = spsolve(L[f][:, f].tocsc(), -(L[f][:, h] @ P[h, k]))
+    rigid_metrics = {}
+    if layout == 'harmonic':
+        for k in axes[:2]:
+            out[f, k] = spsolve(L[f][:, f].tocsc(), -(L[f][:, h] @ P[h, k]))
+    else:
+        ref = np.asarray(reference, float)
+        if ref.shape != P.shape or not np.isfinite(ref).all():
+            raise ValueError('The reference must correspond to the positions')
+        R2, I2 = ref.copy(), P.copy(); R2[:, axes[2]] = 0.; I2[:, axes[2]] = 0.
+        held = np.zeros(n, bool); held[h] = True
+        rd = rigid_deform(R2, I2, tri, held, units='chart units', frame='projection plane',
+                          relative_area_tolerance=1e-12, iterations=int(iterations))
+        for k in axes[:2]:
+            out[f, k] = np.asarray(rd['deformed'], float)[f, k]
+        rigid_metrics = {'rigid_' + k: v for k, v in rd['public_metrics'].items()
+                         if k in ('iterations', 'converged', 'energy_first', 'energy_last', 'clamped_weights')}
     plane = out[f][:, list(axes[:2])]
     if depth_samples is not None:
         from scipy.interpolate import RBFInterpolator
@@ -442,11 +467,15 @@ def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis
             raise ValueError('A 2D depth map with its window (a0, a1, b0, b1) and cell size is required')
         ci = (plane[:, 0] - win[0]) / cell - .5; cj = (plane[:, 1] - win[2]) / cell - .5
         V = np.where(np.isfinite(D), D, 0.); W = np.isfinite(D).astype(float)
+        if depth_blur > 0:                     # low-pass that ignores empty cells (normalized convolution)
+            from scipy.ndimage import gaussian_filter
+            num, den = gaussian_filter(V * W, depth_blur), gaussian_filter(W, depth_blur)
+            V = np.where(W > 0, num / np.maximum(den, 1e-12), 0.)
         v = map_coordinates(V, [cj, ci], order=1, cval=0.); w = map_coordinates(W, [cj, ci], order=1, cval=0.)
         if (w < .99).any():
             raise ValueError('The depth map does not cover every re-laid vertex')
         out[f, axes[2]] = v / w
-        source = {'depth_source': 'map'}
+        source = {'depth_source': 'map', 'depth_blur_cells': float(depth_blur)}
     if not np.isfinite(out).all():
         raise ValueError('Re-layout did not produce finite positions; qualify the held set')
 
@@ -455,7 +484,7 @@ def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis
         s2 = (a[:, 1] - a[:, 0]) * (b[:, 2] - b[:, 0]) - (a[:, 2] - a[:, 0]) * (b[:, 1] - b[:, 0])
         major = 1. if (s2 > 0).sum() >= (s2 < 0).sum() else -1.
         return int(np.count_nonzero(s2 * major < 0))
-    metrics = {'free_vertices': int(len(f)), 'held_vertices': int(len(h)), **source,
+    metrics = {'free_vertices': int(len(f)), 'held_vertices': int(len(h)), **source, 'layout': layout, **rigid_metrics,
                'plane_flips_before': flips(P), 'plane_flips_after': flips(out),
                'max_position_change': float(np.linalg.norm(out - P, axis=1).max())}
     if reference is not None:
@@ -468,8 +497,9 @@ def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis
                         'smallest_stretch_q01_before': before['smallest_stretch_q01'], 'smallest_stretch_q01_after': after['smallest_stretch_q01'],
                         'local_reversals_before': before['local_reversals'], 'local_reversals_after': after['local_reversals']})
     return {'relaid': out, 'delta': out - P, 'free_vertices': f, 'held_vertices': h, 'public_metrics': metrics,
-            'objective': 'Uniform harmonic (Tutte) layout of the free vertices in the projection plane with the rest of the '
-                         'patch held; depth from a smoothed thin-plate field through the samples, or from a depth map',
+            'objective': ('Uniform harmonic (Tutte) layout' if layout == 'harmonic' else 'As-rigid-as-possible layout of the reference')
+                         + ' of the free vertices in the projection plane with the rest of the patch held; depth from a '
+                           'smoothed thin-plate field through the samples, or from a (low-passed) depth map',
             'limits': 'The plane must show the block unfolded and its held surroundings must be sound: a uniform layout '
                       'evens out spacing, it does not know anatomy. The free material loses its own relief: its depth is '
                       'that of the field. No guide is fitted unless the depth map is a guide.'}

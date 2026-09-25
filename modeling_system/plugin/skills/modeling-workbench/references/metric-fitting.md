@@ -187,6 +187,21 @@ takes their depth from a smoothed thin-plate field through the `depth_samples` v
   guide refit inside the block adds a ring where it meets the held surroundings. Use `depth_map` when a qualified
   guide surface covers the block.
 
+`layout='rigid'` (with `reference`, for example the rest pose) keeps the reference layout up to local rotations
+instead of evening out the spacing: `rigid_deform` of the positions projected into the plane, every non-free patch
+vertex held. Use it where the material has to turn, such as the fan of rows around a corner that rotates down as a lid
+closes: uniform harmonic weights pull an uneven fan toward even spacing and distort it. With `depth_map`,
+`depth_blur` low-passes the map by a Gaussian of that many cells, ignoring empty cells, so a retained surface can give
+the depth: its volume stays and its fine corrugation goes.
+
+In real use the inner end of a closed lid had the fan of rows around the canthus left near its rest place while the
+margin rows closed: rows folded into a V and buckled into a zigzag across the columns (fine radial lines). A block that
+held part of the torn rows rebuilt the tear at its edge; a thin-plate depth through a ring of held samples bulged into
+a pad where dense held seam rows met the block; freeing the seam's inner end opened a hole at the corner. What worked:
+the whole torn fan free with the seam end held, the rigid layout from the rest fan, depth from the retained closed
+surface low-passed over three cells, and the change blended out toward the lid centre, where the untouched rows
+continue (a hard block edge there met them in a sharp corner).
+
 In real use a closed lid corner whose material collapsed along an unsupported hook of its guide resisted eleven
 repairs (rigid and similar deformation from rest, relaxation, thin-plate depth fills, harmonic 3D layouts, smoothing,
 depth-only fairing). A uniform layout of that block in the front view, where it was not folded, with depth from the

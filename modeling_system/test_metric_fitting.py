@@ -405,6 +405,54 @@ class PlanarRelayoutTests(unittest.TestCase):
         np.testing.assert_allclose(out[4 * n + 4, [0, 2]], [.4, .4], atol=1e-9)
         self.assertAlmostEqual(out[4 * n + 4, 1], .3 + .1 * .4 - .05 * .4, places=6)
 
+    @staticmethod
+    def fan(nr=7, na=9):
+        """An uneven fan around a corner at the origin (radii grow geometrically), seen along y."""
+        r = .05 * 1.35 ** np.arange(nr); a = np.radians(np.linspace(10, 80, na))
+        R, A = np.meshgrid(r, a, indexing='ij')
+        positions = np.c_[(R * np.cos(A)).ravel(), np.zeros(R.size), (R * np.sin(A)).ravel()]
+        tri = []
+        for i in range(nr - 1):
+            for j in range(na - 1):
+                v = i * na + j; tri += [[v, v + na, v + na + 1], [v, v + na + 1, v + 1]]
+        return positions, np.array(tri), nr, na
+
+    def test_rigid_layout_turns_an_uneven_fan_that_the_harmonic_layout_distorts(self):
+        rest, tri, nr, na = self.fan()
+        th = np.radians(-25.); rot = np.array([[np.cos(th), 0, -np.sin(th)], [0, 1, 0], [np.sin(th), 0, np.cos(th)]])
+        turned = rest @ rot.T                                                    # the whole fan turned about the corner
+        ij = np.array([(i, j) for i in range(nr) for j in range(na)])
+        free = (ij[:, 0] > 0) & (ij[:, 0] < nr - 1) & (ij[:, 1] > 0) & (ij[:, 1] < na - 1)
+        posed = turned.copy()
+        posed[free, 2] += .01 * np.where(ij[free, 1] % 2, 1., -1.)              # buckled into a zigzag across the columns
+        rigid = planar_relayout(posed, tri, free, depth_map=np.zeros((20, 20)), window=(-.5, .5, -.5, .5), cell=.05,
+                                reference=rest, layout='rigid')
+        np.testing.assert_allclose(rigid['relaid'][free][:, [0, 2]], turned[free][:, [0, 2]], atol=1e-6)
+        harmonic = planar_relayout(posed, tri, free, depth_map=np.zeros((20, 20)), window=(-.5, .5, -.5, .5), cell=.05)
+        self.assertGreater(np.abs(harmonic['relaid'][free] - turned[free]).max(), 2e-3)  # uniform weights even the spacing out
+        self.assertEqual(rigid['public_metrics']['layout'], 'rigid')
+        with self.assertRaisesRegex(ValueError, 'reference'):
+            planar_relayout(posed, tri, free, depth_map=np.zeros((20, 20)), window=(-.5, .5, -.5, .5), cell=.05, layout='rigid')
+        with self.assertRaisesRegex(ValueError, 'layout'):
+            planar_relayout(posed, tri, free, depth_map=np.zeros((20, 20)), window=(-.5, .5, -.5, .5), cell=.05, layout='even')
+
+    def test_depth_map_can_be_low_passed(self):
+        rest, tri, n = self.grid()
+        free = np.zeros(len(rest), bool); free[4 * n + 4] = True
+        window, cell = (-.055, .845, -.055, .845), .01                          # the vertex sits on a cell centre
+        a = window[0] + (np.arange(90) + .5) * cell
+        A, B = np.meshgrid(a, a); plane = .3 + .1 * A - .05 * B
+        ripple = plane + .01 * np.where((np.arange(90)[None, :] + np.arange(90)[:, None]) % 2, 1., -1.)   # fine corrugation
+        ripple[:5, :5] = np.nan                                                  # an empty corner stays empty
+        sharp = planar_relayout(rest, tri, free, depth_map=ripple, window=window, cell=cell)['relaid'][4 * n + 4, 1]
+        smooth = planar_relayout(rest, tri, free, depth_map=ripple, window=window, cell=cell, depth_blur=3.)
+        exact = .3 + .1 * .4 - .05 * .4
+        self.assertLess(abs(smooth['relaid'][4 * n + 4, 1] - exact), 1e-3)
+        self.assertGreater(abs(sharp - exact), 5e-3)
+        self.assertEqual(smooth['public_metrics']['depth_blur_cells'], 3.)
+        with self.assertRaisesRegex(ValueError, 'depth_blur'):
+            planar_relayout(rest, tri, free, depth_map=ripple, window=window, cell=cell, depth_blur=-1.)
+
     def test_refuses_boundary_free_vertices_and_ambiguous_depth(self):
         rest, tri, n = self.grid(4)
         free = np.zeros(len(rest), bool); free[0] = True
