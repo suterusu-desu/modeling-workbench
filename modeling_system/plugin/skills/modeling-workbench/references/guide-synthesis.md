@@ -39,6 +39,12 @@ neutral, and say at every place how far it can be trusted.
   the excesses (with points already inside holding it at 0) moves only what is outside, and only to the band's edge.
 - `height_field_mesh(depth, window=..., cell=..., keep=..., max_step=...)`: the guide as a surface for display and
   fitting; blocks across a cliff are left open.
+- `keep_in_front(depth, obstacle, margin, softness=...)`: the guide kept at least `margin` in front of an obstacle's
+  depth map (a lid over the character's own eyeball). With `softness` 0 it is the exact minimum; with a positive
+  softness a smooth minimum that lies at most `softness * log 2` in front of it and has no kink where the two surfaces
+  cross. `push` says how far each cell moved.
+- `front_retreat(rest, pose, support=..., threshold=...)`: how far a surface moved away from the viewer between two
+  poses, per cell, with the share, median, 90th percentile and maximum over a support.
 
 ## Composing a guide (what real use needed)
 
@@ -64,6 +70,22 @@ At rest the change is zero, so the guide reproduces the accepted neutral exactly
 declared derivative of its runs: record the runs, the chart, the supports, each width and threshold, the pinned points
 and which of them were left unpinned, and qualify it by its band before a correction relies on it. Inside a wide band
 the guide does not decide the shape: say so, and choose the shape there by clean geometry and the reference images.
+
+## A guide in front of the character's own anatomy
+
+A generated head carries its own anatomy under the part it poses: in real use, generated closed-eye heads had smaller,
+deeper eyeballs than the accepted neutral, so their lids lay up to a few millimetres (at head scale) behind where the
+character's eyeball is. Fitted directly, the character's closing lid was pulled into its own eye, which reads as the eye
+sucking in. Where the guide lies behind the obstacle plus the lid's thickness it no longer says where the lid is; keep
+it in front with `keep_in_front` (a smooth join, so no crest appears where the guide surfaces again), and fit a
+correction there in the forward direction only: pulling material back toward the obstacle is exactly the failure. Where
+the guide lies in front of the obstacle it is valid both ways. Measure the result with `front_retreat` between the rest
+and the pose over the moving skin; a closing lid that follows a sphere-like eye should not retreat. The margin is a
+design value (the lid's thickness over the eye), not a fitting tolerance.
+
+The volume of a pose guide, not every line in it, is the target. Generated runs sculpt fine grooves and creases (a
+lid crease, a fold line) whose position varies between runs and which a character may carry in texture instead. Fit
+the smooth field, keep its knot spacing wider than those lines, and use the tolerance band to state what it leaves out.
 
 ## Using the band in a correction
 

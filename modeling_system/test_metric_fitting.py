@@ -6,7 +6,7 @@ import tempfile
 import unittest
 import numpy as np
 from scipy.sparse import coo_matrix, diags
-from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform
+from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout
 from .preparation import ArrayPreparation
 
 
@@ -362,6 +362,65 @@ class RigidDeformTests(unittest.TestCase):
             result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
             self.assertEqual(result['status'], 'completed')
             self.assertIn('energy_last', result['summary'])
+
+
+class PlanarRelayoutTests(unittest.TestCase):
+    """Collapsed material re-laid in a projection plane, depth from its surroundings or a map."""
+
+    @staticmethod
+    def grid(n=9, spacing=.1):
+        a, b = np.meshgrid(np.arange(n) * spacing, np.arange(n) * spacing)
+        depth = .2 * (a - .4) ** 2 + .1 * (b - .4) ** 2                    # a gently curved sheet, seen along y
+        positions = np.c_[a.ravel(), depth.ravel(), b.ravel()]
+        tri = []
+        for j in range(n - 1):
+            for i in range(n - 1):
+                v = j * n + i; tri += [[v, v + 1, v + n + 1], [v, v + n + 1, v + n]]
+        return positions, np.array(tri), n
+
+    def test_collapsed_block_is_relaid_and_given_the_surrounding_depth(self):
+        rest, tri, n = self.grid()
+        ij = np.array([(i, j) for j in range(n) for i in range(n)])
+        block = (ij[:, 0] >= 3) & (ij[:, 0] <= 5) & (ij[:, 1] >= 3) & (ij[:, 1] <= 5)
+        posed = rest.copy(); posed[block, 2] = .42 + .01 * (ij[block, 1] - 4)   # rows squeezed together (collapsed quads)
+        posed[block, 1] += .02                                                  # and pushed off the surface
+        samples = ~block & (np.abs(ij[:, 0] - 4) <= 3) & (np.abs(ij[:, 1] - 4) <= 3)
+        result = planar_relayout(posed, tri, block, depth_samples=samples, reference=rest)
+        out = result['relaid']
+        np.testing.assert_allclose(out[block][:, [0, 2]], rest[block][:, [0, 2]], atol=1e-9)   # the uniform grid is harmonic
+        np.testing.assert_allclose(out[block, 1], rest[block, 1], atol=4e-3)                  # depth from the surroundings
+        np.testing.assert_array_equal(out[~block], posed[~block])                              # held vertices exact bytes
+        m = result['public_metrics']
+        self.assertGreater(m['compressed_before'], 0); self.assertEqual(m['compressed_after'], 0)
+        self.assertEqual(m['plane_flips_after'], 0)
+
+    def test_depth_can_come_from_a_depth_map(self):
+        rest, tri, n = self.grid()
+        free = np.zeros(len(rest), bool); free[4 * n + 4] = True
+        posed = rest.copy(); posed[4 * n + 4] += [.03, .05, -.02]
+        window, cell = (-.05, .85, -.05, .85), .01
+        a = window[0] + (np.arange(90) + .5) * cell
+        A, B = np.meshgrid(a, a); plane = .3 + .1 * A - .05 * B                 # a guide surface as a front depth map
+        out = planar_relayout(posed, tri, free, depth_map=plane, window=window, cell=cell)['relaid']
+        np.testing.assert_allclose(out[4 * n + 4, [0, 2]], [.4, .4], atol=1e-9)
+        self.assertAlmostEqual(out[4 * n + 4, 1], .3 + .1 * .4 - .05 * .4, places=6)
+
+    def test_refuses_boundary_free_vertices_and_ambiguous_depth(self):
+        rest, tri, n = self.grid(4)
+        free = np.zeros(len(rest), bool); free[0] = True
+        with self.assertRaisesRegex(ValueError, 'interior'):
+            planar_relayout(rest, tri, free, depth_samples=~free)
+        free[:] = False; free[n + 1] = True
+        with self.assertRaisesRegex(ValueError, 'exactly one depth source'):
+            planar_relayout(rest, tri, free)
+        with self.assertRaisesRegex(ValueError, 'must not include'):
+            planar_relayout(rest, tri, free, depth_samples=np.ones(len(rest), bool))
+        with self.assertRaisesRegex(ValueError, 'does not cover'):
+            planar_relayout(rest, tri, free, depth_map=np.full((2, 2), np.nan), window=(0, .3, 0, .3), cell=.15)
+
+    def test_available_for_array_preparation(self):
+        from .preparation import ARRAY_OPERATIONS
+        self.assertIn('planar_relayout', ARRAY_OPERATIONS)
 
 
 if __name__ == '__main__': unittest.main()

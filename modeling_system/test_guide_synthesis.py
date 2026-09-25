@@ -2,7 +2,8 @@
 import unittest
 import numpy as np
 from .guide_synthesis import (front_depth, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
-                              evaluate_depth_field, change_band, band_excess, height_field_mesh)
+                              evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
+                              front_retreat)
 from .preparation import ARRAY_OPERATIONS
 
 WINDOW, CELL = (0., 1., 0., 1.), .02          # a 50 x 50 chart
@@ -198,10 +199,78 @@ class HeightFieldTests(unittest.TestCase):
         self.assertEqual(len(height_field_mesh(cliff, window=window, cell=.1, max_step=.1)['triangles']), 4)
 
 
+class KeepInFrontTests(unittest.TestCase):
+    """A guide surface kept in front of an obstacle (an eyeball) by a margin."""
+
+    def test_exact_minimum_moves_only_what_lies_behind(self):
+        A, B = chart()
+        lid = .05 + .2 * (B - .5)                        # a sloping sheet: behind the ball below, in front above
+        ball = dome(A, B, radius=.4, height=.1)
+        out = keep_in_front(lid, ball, .01)
+        np.testing.assert_allclose(out['depth'], np.minimum(lid, ball - .01))
+        self.assertTrue((out['push'] >= 0).all())
+        self.assertTrue((out['depth'] <= ball - .01 + 1e-12).all())
+        self.assertEqual(out['public_metrics']['pushed'], int((lid > ball - .01).sum()))
+
+    def test_smooth_join_stays_near_the_minimum_and_nearer_than_both(self):
+        A, B = chart()
+        lid = .05 + .2 * (B - .5); ball = dome(A, B, radius=.4, height=.1)
+        k = .004; out = keep_in_front(lid, ball, .01, softness=k)['depth']
+        exact = np.minimum(lid, ball - .01)
+        self.assertTrue((out <= exact + 1e-12).all())
+        self.assertTrue((out >= exact - k * np.log(2) - 1e-12).all())
+        far = np.abs(lid - (ball - .01)) > 10 * k       # away from the crossing it is the minimum
+        np.testing.assert_allclose(out[far], exact[far], atol=1e-6)
+        d2 = np.abs(np.diff(out, 2, axis=0)).max()       # no kink where the surfaces cross
+        self.assertLess(d2, np.abs(np.diff(exact, 2, axis=0)).max())
+
+    def test_uncovered_cells_and_the_other_front(self):
+        A, B = chart()
+        lid = np.full(A.shape, .05); ball = dome(A, B, radius=.3, height=.1); ball[:, :10] = np.nan
+        out = keep_in_front(lid, ball, .01)['depth']
+        np.testing.assert_array_equal(out[:, :10], lid[:, :10])
+        flip = keep_in_front(-lid, -ball, .01, front='max')['depth']      # larger depth nearer: the mirror image
+        np.testing.assert_allclose(flip, -out)
+
+    def test_refusals(self):
+        with self.assertRaisesRegex(ValueError, 'margin and softness'):
+            keep_in_front(np.zeros((3, 3)), np.zeros((3, 3)), -.01)
+        with self.assertRaisesRegex(ValueError, 'obstacle'):
+            keep_in_front(np.zeros((3, 3)), np.zeros((4, 3)), .01)
+        with self.assertRaisesRegex(ValueError, 'front'):
+            keep_in_front(np.zeros((3, 3)), np.zeros((3, 3)), .01, front='near')
+
+
+class FrontRetreatTests(unittest.TestCase):
+    """Skin that moves away from the viewer between two poses (a closing eye 'sucking in')."""
+
+    def test_counts_a_sunken_patch(self):
+        A, B = chart()
+        rest = np.zeros(A.shape); pose = rest.copy()
+        sunk = (A - .3) ** 2 + (B - .3) ** 2 < .1 ** 2
+        pose[sunk] = .004; pose[~sunk & (A > .7)] = -.002                   # a dent, and skin that came forward
+        m = front_retreat(rest, pose, threshold=.001)['public_metrics']
+        self.assertAlmostEqual(m['retreating_share'], sunk.mean())
+        self.assertAlmostEqual(m['max'], .004)
+        sup = front_retreat(rest, pose, support=A > .7)['public_metrics']
+        self.assertEqual(sup['retreating_share'], 0.); self.assertAlmostEqual(sup['max'], -.002)
+        other = front_retreat(-rest, -pose, front='max', threshold=.001)['public_metrics']
+        self.assertAlmostEqual(other['retreating_share'], m['retreating_share'])
+
+    def test_empty_cells_and_refusals(self):
+        rest = np.full((4, 4), np.nan); m = front_retreat(rest, rest)['public_metrics']
+        self.assertEqual(m['cells'], 0); self.assertIsNone(m['median'])
+        with self.assertRaisesRegex(ValueError, 'support'):
+            front_retreat(np.zeros((3, 3)), np.zeros((3, 3)), support=np.ones((3, 3)))
+        with self.assertRaisesRegex(ValueError, 'threshold'):
+            front_retreat(np.zeros((3, 3)), np.zeros((3, 3)), threshold=-1.)
+
+
 class RegistrationTests(unittest.TestCase):
     def test_operations_are_available_for_array_preparation(self):
         for name in ('front_depth', 'remove_thin_relief', 'stationary_offset', 'pose_change', 'fit_depth_field',
-                     'evaluate_depth_field', 'change_band', 'band_excess', 'height_field_mesh'):
+                     'evaluate_depth_field', 'change_band', 'band_excess', 'height_field_mesh', 'keep_in_front',
+                     'front_retreat'):
             self.assertIn(name, ARRAY_OPERATIONS)
 
 

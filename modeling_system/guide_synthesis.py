@@ -375,6 +375,67 @@ def band_excess(values, lower, upper):
                                                  'max_abs_excess': float(np.abs(excess[ok]).max()) if ok.any() else None}}
 
 
+def keep_in_front(depth, obstacle, margin, *, softness=0., front='min'):
+    """Keep a depth map at least `margin` in front of an obstacle's depth map (a lid over an eyeball).
+
+    Where both maps are covered the result is the nearer of `depth` and `obstacle` moved `margin` toward the viewer,
+    joined by a smooth minimum of width `softness` in depth units (0 gives the exact minimum, which leaves a kink where
+    the two surfaces cross; a smooth one lies nearer than both by at most softness * log 2). Elsewhere the depth is
+    unchanged. `push` is how far each cell moved toward the viewer (never negative).
+
+    In real use a generated pose had a smaller, deeper eye than the character it guides, so its closed lid lay behind
+    the character's eyeball; below that crossing its surface belonged to the other eye, and the guide followed the
+    character's eye plus the lid's own thickness there instead.
+    """
+    depth = _map(depth, name='depth'); obstacle = _map(obstacle, depth.shape, 'obstacle')
+    if not (np.isfinite(margin) and margin >= 0 and np.isfinite(softness) and softness >= 0):
+        raise ValueError('Nonnegative margin and softness required')
+    sign = 1. if _front(front) == 'min' else -1.
+    a, b = sign * depth, sign * obstacle - margin              # in 'min' terms: smaller is nearer
+    both = np.isfinite(a) & np.isfinite(b)
+    out = a.copy()
+    lo = np.minimum(a[both], b[both])
+    if softness > 0:
+        with np.errstate(over='ignore', under='ignore'):
+            lo = lo - softness * np.log(np.exp(-(a[both] - lo) / softness) + np.exp(-(b[both] - lo) / softness))
+    out[both] = lo
+    result = sign * out
+    push = np.where(both, sign * (depth - result), 0.)
+    moved = push > 1e-12
+    return {'depth': result, 'push': push,
+            'public_metrics': {'covered': int(both.sum()), 'pushed': int(moved.sum()),
+                               'max_push': float(push.max()) if push.size else 0.},
+            'limits': 'The obstacle and margin are the caller\'s anatomy; the result says where a surface may lie, not '
+                      'what it should look like there.'}
+
+
+def front_retreat(rest, pose, *, support=None, threshold=0., front='min'):
+    """How far a surface moved away from the viewer between two front depth maps: retreat = pose - rest for
+    front='min' (positive = farther away, sunk), its share above `threshold`, median, 90th percentile and maximum
+    over `support` (default: every cell covered in both maps).
+
+    A closing eye whose surrounding skin retreats reads as the eye 'sucking in'; count it per pose and region, from the
+    actual surfaces, instead of judging it from shading.
+    """
+    rest = _map(rest, name='rest'); pose = _map(pose, rest.shape, 'pose')
+    if not (np.isfinite(threshold) and threshold >= 0):
+        raise ValueError('Nonnegative threshold required')
+    retreat = (pose - rest) if _front(front) == 'min' else (rest - pose)
+    ok = np.isfinite(retreat)
+    if support is not None:
+        support = np.asarray(support)
+        if support.shape != rest.shape or support.dtype != bool:
+            raise ValueError('A boolean support map of the chart shape is required')
+        ok &= support
+    v = retreat[ok]
+    return {'retreat': retreat,
+            'public_metrics': {'cells': int(v.size),
+                               'retreating_share': float(np.mean(v > threshold)) if v.size else None,
+                               'median': float(np.median(v)) if v.size else None,
+                               'p90': float(np.quantile(v, .9)) if v.size else None,
+                               'max': float(v.max()) if v.size else None}}
+
+
 def height_field_mesh(depth, *, window, cell, keep=None, depth_axis=1, chart_axes=(0, 2), max_step=None):
     """Triangle mesh of a depth map: a vertex at every kept, covered cell centre, two triangles per 2x2 block of them.
 

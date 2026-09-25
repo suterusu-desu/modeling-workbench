@@ -167,3 +167,27 @@ with `construction_diagnostics.compare_bends`, not with the reference-relative c
 
 When both end poses of a motion are established and only the in-between poses are wrong, build the in-betweens from
 the two poses with [motion paths](motion-paths.md) (pace, rolled or hinged paths) instead of fitting further keys.
+
+## Re-lay collapsed material in a plane
+
+A pose can squeeze a block of material until its rows and columns run parallel (collapsed quads): shading shows a hard
+line along it, and relaxing, smoothing or refitting depth around it keeps the line because every one of those works on
+the collapsed layout itself. `planar_relayout(positions, triangles, free, plane_axes=..., depth_axis=...,
+depth_samples=... or depth_map=..., window=..., cell=...)` (also an `ArrayPreparation` operation) gives the free
+vertices the uniform harmonic (Tutte) layout of the patch in a projection plane, every other patch vertex held, then
+takes their depth from a smoothed thin-plate field through the `depth_samples` vertices or from a front depth map
+(for example a guide surface). The report counts triangles flipped in the plane before and after and, with a
+`reference`, the compressed triangles and local folds against it.
+
+- Pick the plane in which the block is not folded (for a closing lid seen from the front, the front view), and check
+  `plane_flips_after` is 0.
+- Hold everything whose position is established: the block's surroundings, rows an attachment samples, seam or rim
+  vertices, and a ring around the block.
+- Take depth from the retained surface around the block when that surface came from a coupled registration; a local
+  guide refit inside the block adds a ring where it meets the held surroundings. Use `depth_map` when a qualified
+  guide surface covers the block.
+
+In real use a closed lid corner whose material collapsed along an unsupported hook of its guide resisted eleven
+repairs (rigid and similar deformation from rest, relaxation, thin-plate depth fills, harmonic 3D layouts, smoothing,
+depth-only fairing). A uniform layout of that block in the front view, where it was not folded, with depth from the
+surrounding retained skin, removed the line and left the guide depth fit unchanged.

@@ -8,13 +8,14 @@ from . import material_operations
 from .preparation_contracts import PreparationOperation
 from .result_reporting import json_data, compact_summary
 from .triangle_contact import projected_triangle_contact
-from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform
+from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout
 from .correction_scope import correction_scope
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
                            shared_schedule)
 from .construction_diagnostics import section_turns
 from .guide_synthesis import (front_depth, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
-                              evaluate_depth_field, change_band, band_excess, height_field_mesh)
+                              evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
+                              front_retreat)
 
 
 def active_vertex_coverage(vertex_count, faces, driven):
@@ -92,7 +93,7 @@ def pose_correspondence(guide_points, pose_points, pose_values):
 
 
 ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric': surface_fem_metric,
-    'relax_displacement': relax_displacement, 'rigid_deform': rigid_deform,
+    'relax_displacement': relax_displacement, 'rigid_deform': rigid_deform, 'planar_relayout': planar_relayout,
     'correction_scope': correction_scope,
     'section_fit': guide_fitting.prepare_section_fit,
     'material_path': guide_fitting.remap_material_path, 'compose_correspondence': compose_correspondence,
@@ -108,7 +109,7 @@ ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric'
     'shared_schedule': shared_schedule, 'front_depth': front_depth, 'remove_thin_relief': remove_thin_relief,
     'stationary_offset': stationary_offset, 'pose_change': pose_change, 'fit_depth_field': fit_depth_field,
     'evaluate_depth_field': evaluate_depth_field, 'change_band': change_band, 'band_excess': band_excess,
-    'height_field_mesh': height_field_mesh}
+    'height_field_mesh': height_field_mesh, 'keep_in_front': keep_in_front, 'front_retreat': front_retreat}
 
 
 def prepare_arrays(operation, *, inputs, parameters=None, operations=None):

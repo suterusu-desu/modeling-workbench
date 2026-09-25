@@ -363,3 +363,113 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
                          'degree-scaled soft position targets; held vertices exact',
             'limits': 'Shape preservation of the chosen reference only: no guide, depth, anatomical or appearance qualification. '
                       'A folded reference keeps its folds; local minima depend on the initial positions; the held set is an explicit owner choice.'}
+
+
+def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis=1, depth_samples=None, depth_map=None,
+                    window=None, cell=None, depth_smoothing=0., reference=None, compressed_below=.5):
+    """Re-lay collapsed material in a projection plane and give it depth from its surroundings or a guide.
+
+    The free vertices take the uniform harmonic (Tutte) layout of the patch in the plane of `plane_axes`, every other
+    patch vertex held where it is: each free vertex at the mean of its patch neighbours. Their depth along `depth_axis`
+    then comes either from a smoothed thin-plate field through the depth of the `depth_samples` vertices (for example the
+    retained surface around the block) or from a front depth map over `window`/`cell` (for example a guide surface).
+    Use it where a pose has squeezed material into parallel rows or columns (collapsed quads) and the projection plane
+    shows that block unfolded. Free vertices must be interior to the patch; hold the rows an attachment samples.
+    """
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.linalg import spsolve
+    from .construction_diagnostics import compare_stretch
+
+    P, tri = np.asarray(positions, float), np.asarray(triangles)
+    axes = (int(plane_axes[0]), int(plane_axes[1]), int(depth_axis))
+    if P.ndim != 2 or P.shape[1] != 3 or not np.isfinite(P).all() or sorted(axes) != [0, 1, 2]:
+        raise ValueError('Finite (N, 3) positions and three distinct axes required')
+    if tri.ndim != 2 or tri.shape[1:] != (3,) or tri.dtype.kind not in 'iu' or not len(tri) or tri.min() < 0 or tri.max() >= len(P):
+        raise ValueError('Patch triangles must index the supplied positions')
+    mask = np.zeros(len(P), bool)
+    free_in = np.asarray(free)
+    if free_in.dtype == bool:
+        if free_in.shape != (len(P),):
+            raise ValueError('A boolean free mask needs one flag per position')
+        mask = free_in.copy()
+    else:
+        if free_in.dtype.kind not in 'iu' or free_in.ndim != 1 or (len(free_in) and (free_in.min() < 0 or free_in.max() >= len(P))):
+            raise ValueError('Free vertices must be a boolean mask or valid indices')
+        mask[free_in] = True
+    if (depth_samples is None) == (depth_map is None):
+        raise ValueError('Give exactly one depth source: depth_samples or depth_map')
+    tri = tri.astype(np.int64); used = np.unique(tri)
+    if not mask.any() or not np.isin(np.flatnonzero(mask), used).all():
+        raise ValueError('Free vertices must belong to the patch')
+    edges = np.sort(np.r_[tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]], axis=1)
+    unique, counts = np.unique(edges, axis=0, return_counts=True)
+    if (counts > 2).any():
+        raise ValueError('Nonmanifold patch edges refuse a harmonic layout')
+    boundary = np.zeros(len(P), bool); boundary[np.unique(unique[counts == 1])] = True
+    if (mask & boundary).any():
+        raise ValueError('Free vertices must be interior to the patch; hold its boundary')
+    n = len(P); i, j = unique[:, 0], unique[:, 1]
+    A = coo_matrix((np.ones(2 * len(i)), (np.r_[i, j], np.r_[j, i])), shape=(n, n)).tocsr()
+    degree = np.asarray(A.sum(1)).ravel()
+    L = (coo_matrix((degree, (np.arange(n), np.arange(n))), shape=(n, n)) - A).tocsr()
+    f = np.flatnonzero(mask); h = np.setdiff1d(used, f)
+    out = P.copy()
+    for k in axes[:2]:
+        out[f, k] = spsolve(L[f][:, f].tocsc(), -(L[f][:, h] @ P[h, k]))
+    plane = out[f][:, list(axes[:2])]
+    if depth_samples is not None:
+        from scipy.interpolate import RBFInterpolator
+        s = np.asarray(depth_samples)
+        smask = np.zeros(n, bool)
+        if s.dtype == bool:
+            if s.shape != (n,):
+                raise ValueError('A boolean sample mask needs one flag per position')
+            smask = s.copy()
+        else:
+            smask[s.astype(np.int64)] = True
+        if (smask & mask).any():
+            raise ValueError('Depth samples must not include the re-laid vertices')
+        if smask.sum() < 3:
+            raise ValueError('At least three depth samples are required')
+        field = RBFInterpolator(P[smask][:, list(axes[:2])], P[smask, axes[2]], kernel='thin_plate_spline',
+                                smoothing=float(depth_smoothing) * int(smask.sum()), degree=1)
+        out[f, axes[2]] = field(plane)
+        source = {'depth_source': 'samples', 'depth_samples': int(smask.sum())}
+    else:
+        from scipy.ndimage import map_coordinates
+        D = np.asarray(depth_map, float); win = np.asarray(window, float)
+        if D.ndim != 2 or win.shape != (4,) or not (cell is not None and np.isfinite(cell) and cell > 0):
+            raise ValueError('A 2D depth map with its window (a0, a1, b0, b1) and cell size is required')
+        ci = (plane[:, 0] - win[0]) / cell - .5; cj = (plane[:, 1] - win[2]) / cell - .5
+        V = np.where(np.isfinite(D), D, 0.); W = np.isfinite(D).astype(float)
+        v = map_coordinates(V, [cj, ci], order=1, cval=0.); w = map_coordinates(W, [cj, ci], order=1, cval=0.)
+        if (w < .99).any():
+            raise ValueError('The depth map does not cover every re-laid vertex')
+        out[f, axes[2]] = v / w
+        source = {'depth_source': 'map'}
+    if not np.isfinite(out).all():
+        raise ValueError('Re-layout did not produce finite positions; qualify the held set')
+
+    def flips(Q):
+        a = Q[tri][:, :, axes[0]]; b = Q[tri][:, :, axes[1]]
+        s2 = (a[:, 1] - a[:, 0]) * (b[:, 2] - b[:, 0]) - (a[:, 2] - a[:, 0]) * (b[:, 1] - b[:, 0])
+        major = 1. if (s2 > 0).sum() >= (s2 < 0).sum() else -1.
+        return int(np.count_nonzero(s2 * major < 0))
+    metrics = {'free_vertices': int(len(f)), 'held_vertices': int(len(h)), **source,
+               'plane_flips_before': flips(P), 'plane_flips_after': flips(out),
+               'max_position_change': float(np.linalg.norm(out - P, axis=1).max())}
+    if reference is not None:
+        ref = np.asarray(reference, float)
+        if ref.shape != P.shape:
+            raise ValueError('The reference must correspond to the positions')
+        before = compare_stretch(ref, P, tri, compressed_below=compressed_below, limit=1)['all']
+        after = compare_stretch(ref, out, tri, compressed_below=compressed_below, limit=1)['all']
+        metrics.update({'compressed_before': before['compressed'], 'compressed_after': after['compressed'],
+                        'smallest_stretch_q01_before': before['smallest_stretch_q01'], 'smallest_stretch_q01_after': after['smallest_stretch_q01'],
+                        'local_reversals_before': before['local_reversals'], 'local_reversals_after': after['local_reversals']})
+    return {'relaid': out, 'delta': out - P, 'free_vertices': f, 'held_vertices': h, 'public_metrics': metrics,
+            'objective': 'Uniform harmonic (Tutte) layout of the free vertices in the projection plane with the rest of the '
+                         'patch held; depth from a smoothed thin-plate field through the samples, or from a depth map',
+            'limits': 'The plane must show the block unfolded and its held surroundings must be sound: a uniform layout '
+                      'evens out spacing, it does not know anatomy. The free material loses its own relief: its depth is '
+                      'that of the field. No guide is fitted unless the depth map is a guide.'}
