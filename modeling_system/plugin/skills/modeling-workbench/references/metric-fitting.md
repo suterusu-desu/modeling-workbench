@@ -153,7 +153,27 @@ rotations and a sparse solve, started from the free vertices' `initial` position
   a weight relative to each vertex's cotangent degree: zero on and near the material being
   replaced, rising with distance from it. A soft pull toward a shape that is itself folded
   brings the fold back, so measure the distance from the folded material, not from a point.
-- It fits no guide. Follow it with a guide depth fit, joined to the held surroundings.
+- Optional intervals (`interval_axis=`, `lower=`, `upper=`, `interval_weight=1e3`) keep one
+  coordinate of each free vertex inside its own `[lower, upper]` (NaN or an infinite value
+  leaves that side open), for example a guide's depth band along the view axis, so the
+  relaxed material stays inside the guide during the solve instead of being measured
+  against it afterwards. Vertices outside their interval are pulled onto the violated bound
+  in that coordinate only, by a degree-scaled penalty re-solved with the rotations until the
+  set stops changing; a vertex the solve keeps inside leaves the set, and the active ones
+  finish exactly on their bound. The report gives the bounded and active vertices, the
+  outside counts and largest violation before and after, the penalty's residual before that
+  last step and how often the set changed. Give a vertex that already lies outside the band
+  an interval that includes where it is when the relaxation must not drag it (and its
+  neighbours) across.
+- A guide band can carry the guide's own fold lines in its edges. Hard intervals pin the
+  vertices that press against such an edge and trace it, and a vertex held where it is
+  beside free neighbours leaves a crease along that boundary. With a small
+  `interval_weight` (about 1, as strong as the shape term) and `project_active=False` the
+  band is a soft pull that the shape term smooths, so the material follows the band's
+  volume. The report's penalty residual then says how far outside the band the solve
+  settled.
+- Without intervals it fits no guide. Follow it with a guide depth fit, joined to the held
+  surroundings.
 - A rest reference also undoes the large rotations the pose makes on purpose: a lid margin
   that rolls under as the lid closes comes back as an open-eye bulge if it is free. Hold or
   soft-target material whose posed turn is intended, and keep the free set to the defect.
@@ -164,6 +184,19 @@ stretch tails of both. A normal reversal against the reference means a fold only
 material that should not turn past 90 degrees; a closing lid legitimately does, so judge
 folds with `local_reversals_before/after` (flips against the local rotation) and creases
 with `construction_diagnostics.compare_bends`, not with the reference-relative count.
+
+In real use three separately fitted forward depth corrections met on a closing upper lid beside its inner corner (a
+guide-band fit decaying toward the corner, another guide's field growing away from it, an older fit peaking between).
+Each correction was smooth, but where they met the lid's bend across its rows gathered into a narrow fold, 11 to 14
+degrees per edge against 7 to 9 at rest with the corner side flattened, seen as a soft line up from the corner in
+three-quarter view through the middle of the blink. Softening one of the fits or re-timing the skin above made it
+worse. What worked was re-laying that patch of each in-between as-rigid-as-possible from rest, with the soft pull toward
+the finished shape at 0 on the fold's core and rising with distance from it. Three details mattered:
+- The pull also rose toward the held margin rows. A hard held row right below the fold took the mismatch as a
+  sharper margin turn.
+- The band was a soft interval widened to where each vertex already was. Hard intervals pinned the vertices already
+  behind the band and left a crease beside them. A soft interval to the band itself traced its fold lines.
+- The re-lay faded out before closure. There the skin stretches flat, and a rest-shaped pull brought back an older line.
 
 When both end poses of a motion are established and only the in-between poses are wrong, build the in-betweens from
 the two poses with [motion paths](motion-paths.md) (pace, rolled or hinged paths) instead of fitting further keys.

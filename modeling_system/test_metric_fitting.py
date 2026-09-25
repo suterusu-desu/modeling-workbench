@@ -335,6 +335,50 @@ class RigidDeformTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'nonnegative weight'):
             rigid_deform(rest, initial, triangles, held, targets=goal, target_weights=-np.ones(len(rest)), **self.parameters)
 
+    def test_intervals_keep_free_vertices_inside_and_loose_intervals_change_nothing(self):
+        rest, triangles, held, initial = self.folded_sheet(90)
+        free, n = ~held, len(rest)
+        plain = rigid_deform(rest, initial, triangles, held, iterations=60, **self.parameters)
+        loose = rigid_deform(rest, initial, triangles, held, iterations=60, interval_axis=2, lower=plain['deformed'][:, 2] - 1,
+                             upper=np.full(n, np.nan), **self.parameters)
+        np.testing.assert_allclose(loose['deformed'], plain['deformed'], atol=1e-12)
+        self.assertEqual(loose['public_metrics']['interval_active'], 0)
+        ceiling = .02
+        self.assertGreater(plain['deformed'][free, 2].max(), ceiling + .01)
+        capped = rigid_deform(rest, initial, triangles, held, iterations=200, interval_axis=2, lower=np.full(n, -np.inf),
+                              upper=np.full(n, ceiling), **self.parameters)
+        metrics = capped['public_metrics']
+        self.assertLessEqual(capped['deformed'][free, 2].max(), ceiling)
+        np.testing.assert_array_equal(capped['deformed'][held], initial[held])
+        self.assertGreater(metrics['interval_active'], 0); self.assertEqual(metrics['interval_outside_after'], 0)
+        self.assertEqual(metrics['interval_vertices'], int(free.sum()))
+        self.assertLess(metrics['interval_penalty_residual'], 1e-3)
+        # Only the bounded coordinate is pulled: the free material still follows the fold sideways.
+        self.assertGreater(np.abs(capped['deformed'][free, 0] - rest[free, 0]).max(), .05)
+        # A soft band without projection pulls toward it but the shape term keeps the material smooth.
+        soft = rigid_deform(rest, initial, triangles, held, iterations=200, interval_axis=2, lower=np.full(n, -np.inf),
+                            upper=np.full(n, ceiling), interval_weight=.5, project_active=False, **self.parameters)
+        top = soft['deformed'][free, 2].max()
+        self.assertLess(top, plain['deformed'][free, 2].max()); self.assertGreater(top, ceiling)
+        self.assertFalse(soft['public_metrics']['interval_projected'])
+        self.assertGreater(soft['public_metrics']['interval_outside_after'], 0)
+
+    def test_interval_arguments_are_checked(self):
+        rest, triangles, held, initial = self.folded_sheet(30)
+        n = len(rest); bounds = dict(lower=np.zeros(n), upper=np.ones(n))
+        with self.assertRaisesRegex(ValueError, 'interval_axis'):
+            rigid_deform(rest, initial, triangles, held, interval_axis=3, **bounds, **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'interval_axis'):
+            rigid_deform(rest, initial, triangles, held, lower=np.zeros(n), **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'interval_axis'):
+            rigid_deform(rest, initial, triangles, held, interval_axis=1, lower=np.zeros(n - 1), upper=np.ones(n - 1), **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'lower <= upper'):
+            rigid_deform(rest, initial, triangles, held, interval_axis=1, lower=np.ones(n), upper=np.zeros(n), **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'interval_weight'):
+            rigid_deform(rest, initial, triangles, held, interval_axis=1, interval_weight=0., **bounds, **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'project_active'):
+            rigid_deform(rest, initial, triangles, held, interval_axis=1, project_active=1, **bounds, **self.parameters)
+
     def test_region_of_a_larger_mesh_and_invalid_inputs(self):
         rest, triangles, index, held = RelaxDisplacementTests().patch()
         extra = np.array([[5., 5, 5], [6, 5, 5], [5, 6, 5]])
@@ -362,6 +406,22 @@ class RigidDeformTests(unittest.TestCase):
             result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
             self.assertEqual(result['status'], 'completed')
             self.assertIn('energy_last', result['summary'])
+
+    def test_preparation_route_takes_interval_arrays(self):
+        rest, triangles, held, initial = self.folded_sheet(60)
+        n = len(rest)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / 'source.npz'
+            np.savez(source, reference=rest, initial=initial, triangles=triangles, held=held.astype(np.int8),
+                     lower=np.full(n, -1.), upper=np.full(n, .05))
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            item = {'reads': {'geometry': digest}, 'workbench': {'profile': 'analysis'},
+                'payload': {'operation': 'rigid_deform', 'parameters': dict(self.parameters, iterations=60, interval_axis=2),
+                    'inputs': {name: {'path': str(source), 'sha256': digest, 'array': name}
+                               for name in ('reference', 'initial', 'triangles', 'held', 'lower', 'upper')}}}
+            result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
+            self.assertEqual(result['status'], 'completed')
+            self.assertIn('interval_active', result['summary'])
 
 
 class PlanarRelayoutTests(unittest.TestCase):

@@ -255,7 +255,8 @@ def relax_displacement(reference, deformed, triangles, held, *, units, frame, re
 
 
 def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_area_tolerance,
-                 iterations=50, tolerance=1e-9, compressed_below=.5, targets=None, target_weights=None):
+                 iterations=50, tolerance=1e-9, compressed_below=.5, targets=None, target_weights=None,
+                 interval_axis=None, lower=None, upper=None, interval_weight=1e3, project_active=True):
     """As-rigid-as-possible deformation of a patch: free vertices keep the reference shape up to local rotations.
 
     Held vertices take their `initial` positions exactly (moved handles and preserved material alike). Every free
@@ -270,6 +271,15 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
     the vertex's summed cotangent weight, so a weight of 1 pulls about as strongly as the local shape term. Use them to
     keep an achieved shape away from a correction without the seam a hard held boundary makes: zero weight near the
     material being replaced, rising with distance from it.
+
+    Optional intervals keep each free vertex's coordinate along `interval_axis` (0, 1 or 2) inside
+    [lower[i], upper[i]] (NaN or an infinite value leaves that side open), for example a guide's depth band. The
+    vertices outside their interval form an active set pulled onto the violated bound by a penalty of
+    interval_weight * degree_i in that coordinate only, re-solved with the rotations until the set stops changing; a
+    vertex the solve keeps inside leaves the set, and the other two coordinates are never pulled. With
+    project_active (the default) the active vertices finish exactly on their bound (the penalty alone leaves them
+    outside by about force / weight). A small interval_weight without projection makes the band a soft pull that the
+    shape term smooths: the material follows the band's volume instead of tracing a steep edge of it.
     """
     from scipy.sparse import coo_matrix, diags
     from scipy.sparse.linalg import factorized
@@ -291,6 +301,21 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
         if (targets.shape != rest.shape or target_weights.shape != (len(rest),) or not np.isfinite(targets).all()
                 or not np.isfinite(target_weights).all() or (target_weights < 0).any()):
             raise ValueError('Soft targets need one finite position and one finite nonnegative weight per vertex')
+    axis = None
+    if interval_axis is not None or lower is not None or upper is not None:
+        if interval_axis is None or lower is None or upper is None or isinstance(interval_axis, bool) or interval_axis not in (0, 1, 2):
+            raise ValueError('Intervals need interval_axis 0, 1 or 2 and one lower and one upper bound per vertex')
+        axis = int(interval_axis)
+        low, high = np.asarray(lower, float), np.asarray(upper, float)
+        if low.shape != (len(rest),) or high.shape != (len(rest),):
+            raise ValueError('Intervals need interval_axis 0, 1 or 2 and one lower and one upper bound per vertex')
+        low, high = np.where(np.isnan(low), -np.inf, low), np.where(np.isnan(high), np.inf, high)
+        if (low > high).any() or (low == np.inf).any() or (high == -np.inf).any():
+            raise ValueError('Each interval needs lower <= upper')
+        if not (np.isfinite(interval_weight) and interval_weight > 0):
+            raise ValueError('A finite positive interval_weight is required')
+        if not isinstance(project_active, bool):
+            raise ValueError('project_active must be True or False')
     n = len(rest); tri = tri.astype(np.int64); used = np.unique(tri)
     local = np.full(n, -1, dtype=np.int64); local[used] = np.arange(len(used))
     metric = surface_fem_metric(rest[used], local[tri], units=units, frame=frame, relative_area_tolerance=relative_area_tolerance)
@@ -316,6 +341,18 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
     solve = factorized((laplacian + diags(soft))[free][:, free].tocsc()); coupling = laplacian[free][:, fixed]
     edges = p[i] - p[j]
     energies = []
+    is_free = np.zeros(m, bool); is_free[free] = True
+    if axis is not None:
+        low_l, high_l = low[used], high[used]
+        bounded = is_free & (np.isfinite(low_l) | np.isfinite(high_l))
+        penalty = float(interval_weight) * degree
+    active = np.zeros(m, bool); bound = np.zeros(m); solve_axis, active_solved = None, None
+
+    def outside(v):
+        return bounded & ((v < low_l) | (v > high_l))
+
+    def violation(v):
+        return np.where(bounded, np.maximum(np.maximum(low_l - v, v - high_l), 0.), 0.)
 
     def rotations(y):
         covariance = np.zeros((m, 3, 3))
@@ -328,21 +365,42 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
         return r
 
     def energy(y, r):
-        return float((w * np.sum(((y[i] - y[j]) - np.einsum('nab,nb->na', r[i], edges)) ** 2, axis=1)).sum()
-                     + (soft[free] * np.sum((y[free] - goal[free]) ** 2, axis=1)).sum())
+        value = float((w * np.sum(((y[i] - y[j]) - np.einsum('nab,nb->na', r[i], edges)) ** 2, axis=1)).sum()
+                      + (soft[free] * np.sum((y[free] - goal[free]) ** 2, axis=1)).sum())
+        return value + (float((penalty[active] * (y[active, axis] - bound[active]) ** 2).sum()) if active.any() else 0.)
 
-    converged = False
+    if axis is not None:
+        before_violation = violation(x[:, axis])
+        active = outside(x[:, axis]); bound = np.where(x[:, axis] < low_l, low_l, np.where(active, high_l, 0.))
+    converged, set_changes = False, 0
     for _ in range(int(iterations)):
         r = rotations(x)
         right = np.zeros((m, 3)); np.add.at(right, i, .5 * w[:, None] * np.einsum('nab,nb->na', r[i] + r[j], edges))
         right += soft[:, None] * goal
         for k in range(3):
-            x[free, k] = solve(right[free, k] - coupling @ x[fixed, k])
+            if k == axis and active.any():
+                pulled = np.where(active, penalty, 0.)
+                if active_solved is None or not np.array_equal(active_solved, active):
+                    solve_axis = factorized((laplacian + diags(soft + pulled))[free][:, free].tocsc()); active_solved = active.copy()
+                x[free, k] = solve_axis(right[free, k] + (pulled * bound)[free] - coupling @ x[fixed, k])
+            else:
+                x[free, k] = solve(right[free, k] - coupling @ x[fixed, k])
         energies.append(energy(x, rotations(x)))
-        if len(energies) > 1 and abs(energies[-2] - energies[-1]) <= tolerance * max(energies[-2], 1e-300):
+        changed = False
+        if axis is not None:
+            # Vertices the penalty holds stay slightly outside; those the solve keeps inside leave the set.
+            now = outside(x[:, axis]); changed = not np.array_equal(now, active)
+            set_changes += int(changed); active = now
+            bound = np.where(x[:, axis] < low_l, low_l, np.where(active, high_l, 0.))
+        if (not changed and len(energies) > 1
+                and abs(energies[-2] - energies[-1]) <= tolerance * max(energies[-2], 1e-300)):
             converged = True; break
     if not np.isfinite(x).all():
         raise ValueError('Rigid deformation did not produce finite positions; qualify the held set')
+    if axis is not None:
+        penalty_residual = float(violation(x[:, axis])[active].max()) if active.any() else 0.
+        if project_active:
+            x[active, axis] = bound[active]
     # Only free vertices receive recomputed positions; held and unused ones keep their exact bytes.
     deformed = start.astype(float).copy(); deformed[used[free]] = x[free]
     before = compare_stretch(rest, start, tri, compressed_below=compressed_below, limit=1)['all']
@@ -357,11 +415,20 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
                'smallest_stretch_q01_before': before['smallest_stretch_q01'], 'smallest_stretch_q01_after': after['smallest_stretch_q01'],
                'normal_reversals_before': before['normal_reversals'], 'normal_reversals_after': after['normal_reversals'],
                'local_reversals_before': before['local_reversals'], 'local_reversals_after': after['local_reversals']}
+    if axis is not None:
+        after_violation = violation(x[:, axis])
+        metrics.update({'interval_axis': axis, 'interval_vertices': int(bounded.sum()), 'interval_active': int(active.sum()),
+                        'interval_outside_before': int((before_violation > 0).sum()), 'interval_outside_after': int((after_violation > 0).sum()),
+                        'interval_max_violation_before': float(before_violation.max()),
+                        'interval_max_violation_after': float(after_violation.max()),
+                        'interval_penalty_residual': penalty_residual, 'interval_set_changes': set_changes,
+                        'interval_projected': project_active})
     return {'delta': deformed - start, 'deformed': deformed, 'free_vertices': free_ids, 'held_vertices': fixed_ids,
             'energies': energies, 'public_metrics': metrics,
             'objective': 'As-rigid-as-possible energy of the reference shape with intrinsic cotangent weights, plus optional '
-                         'degree-scaled soft position targets; held vertices exact',
-            'limits': 'Shape preservation of the chosen reference only: no guide, depth, anatomical or appearance qualification. '
+                         'degree-scaled soft position targets and interval penalties on one axis; held vertices exact',
+            'limits': 'Shape preservation of the chosen reference only: no guide, depth, anatomical or appearance qualification '
+                      'beyond the supplied intervals, which bound one coordinate and fit nothing inside them. '
                       'A folded reference keeps its folds; local minima depend on the initial positions; the held set is an explicit owner choice.'}
 
 
