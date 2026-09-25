@@ -67,7 +67,14 @@ where `w` falls, or the falling weight turns it into a ramp: anchor correction f
 fitted to the rebuilt motion are often global (a smooth field through many points): if smoothing the weight moves the
 points they are fitted to, they re-solve everywhere. Fit them with the weight and region they were built with and use
 the smoothed weight only to compose the result; points the smoothed weight adds to the region then sit at the existing
-motion while fitting.
+motion while fitting. The pace is global in the same way: `motion_pace` scales travel weights by a percentile of the
+travel of the points it is given, so adding barely moving points shifts every point's pace slightly. Compute the old
+region's pace as before and give the added points theirs at the same `travel_scale`.
+
+Smooth only where the weights alternate. In real use smoothing the weight of every point near a corner, including the
+lower lid's inner end and the inner surfaces there, changed how much of that surface the three-quarter view showed;
+limited to the upper lid's own skin away from the corner, the fine lines faded (the largest added bend there fell from
+14-24 to 3-9 degrees) and the rest stayed as it was.
 
 ## Paths: roll over the obstacle, straight beside it
 

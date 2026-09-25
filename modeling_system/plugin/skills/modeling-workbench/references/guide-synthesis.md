@@ -140,3 +140,10 @@ and more of the corner lay inside the band at every guide phase than before. Whe
 decides the shape (inside a wide band), anchor the field at 0 wherever the construction scales or ends it: in the same
 use the field reached the edge of the region where the rebuilt motion blends into the existing one, was multiplied by
 that falling blend weight and came out as a steep ramp until the blend edge was anchored at 0 too.
+
+Points inside the band may move back as well as forward. Where the design must not sink (a closing lid over the eye),
+lean the intervals forward: points inside the band get `upper = min(upper, 0)` and points in front of it only the move
+the band requires, `upper = max(lower, min(upper, 0))`. In the same use the unrestricted field moved several hundred
+points of the lid beside the corner back within the band, which counted as the lid retreating and showed more of the
+inner surface beside the corner; leaned forward, the line still went. Where the field only decays past its data, give
+those points the interval `[-large, 0]` as well, so the decay cannot overshoot backward.
