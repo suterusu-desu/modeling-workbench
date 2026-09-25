@@ -21,10 +21,35 @@ def file_ref(path):
 
 
 def checked(ref):
-    actual = file_ref(ref['path'])
+    """The pinned file's path if its bytes still match; otherwise name the file that is missing or changed."""
+    try:
+        actual = file_ref(ref['path'])
+    except OSError:
+        raise ValueError(f"Required preservation source missing: {ref['path']}") from None
     if actual['sha256'] != ref['sha256']:
-        raise ValueError('Required preservation source changed')
+        raise ValueError(f"Required preservation source changed: {actual['path']} "
+                         f"(pinned {ref['sha256'][:12]}, now {actual['sha256'][:12]})")
     return Path(actual['path'])
+
+
+def stale_references(refs):
+    """Every pinned file ref that is missing or whose bytes changed, once per path: [{path, pinned, actual}].
+
+    `actual` is None for a missing file. Call it before launching a long operation whose later measurement re-reads
+    the same pins, so an edited record is found before the work rather than after it.
+    """
+    out, seen = [], set()
+    for ref in refs:
+        key = (str(Path(ref['path']).resolve()), ref['sha256'])
+        if key in seen: continue
+        seen.add(key)
+        try:
+            actual = file_ref(ref['path'])['sha256']
+        except OSError:
+            actual = None
+        if actual != ref['sha256']:
+            out.append({'path': key[0], 'pinned': ref['sha256'], 'actual': actual})
+    return out
 
 
 def same_ref(a, b):
@@ -113,8 +138,19 @@ class PreservationPolicy:
             except OSError: values[_key(ref)] = None
         return values
 
+    def stale_references(self):
+        """Every pinned requirement, authority, evidence, construction and adapter source that is missing or changed.
+
+        A preflight before a long native trial: the trial's measurement and retention re-read these same pins, so a
+        record edited while it runs fails the trial after its work is done. This lists all of them at once.
+        """
+        return stale_references(self.references)
+
     def fresh(self):
-        for ref in self.references: checked(ref)
+        stale = self.stale_references()
+        if stale:
+            raise ValueError('Required preservation source changed: ' + '; '.join(
+                f"{s['path']} ({'missing' if s['actual'] is None else 'changed'})" for s in stale))
         if self._adapter_identity() != self.adapter_identity:
             raise ValueError('Preservation adapter binding changed')
 
@@ -243,12 +279,22 @@ class PreservationPolicy:
         expected_kind = 'prepared_output' if binding['stage'] == 'prepare' else 'evaluated_output'
         if report.get('kind') != expected_kind or not same_ref(report.get('construction', {}), self.document['construction']):
             raise ValueError('Preservation requires current construction and the declared evaluated stage')
-        rows = report.get('outcomes', {})
+        judgments, status = self._judge(binding['outcomes'], report.get('outcomes', {}), require_identity=True)
+        return {'policy': self.revision, 'status': status, 'kind': expected_kind,
+            'subject': deepcopy(report['subject']), 'evidence': deepcopy(report['evidence']),
+            'measurements': deepcopy(report), 'checks': judgments, 'consumption': deepcopy(consumption),
+            'outcomes': deepcopy(binding['outcomes']), 'adapter': binding['adapter'],
+            'appearance_acceptance': 'not implied'}
+
+    def _judge(self, outcome_ids, rows, *, require_identity):
         judgments = []
-        for key in binding['outcomes']:
+        for key in outcome_ids:
             expected = self.outcomes[key]; measured = rows.get(key, {})
-            identity_ok = (same_ref(measured.get('baseline', {}), expected['baseline'])
-                           and same_ref(measured.get('guide', {}), expected['guide']))
+            if require_identity or 'baseline' in measured or 'guide' in measured:
+                identity_ok = (same_ref(measured.get('baseline', {}), expected['baseline'])
+                               and same_ref(measured.get('guide', {}), expected['guide']))
+            else:
+                identity_ok = True
             cells = measured.get('cells', {})
             for cell in expected['cells']:
                 measurement = cells.get(cell['id'], {})
@@ -264,11 +310,26 @@ class PreservationPolicy:
                     'observed': value, 'baseline': base, 'rule': deepcopy(cell['rule'])})
         status = 'fail' if any(r['status'] == 'fail' for r in judgments) else (
             'unknown' if any(r['status'] == 'unknown' for r in judgments) else 'pass')
-        return {'policy': self.revision, 'status': status, 'kind': expected_kind,
-            'subject': deepcopy(report['subject']), 'evidence': deepcopy(report['evidence']),
-            'measurements': deepcopy(report), 'checks': judgments, 'consumption': deepcopy(consumption),
-            'outcomes': deepcopy(binding['outcomes']), 'adapter': binding['adapter'],
-            'appearance_acceptance': 'not implied'}
+        return judgments, status
+
+    def preview(self, measured, *, outcomes=None):
+        """Judge offline measurements with this policy's own cells and rules before a native trial.
+
+        `measured` has the adapter's per-outcome shape, {outcome_id: {'cells': {cell_id: {region, pose, metric,
+        observed, baseline}}}}, for example the adapter's own measures applied to offline candidate and baseline arrays.
+        Baseline/guide refs are compared when a row carries them. `outcomes` limits the judged outcomes (default all).
+        The verdict is a screen: no subject, saved evaluated evidence or stage is bound, so it is never preservation
+        evidence and cannot satisfy a trial or retention; the native result is still measured and judged.
+        """
+        self.fresh()
+        ids = list(self.outcomes) if outcomes is None else list(outcomes)
+        if not ids or set(ids) - self.outcomes.keys():
+            raise ValueError('Preview outcomes must be outcomes of this policy')
+        judgments, status = self._judge(ids, measured or {}, require_identity=False)
+        return {'policy': self.revision, 'kind': 'preview', 'status': status, 'checks': judgments,
+                'outcomes': ids, 'evidence': None,
+                'limits': 'Offline screen with the policy rules: not preservation evidence, no subject or saved '
+                          'evaluated output, no appearance judgment'}
 
     def verify_assessment(self, assessment, item, result):
         if assessment['policy'] != self.revision: raise ValueError('Preservation policy changed')

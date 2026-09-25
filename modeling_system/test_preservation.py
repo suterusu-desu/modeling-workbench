@@ -100,6 +100,35 @@ class PreservationTests(unittest.TestCase):
         self.assertEqual(result['preservation']['status'],'unknown')
         self.assertEqual(result['preservation']['checks'][-1]['status'],'unknown')
 
+    def test_changed_or_missing_pins_are_named_all_at_once_before_work(self):
+        self.assertEqual(self.policy.stale_references(),[])
+        Path(self.construction['path']).write_text('{"edited during the trial":true}')
+        Path(self.authority['path']).unlink()
+        stale={Path(s['path']).name:s for s in self.policy.stale_references()}
+        self.assertEqual(set(stale),{'construction.json','authority.json'})
+        self.assertIsNone(stale['authority.json']['actual'])
+        self.assertNotEqual(stale['construction.json']['actual'],stale['construction.json']['pinned'])
+        with self.assertRaisesRegex(ValueError,r'source changed: .*construction\.json \(changed\).*authority\.json \(missing\)'):
+            self.policy.fresh()
+        from .preservation import checked
+        with self.assertRaisesRegex(ValueError,r'changed: .*construction\.json \(pinned '):checked(self.construction)
+        with self.assertRaisesRegex(ValueError,r'missing: .*authority\.json'):checked(self.authority)
+
+    def test_preview_uses_the_policy_rules_on_offline_measurements_and_is_not_evidence(self):
+        def rows(values,base=(0.,.1,0.)):
+            return {'shell':{'cells':{p:{'region':'shell','pose':p,'metric':'penetration','observed':v,'baseline':b}
+                for p,v,b in zip(('open','half','closed'),values,base) if v is not None}}}
+        failing=self.policy.preview(rows((0.,.2,0.)))
+        self.assertEqual([c['status'] for c in failing['checks']],['pass','fail','pass'])
+        self.assertEqual((failing['status'],failing['kind'],failing['evidence']),('fail','preview',None))
+        self.assertEqual(self.policy.preview(rows((0.,.05,None)))['status'],'unknown')
+        self.assertEqual(self.policy.preview(rows((0.,.1,0.)))['status'],'pass')
+        wrong=rows((0.,.1,0.));wrong['shell']['baseline']=self.guide     # a row naming another baseline is not this outcome
+        self.assertEqual(self.policy.preview(wrong)['status'],'unknown')
+        with self.assertRaisesRegex(ValueError,'outcomes of this policy'):self.policy.preview(rows((0.,.1,0.)),outcomes=['other'])
+        _,result=self.assess({'open':0.,'half':0.2,'closed':0.})       # the native judgment is the same rule
+        self.assertEqual([c['status'] for c in result['preservation']['checks']],[c['status'] for c in failing['checks']])
+
     def test_forged_numbers_and_arbitrary_existing_subject_fail_recomputation(self):
         task,result=self.assess({'open':0.,'half':0.2,'closed':0.})
         altered=deepcopy(result['preservation']);altered['measurements']['outcomes']['shell']['cells']['half']['observed']=0.

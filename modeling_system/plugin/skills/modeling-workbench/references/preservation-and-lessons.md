@@ -88,6 +88,24 @@ the upstream candidate's evaluated arrays forward (the subject is in
 file reproduces them, such as an independent reopen of the retained checkpoint
 against those arrays. Pose, display and save alone do not show equal content.
 
+Every requirement, authority, evidence, construction and adapter source file is
+pinned by hash, and measurement and retention re-read the pins after the work.
+A record edited while a long native trial runs therefore fails that trial after
+its effect is done (in real use: project notes listed as evidence were updated
+during the run). Before launching, call `policy.stale_references()`: it lists
+every pinned file that is missing or changed, all at once; `fresh()` and
+`checked()` name the file in their errors. Keep pinned records unedited until
+the trial is measured, or pin a snapshot instead of a file that keeps changing.
+
+Before spending a native trial, apply the adapter's own measures to offline
+candidate and baseline arrays and judge them with `policy.preview(measured)`
+(the adapter's `outcomes` rows, optionally limited with `outcomes=[...]`). It
+uses the same cells and rules as the native verdict, so a candidate that fails
+a declared bound is found before the trial. Choose bounds from their evidence,
+not from what a preview happens to pass. A preview binds no subject or saved
+evaluated output: it is never preservation evidence, cannot satisfy a trial or
+retention, and the native result is still measured and judged.
+
 `require_preservation=True` blocks affected appearance/retention operations if
 the policy is omitted, while unrelated analysis remains available. Set this in
 the workspace's normal operator bridge; the public default stays compatible
