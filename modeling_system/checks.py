@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .construction_diagnostics import closing_edges, line_depth, local_reversals
+from .construction_diagnostics import closing_edges, line_depth, local_reversals, triangle_stretches
 from .motion_paths import keep_clearance
 
 LIMITS = {
@@ -37,6 +37,8 @@ LIMITS = {
     'corner_travel_share': .1,      # largest travel of a closing corner, share of the corner distance
     'corner_ramp': 0.,              # how far the margin's travel reaches 90 % of its most sooner than `min_ramp` of its
                                     # length from either end (a pinched corner)
+    'corner_compression': 0.,       # region triangles near a closing corner squeezed below `stretch` (.5) of their rest
+                                    # size in some direction at the worst phase: allowance on new ones
     'band_reach': .55,              # height above the margin (share of the width) where the band's travel falls below a tenth
     'lash_travel': 0.,              # how far a lash root's travel leaves .9-1.05 of the travel of the margin under it
     'lash_turn': 35.,               # largest turn of a lash about its root relative to the lid it rides (degrees)
@@ -48,7 +50,7 @@ LIMITS = {
 # Defects a baseline may already have: with a baseline the limit is an allowance over the baseline's value, so a candidate
 # is not failed for what it inherited (the report still shows it) and a rebuild is not held to its predecessor's
 # geometry. Rest identity, motion outside the region and the closing checks describe the construction and stay absolute.
-INCREASE_ONLY = ('clearance_shortfall', 'folds', 'reversing_vertices')
+INCREASE_ONLY = ('clearance_shortfall', 'folds', 'reversing_vertices', 'corner_compression')
 REVERSAL_SHARE = .02                # progress falling by more than this share of the chord counts as moving back
 MOVER_SHARE = .2                    # vertices whose end chord exceeds this share of the largest are followed for reversals
 
@@ -130,6 +132,10 @@ def validate_declaration(declaration):
     if closing is not None and (not isinstance(closing, dict) or 'moving' not in closing or 'facing' not in closing
                                 or ('pivot' in closing) != ('axis' in closing)):
         raise ValueError('Closing needs the moving and facing edges, and both a pivot and an axis or neither')
+    squeeze = (closing or {}).get('corner_compression')
+    if squeeze is not None and (not (closing or {}).get('corners') or not (squeeze is True or (
+            isinstance(squeeze, dict) and all(_positive(squeeze.get(k, 1.)) for k in ('radius', 'stretch'))))):
+        raise ValueError('corner_compression needs the closing corners and optionally a positive radius and stretch')
     if closing is not None and 'corners' in closing and len(closing['corners']) != 2:
         raise ValueError('Closing corners are the two vertices where the edges meet')
     depth = (closing or {}).get('closed_depth')
@@ -179,6 +185,7 @@ def applicable_checks(declaration):
         ids += ['roll_deviation_share'] if 'pivot' in d['closing'] else []
         ids += ['closed_depth_error'] if d['closing'].get('closed_depth') else []
         ids += ['corner_travel_share', 'corner_ramp'] if d['closing'].get('corners') else []
+        ids += ['corner_compression'] if d['closing'].get('corner_compression') else []
         ids += ['band_reach'] if d.get('band') is not None else []
         ids += ['lash_travel', 'lash_turn', 'lash_length', 'lash_timing'] if d.get('lash') else []
         ids += ['combination_seam'] if d.get('combinations') else []
@@ -285,12 +292,12 @@ def _measure(d, states, base, baseline=None, mover_cut=None):
             shortfall = max(shortfall, worst_row['shortfall'])
         out['clearance_shortfall'] = (shortfall, {'obstacles': rows})
 
-    tri = states[phases[0]][d['object']].get('tri')
+    tri = states[phases[0]][d['object']].get('tri'); region_tri = None
     if tri is None:
         out['folds'] = (None, {'reason': 'no triangles saved at the rest phase'})
     else:
         tri = np.asarray(tri).astype(np.int64)
-        tri = tri[inside[tri].all(axis=1)] if len(tri) else tri
+        tri = tri[inside[tri].all(axis=1)] if len(tri) else tri; region_tri = tri
         folded = [np.flatnonzero(local_reversals(P[0], P[g], tri)) if len(tri) else np.zeros(0, int) for g in range(len(P))]
         counts = [len(f) for f in folded]
         out['folds'] = (float(max(counts)), {'per_phase': dict(zip(phases, counts)), 'region_triangles': int(len(tri)),
@@ -352,6 +359,9 @@ def _measure(d, states, base, baseline=None, mover_cut=None):
                                                      if r['turn_share'] else None for r in report['poses']}})
         if c.get('corners'):
             out.update(_corners(P, moving_edge, [int(v) for v in c['corners']], float(c.get('min_ramp', .2))))
+            if c.get('corner_compression'):
+                out['corner_compression'] = _corner_compression(P, region_tri, [int(v) for v in c['corners']],
+                                                                c['corner_compression'])
         if d.get('band') is not None:
             out['band_reach'] = _band(P, d['band'], c, moving_edge, base, n)
         if d.get('lash'):
@@ -390,6 +400,32 @@ def _corners(P, margin, corners, min_ramp):
     return {'corner_travel_share': (corner, {'width': width, 'corners': corners}),
             'corner_ramp': (max(0., min_ramp - min(ramps)), {'ramp_from_start': ramps[0], 'ramp_from_end': ramps[1],
                                                              'min_ramp': min_ramp})}
+
+
+def _corner_compression(P, tri, corners, spec):
+    """Region triangles within `radius` (share of the corner distance, default .2) of a closing corner whose smaller
+    principal stretch falls below `stretch` (default .5), summed over the in-between phases: the column a band's turn
+    step squeezes up from a blunt corner shows during the motion. The closed pose is squeezed near the corners by design,
+    so its count is reported, not gated (on a real lid the closed counts of a fixed and an unfixed corner were equal)."""
+    if tri is None or not len(tri):
+        return None, {'reason': 'no region triangles saved at the rest phase'}
+    spec = {} if spec is True else spec
+    radius, below = float(spec.get('radius', .2)), float(spec.get('stretch', .5))
+    a, b = corners; width = float(np.linalg.norm(P[0][b] - P[0][a])); centre = P[0][tri].mean(axis=1)
+    near = np.minimum(np.linalg.norm(centre - P[0][a], axis=1), np.linalg.norm(centre - P[0][b], axis=1)) <= radius * width
+    T = tri[near]
+    between = list(range(1, len(P) - 1)) or [len(P) - 1]          # with only rest and end, the end
+    if not len(T):
+        return 0., {'triangles_near_corners': 0, '_squeezed': {}}
+    squeezed = {}; counts = []
+    for g, phase in enumerate(P):
+        smallest = triangle_stretches(P[0], phase, T)[1]
+        hit = np.flatnonzero(smallest < below); counts.append(len(hit))
+        if g in between:
+            squeezed[g] = {tuple(int(v) for v in T[i]) for i in hit}
+    return float(sum(counts[g] for g in between)), {
+        'triangles_near_corners': int(len(T)), 'radius': radius, 'stretch': below, 'per_phase': counts,
+        'measured_on': 'the in-between phases (summed)', 'closed_phase': counts[-1], '_squeezed': squeezed}
 
 
 def _band(P, band, c, margin, base, n):
@@ -523,6 +559,15 @@ def _compare_sets(measured, before, shown=50):
     """Which reversing vertices and folded triangles are new against the baseline and which it had; private sets out."""
     rev, fold = measured['reversing_vertices'][1], measured['folds'][1]
     now = rev.pop('_reversing'); folded = fold.pop('_folded', None)
+    squeeze = measured.get('corner_compression', (None, {}))[1]; squeezed = squeeze.pop('_squeezed', None)
+    had_squeezed = before.get('corner_compression', (None, {}))[1].pop('_squeezed', None) if before else None
+    if squeezed is not None and had_squeezed is not None:
+        common = [g for g in squeezed if g in had_squeezed]
+        new = {g: sorted(squeezed[g] - had_squeezed[g]) for g in common}
+        gone = {g: sorted(had_squeezed[g] - squeezed[g]) for g in common}
+        squeeze.update(new_per_phase=[len(new[g]) for g in common], relieved_per_phase=[len(gone[g]) for g in common],
+                       new_squeezed_triangles=[list(t) for g in common for t in new[g]][:shown],
+                       relieved_triangles=[list(t) for g in common for t in gone[g]][:shown])
     if not before:
         return
     was = before['reversing_vertices'][1].pop('_reversing')

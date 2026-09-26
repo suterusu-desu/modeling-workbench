@@ -394,6 +394,35 @@ class HingeConstructionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'one finite position'):
             land(kept, rest=rest[:-1], corner_blend=.2)
 
+    def test_the_band_turn_is_smoothed_beside_a_blunt_corner_and_the_edge_lands_exactly(self):
+        # A blunt corner: from the pinned canthus (on the facing rim) the margin rises almost across the axis, so its
+        # first points need turns from 0 to nearly the full closing turn within .006 of axis.
+        xe = np.r_[-.6, -.599, -.597, -.594, np.linspace(-.55, .6, 24)]; ne = len(xe)
+        ae = np.r_[30., 0., -20., -35., np.full(24, -40.)]
+        xb = np.linspace(-.6, .6, 241)
+        positions = np.r_[cylinder_points(xe, 1.1, ae), cylinder_points(xb, 1.15, -55.)]
+        landing = cylinder_points(np.linspace(-.7, .7, 561), 1.1, 30.)
+        weights = np.r_[0., np.ones(ne - 1), np.full(len(xb), .6)]                           # the corner is pinned
+        land = lambda **kw: hinge_landing(positions, np.arange(ne), landing, [0., 0., 0.], [1., 0., 0.],
+                                          weights=weights, **kw)
+        plain = land(); smooth = land(band_smooth={'sigma': .01, 'within': .04, 'fade': .04, 'ends': 'low'})
+        np.testing.assert_allclose(smooth['positions'][:ne], plain['positions'][:ne], atol=1e-12)   # the edge lands exactly
+        band = slice(ne, None)
+        step = lambda r: np.abs(np.diff(np.degrees(r['turn'][band])) / np.diff(xb))
+        corner = xb[:-1] < -.55
+        self.assertGreater(step(plain)[corner].max(), 2 * step(smooth)[corner].max())      # the step beside the corner
+        far = xb > -.6 + .04 + .04 + 1e-9
+        np.testing.assert_allclose(smooth['turn'][band][far], plain['turn'][band][far], atol=1e-12)   # untouched past fade
+        info = smooth['public_metrics']['band_smooth']
+        self.assertEqual((info['ends'], info['sigma']), ('low', .01))
+        self.assertGreater(info['largest_turn_change_degrees'], 1.)
+        high_only = land(band_smooth={'sigma': .01, 'within': .04, 'fade': .04, 'ends': 'high'})
+        np.testing.assert_allclose(high_only['turn'][band][xb < 0], plain['turn'][band][xb < 0], atol=1e-12)
+        with self.assertRaisesRegex(ValueError, 'band_smooth needs'):
+            land(band_smooth={'sigma': 0., 'within': .04, 'fade': .04})
+        with self.assertRaisesRegex(ValueError, 'band_smooth needs'):
+            land(band_smooth={'sigma': .01})
+
     def test_edge_beyond_the_landing_range_takes_its_end_values_and_is_counted(self):
         x = np.linspace(-1., 1., 11)
         landing = cylinder_points(np.linspace(-.5, .5, 11), 1., np.linspace(20., 40., 11))

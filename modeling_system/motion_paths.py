@@ -565,7 +565,34 @@ def _polyline_distance(points, line):
     return np.linalg.norm(points[:, None, :] - closest, axis=-1).min(axis=1)
 
 
-def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outside=0., rest=None, corner_blend=0.):
+def _smooth_band(s, edge_s, edge_turn, edge_radial, turn, radial, spec):
+    """The band's turn and radial profiles Gaussian-smoothed along the axis near the chosen ends (see hinge_landing)."""
+    try:
+        sigma, within, fade = (float(spec[k]) for k in ('sigma', 'within', 'fade'))
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("band_smooth needs 'sigma', 'within' and 'fade' (axial distances)") from None
+    ends = spec.get('ends', 'both')
+    if not (sigma > 0 and within >= 0 and fade >= 0) or ends not in ('low', 'high', 'both'):
+        raise ValueError("band_smooth needs sigma > 0, within and fade >= 0 and ends 'low', 'high' or 'both'")
+    step = sigma / 8; low, high = float(edge_s[0]), float(edge_s[-1])
+    grid = np.arange(low - 4 * sigma, high + 4 * sigma + step, step)
+    kernel = np.exp(-.5 * (np.arange(-4 * sigma, 4 * sigma + step / 2, step) / sigma) ** 2); kernel /= kernel.sum()
+    smooth = lambda values: np.interp(s, grid, np.convolve(np.interp(grid, edge_s, values), kernel, 'same'))
+    ramp = lambda x: np.clip(x, 0, 1) ** 2 * (3 - 2 * np.clip(x, 0, 1))
+    near = lambda distance: 1 - (ramp((distance - within) / fade) if fade else (distance > within).astype(float))
+    mask = np.zeros(len(s))
+    if ends in ('low', 'both'):
+        mask = np.maximum(mask, near(s - low))
+    if ends in ('high', 'both'):
+        mask = np.maximum(mask, near(high - s))
+    new_turn, new_radial = turn + mask * (smooth(edge_turn) - turn), radial + mask * (smooth(edge_radial) - radial)
+    return new_turn, new_radial, {'sigma': sigma, 'within': within, 'fade': fade, 'ends': ends,
+                                  'points_smoothed': int(np.count_nonzero(mask > 0)),
+                                  'largest_turn_change_degrees': float(np.degrees(np.abs(new_turn - turn).max()))}
+
+
+def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outside=0., rest=None, corner_blend=0.,
+                  band_smooth=None):
     """Close an edge onto a landing curve by turning it about a hinge, carrying a band of material with it.
 
     `edge` indexes the points of `positions` that must land (a lid's margin); `landing` holds points of the curve they
@@ -585,6 +612,14 @@ def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outsid
     of the edge take the landing of `rest` instead, blended C1 into the landing of `positions` over `corner_blend` (an
     axial distance, or one per end: lower axial end first; 0 keeps that end on `positions`). Past an end the result is the
     landing of `rest`. Found in real use: a C1 fade of the turn toward the corner instead opened a gap at the seam's end.
+
+    `band_smooth` ({'sigma', 'within', 'fade', 'ends': 'low' | 'high' | 'both'}, axial distances): at a blunt corner the
+    margin rises almost across the axis, so its first points need very different turns within a tiny axial distance and
+    the band, which takes the edge's turn at its own axial position, steps there (a column of compressed triangles up
+    from the corner). The band's turn and radial change along the axis are then Gaussian-smoothed (`sigma`) within
+    `within` of the chosen end(s), fading back to the exact profile over `fade`; pinned edge points (weight 0) count as
+    not turning, and the edge itself keeps its exact landing. Real use: sigma .003 within .015, fade .015 (eye width
+    .11) cut the band's turn step beside the canthus from about 13 to 4 degrees per .001 of axis; sigma .006 folded more.
 
     Returns the closed `positions`, each point's full `turn` (radians, right-handed about the axis) and `radial` change,
     and the edge's own values: build the in-betweens as one roll to this pose (`path_positions` with the same pivot and
@@ -618,7 +653,13 @@ def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outsid
         raise ValueError('An edge point would turn half way round; move the pivot')
     beyond = int(np.count_nonzero((se < sl[0] - 1e-12) | (se > sl[-1] + 1e-12)))
     oe = np.argsort(se, kind='stable')
-    turn = w * np.interp(s, se[oe], edge_turn[oe]); radial = w * np.interp(s, se[oe], edge_radial[oe])
+    band_turn, band_radial = np.interp(s, se[oe], edge_turn[oe]), np.interp(s, se[oe], edge_radial[oe])
+    smoothing = None
+    if band_smooth:
+        band_turn, band_radial, smoothing = _smooth_band(s, se[oe], edge_turn[oe] * (w[idx][oe] > 0),
+                                                         edge_radial[oe] * (w[idx][oe] > 0), band_turn, band_radial,
+                                                         band_smooth)
+    turn = w * band_turn; radial = w * band_radial
     turn[idx] = w[idx] * edge_turn; radial[idx] = w[idx] * edge_radial
     moved = w > 0
     out = P.copy()
@@ -631,7 +672,7 @@ def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outsid
         R = np.asarray(rest, float)
         if R.shape != P.shape or not np.isfinite(R).all():
             raise ValueError('The rest needs one finite position per point')
-        from_rest = hinge_landing(R, idx, L, pivot, axis, weights=w, outside=outside)['positions']
+        from_rest = hinge_landing(R, idx, L, pivot, axis, weights=w, outside=outside, band_smooth=band_smooth)['positions']
         ramp = lambda x: np.clip(x, 0, 1) ** 2 * (3 - 2 * np.clip(x, 0, 1))
         low, high = float(se.min()), float(se.max())
         keep = np.ones(len(P))
@@ -655,6 +696,8 @@ def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outsid
                'landed_gap_to_landing_line_median': float(np.median(gap)) if len(gap) else None}
     if blended:
         metrics['corner_blend'] = blended
+    if smoothing:
+        metrics['band_smooth'] = smoothing
     return {'positions': out, 'turn': turn, 'radial': radial, 'edge_turn': edge_turn, 'edge_radial': edge_radial,
             'public_metrics': metrics,
             'objective': "Each edge point turned about the hinge onto the landing curve's angle and distance (plus the "

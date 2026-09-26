@@ -28,6 +28,12 @@ ends: adding the corners to the edge with weight 0 did not remove it). Remedy: t
 hinge applied to the rest, blended into the retained body (`hinge_landing(..., rest=..., corner_blend=...)`); a C1 fade
 of the turn opened a gap at the seam's end instead.
 
+**A column of squeezed skin runs up from a blunt corner as the lid closes.** Cause: the band takes the margin's turn
+at its own axial position, and at a blunt corner the margin's first points need very different turns within a tiny
+axial distance, so the band's turn steps there. Measured on the margin the step looks legitimate; measure it on the band
+rows, or count squeezed triangles near the corner in the in-between phases (`corner_compression`). Remedy: smooth the
+band's axial turn profile near that end and keep the margin's landing exact (`hinge_landing(..., band_smooth=...)`).
+
 **Skin sinks, lumps and creases move around between fixes.** Cause: correction fields and local re-lays stacked on an
 inherited motion, each fitted separately. Remedy: remove the layers and rebuild the motion from the mechanism; clean up
 once afterwards. A defect that returns after a patch belongs to the construction.

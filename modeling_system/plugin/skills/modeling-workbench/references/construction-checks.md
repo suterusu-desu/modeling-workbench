@@ -54,6 +54,9 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   edges meet, for the corner checks (`min_ramp`, default .2, the share of the edge from each corner over which its
   travel rises); `closed_depth` ({"target": share, optionally its own `corners`, `up` and `across`) the closed line's
   intended depth below the corner line, measured on the approved closed drawing with `line_depth`.
+  `corner_compression` (`true`, or `{"radius": share of the corner distance, default .2, "stretch": .5}`) counts the
+  region triangles near either corner squeezed below `stretch` of their rest size in some direction, summed over the
+  in-between phases (the closed pose, squeezed near the corners by design, is reported, not gated).
 - `band`: how far above the moving edge the motion reaches at the column that moves most (`study.band_profile` at the
   last phase). Optional `candidates` (default every vertex of the object), `margin` (default the moving edge), `width`
   (default the corner distance), `up`, `across`. A band still moving at the top of the measured points reports that
@@ -89,6 +92,7 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 | `closed_depth_error` | the closed seam's depth below the corner line (share of the corner distance) minus the declared target | .02 |
 | `corner_travel_share` | the largest travel of either corner, share of the corner distance | .1 |
 | `corner_ramp` | how much sooner than `min_ramp` of the edge (from either corner) its end travel reaches 90 % of its largest: a pinched corner | 0 |
+| `corner_compression` | region triangles near a corner squeezed below half their rest size, summed over the in-between phases: allowance on new ones | 0 |
 | `band_reach` | height above the moving edge (share of the width) where the travel falls below a tenth of the edge's | .55 |
 | `lash_travel` | how far a lash root's end travel leaves .9-1.05 of the travel of the skin under it | 0 |
 | `lash_turn` | a lash's largest turn about its root on the lid (with a hinge, the lid's roll at the host taken out), degrees | 35 |
@@ -97,7 +101,7 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 | `combination_seam` | the largest median signed seam gap of a combined closed pose (positive open, negative crossed), share of the opening | .05 |
 | `carrier_shapes` | blend shapes needed: one straight shape, or with a mid shape driven at 4s(1-s) | 2 |
 
-`clearance_shortfall`, `folds` and `reversing_vertices` count defects a baseline can already have. With a baseline, the
+`clearance_shortfall`, `folds`, `reversing_vertices` and `corner_compression` count defects a baseline can already have. With a baseline, the
 limit is an allowance over the baseline's value: a candidate is not failed for what it inherited, the report still shows
 the inherited value, and a rebuild is not held to its predecessor's geometry. With a baseline both runs follow the same
 moving vertices for reversals (the baseline's cut, a fifth of its largest chord), so a vertex whose path did not change
@@ -138,6 +142,11 @@ taking out the lid's roll it turns 54°, which a plain 35° limit would have fai
 the corner distance with the margin's travel rising over a third of its length from each, and both bands stopped at
 .35 of the width. A 180-point strip that looked like a lash was a lid-line ribbon a fifth of the width above the margin:
 pick the lash's roots, do not trust the nearest object.
+
+`corner_compression` on a real blunt corner: the lid whose band stepped beside the canthus squeezed 758 triangles over
+the in-between phases within .18 of the corner distance, the rebuild with `band_smooth` 694 (fewer at every phase, 33 to
+27 at the first, 131 to 117 at the fifth); the closed phase counted 145 and 148, which is why it is not gated. Against
+the rebuild as baseline the stepped lid fails and its 50 newly squeezed triangles are listed.
 
 ## Guards for native trials
 

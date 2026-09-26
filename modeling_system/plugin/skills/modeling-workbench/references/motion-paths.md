@@ -19,8 +19,8 @@ S), which shading shows as a crease or shelf even when every key is close to its
 
 ## Hinge: land a lid and carry what rides on it
 
-`hinge_landing(positions, edge, landing, pivot, axis, weights=None, outside=0., rest=None, corner_blend=0.)` derives a
-closed pose from the rest
+`hinge_landing(positions, edge, landing, pivot, axis, weights=None, outside=0., rest=None, corner_blend=0.,
+band_smooth=None)` derives a closed pose from the rest
 pose. Each `edge` point (the lid margin, ordered or not) turns about the hinge line through `pivot` along `axis` to the
 `landing` curve's angle at the same axial position (the opposing margin at rest, sampled densely enough to interpolate
 along the axis) and moves to the landing curve's distance from the axis plus `outside`. Every other point turns and
@@ -37,6 +37,17 @@ seam's end need a large extra turn right beside a pinned corner (a spike in real
 (an axial distance, or one per end, lower axial end first) the moving points near each end take the landing of `rest`,
 blended C1 into the landing of `positions` over that distance; `public_metrics['corner_blend']` reports the widths and
 the largest change. A C1 fade of the turn toward the corner instead opened a gap at the seam's end.
+
+At a blunt corner the margin rises almost across the axis, so its first points need very different turns within a tiny
+axial distance, and the band, which takes the edge's turn at its own axial position, steps there: a column of squeezed
+triangles running up from the corner. `band_smooth={'sigma': ..., 'within': ..., 'fade': ..., 'ends': 'low'}` smooths
+the band's turn and radial change along the axis (Gaussian, `sigma`) within `within` of the chosen end(s), fading back
+over `fade`; the edge keeps its exact landing and pinned edge points count as not turning. In real use sigma .003 within
+.015, fade .015 (eye width .11) cut the band's step beside the canthus from about 13 to 4 degrees per .001 of axis,
+removed the squeezed column and left the landed margin identical; sigma .006 folded more. It leaves a small zigzag right
+at the canthus, where the smoothed band out-turns the margin's first points; capping each band point's turn at its
+nearest margin point's turn may remove it (untested). Turning the band from the nearest point along the margin, a
+harmonic turn profile and a smoothing that fades in above the corner were tried and did worse or were not chosen.
 
 `hinge_carry(attached, host_reference, host_end, pivot, axis, fraction=1., host_index=None)` moves attached points (lashes,
 a seam, a marking) by the hinge change of their host point (the nearest host point at rest unless `host_index` is

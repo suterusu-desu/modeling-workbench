@@ -294,6 +294,27 @@ class EyeCheckTests(unittest.TestCase):
         self.assertEqual(self.status(sliding, 'corner_travel_share')[0], 'fail')
         self.assertGreater(self.check(sliding, 'corner_travel_share')['observed'], 1.)
 
+    def test_triangles_squeezed_beside_a_corner_are_counted_and_new_ones_named(self):
+        declaration = self.declare(closing=dict(self.closing, corners=self.corners, corner_compression=True))
+        good = hinged()
+        squeezed = good.copy()                          # the column beside the low corner pressed to a fifth of its width
+        for k, g in enumerate(PHASES):
+            for r in (1, 2, UPPER):
+                a, b = row(r)[0], row(r)[1]
+                squeezed[k][b, 0] = good[k][a, 0] + .2 * g * (good[k][b, 0] - good[k][a, 0]) + (1 - g) * (good[k][b, 0] - good[k][a, 0])
+        base = self.check(run_checks(declaration, states(good)), 'corner_compression')
+        worse = run_checks(declaration, states(squeezed), states(good))
+        row_ = self.check(worse, 'corner_compression')
+        self.assertEqual((row_['status'], row_['rule']), ('fail', 'increase over the baseline'))
+        self.assertGreater(row_['observed'], base['observed'])
+        new = row_['detail']['new_squeezed_triangles']
+        self.assertTrue(new and all(any(v in (row(r)[1] for r in (1, 2, UPPER)) for v in t) for t in new))
+        better = self.check(run_checks(declaration, states(good), states(squeezed)), 'corner_compression')
+        self.assertEqual(better['status'], 'pass')
+        self.assertEqual(len(better['detail']['relieved_triangles']), len(new))
+        with self.assertRaisesRegex(ValueError, 'corner_compression needs'):
+            applicable_checks(self.declare(closing=dict(self.closing, corner_compression=True)))
+
     def test_the_closed_line_depth_can_use_the_closing_corners(self):
         closing = dict(self.closing, corners=[int(row(LOWER)[0]), int(row(LOWER)[-1])], closed_depth={'target': 0.})
         report = run_checks(self.declare(closing=closing), states(hinged()))
