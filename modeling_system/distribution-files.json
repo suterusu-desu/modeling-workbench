@@ -67,6 +67,7 @@
     "plugin/.codex-plugin/plugin.json",
     "plugin/launch.py",
     "plugin/skills/modeling-workbench/SKILL.md",
+    "plugin/skills/modeling-workbench/references/build-the-mechanism-first.md",
     "plugin/skills/modeling-workbench/references/candidate-pipeline.md",
     "plugin/skills/modeling-workbench/references/component-catalog.md",
     "plugin/skills/modeling-workbench/references/construction-diagnostics.md",

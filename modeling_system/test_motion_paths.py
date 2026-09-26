@@ -416,6 +416,34 @@ class HingeConstructionTests(unittest.TestCase):
         for name in ('hinge_change', 'hinge_landing', 'hinge_carry'):
             self.assertIn(name, ARRAY_OPERATIONS)
 
+    def test_the_documented_hinged_lid_recipe(self):
+        """build-the-mechanism-first.md: land, roll with one pace, keep clearance, carry the lashes, check the closing."""
+        from .construction_diagnostics import closing_edges
+        x = np.linspace(-.6, .6, 13); n = len(x); centre, axis = [0., 0., 0.], [1., 0., 0.]
+        rest = np.r_[cylinder_points(x, 1.1, -40.), cylinder_points(x, 1.15, -55.),     # upper margin, band above it
+                     cylinder_points(x, 1.1, 30.), cylinder_points(x, 1.15, 45.)]       # lower margin, skin below it
+        margin, lower = np.arange(n), np.arange(2 * n, 3 * n)
+        band = np.r_[np.ones(n), np.full(n, .6), np.zeros(2 * n)]
+        eye = cylinder_points(np.repeat(np.linspace(-.7, .7, 15), 37), 1., np.tile(np.linspace(-90, 90, 37), 15))
+        closed = hinge_landing(rest, margin, rest[lower], centre, axis, weights=band, outside=.001)['positions']
+        phases = np.linspace(0., 1., 11)
+        pace = np.repeat(phases[:, None], len(rest), axis=1)                               # one pace: one timing
+        rolled = path_positions(rest, closed, pace, pivot=centre, axis=axis)['positions']
+        need = end_clearance(rest, closed, eye, eye, centre, cap=.05)['clearance']
+        kept = keep_clearance(rolled, eye, centre, need)
+        self.assertEqual(float(np.abs(kept['push']).max()), 0.)                             # the roll stays clear
+        chord = path_positions(rest, closed, pace)['positions']
+        self.assertLess(np.linalg.norm(chord[5, margin], axis=1).min(), 1.)                 # a chord cuts the eye
+        lashes = rest[margin] + [0., -.03, -.02]
+        carried = hinge_carry(lashes, rest[margin], closed[margin], centre, axis, fraction=phases)
+        self.assertLess(carried['public_metrics']['seat_distance_change_max'], .002)
+        report = closing_edges(rest, kept['positions'], margin, lower, pivot=centre, axis=axis)['summary']
+        self.assertLess(report['facing_travel_share_max'], 1e-12)                          # the lower lid stays
+        self.assertLess(report['closure_spread_max'], 1e-9)
+        self.assertLess(report['roll_deviation_share_max'], 1e-9)
+        self.assertLess(report['seam_to_facing_rest_share_max'], .002)
+        np.testing.assert_allclose(kept['positions'][:, 3 * n:], np.broadcast_to(rest[3 * n:], (11, n, 3)), atol=1e-12)
+
 
 if __name__ == '__main__':
     unittest.main()

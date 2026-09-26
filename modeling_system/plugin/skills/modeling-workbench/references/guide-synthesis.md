@@ -5,6 +5,11 @@ of the neutral pose made the same way) and has to constrain a character whose ne
 are `ArrayPreparation` operations and plain Python functions in `modeling_system.guide_synthesis`. They work on front
 depth maps (one depth per cell of a regular chart seen along one axis), fit no character and approve no appearance.
 
+A pose guide fits a moving feature's mechanism parameters and checks it by overlap and volume; it is not a per-point
+target at its phase ([build the mechanism first](build-the-mechanism-first.md)). The real-use corrections below
+(forward-only volume fits, band fields) were made on a per-point blink that was later replaced by a hinged lid. They
+remain useful for static shape and bounded clean-up, not as the way to create motion.
+
 ## Why a generated pose is not a guide by itself
 
 Independent runs of one pose differ by smooth depth offsets and by local detail, and a generated neutral pose is not

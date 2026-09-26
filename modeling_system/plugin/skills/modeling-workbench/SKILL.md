@@ -4,6 +4,14 @@ description: Operate the local modeling workbench for numerical scene inspection
 ---
 
 
+Before changing how anything moves (a blink, a jaw, a mouth, an expression), read
+[build the mechanism first](references/build-the-mechanism-first.md). Study how the
+reference avatars construct the feature and build that mechanism, for example a lid
+turning as one piece on a hinge with one timing. Keep the rest pose exactly on the
+accepted neutral. Pose guides fit the mechanism's few parameters and check it by
+overlap and volume; they are not per-point targets at every pose. Fix a motion
+defect by changing the mechanism, never by stacking per-phase fields or patches.
+
 Use [portable setup](references/portable-setup.md) on another machine or character.
 The complete workbench skill ships with the package and has no external skill or
 inference-service dependency. Keep character materials, identity, scope and native
@@ -21,7 +29,8 @@ allow useful independent work while an exact review dependency waits. Unknown
 conditions remain blocked. Intervals stay finite within current authorization.
 
 Preserve the [retained modeling method](references/method.md). Use registered
-guides, depth and corresponding sections during actual fitting. Protect achieved
+guides, depth and corresponding sections when fitting static shape; motion follows
+the mechanism-first order above. Protect achieved
 evaluated shapes through motion using [consumed preservation constraints](references/preservation-and-lessons.md).
 When local repair conflicts with preserved outcomes, solve connected controls
 within qualified guide tolerances and restore the affected outcomes before retention.
@@ -96,9 +105,9 @@ For a local connectivity question use [bounded graph paths](references/graph-pat
 
 When a topology-changing operation emits exact element ancestry, use [topology lineage](references/topology-lineage.md) to retain and compose its mapping and remap selectors conservatively. No native producer is inferred from an offline lineage declaration. For completed or interrupted effects, use `inspect_execution_receipt` and [execution contracts](references/execution-contracts.md) before deciding what actually happened. Owner-authored isolated workers can use the standalone completion helper without switching the live native adapter. Preserve the original failed receipt and attach later verification separately.
 
-In source construction studies, identify the primary movement, support/bulge, gaze and corrective mechanisms separately; trace material rim/fold/return paths, corners/contact and neighboring ocular or lash layers through actual native controls. These are diagnostic questions, not prescribed anatomy, a spherical rig, zero neighboring influence or a biological simulation. Retain the evidence that supports an intervention before implementing a new character-specific mechanism.
+Study the construction of the reference avatars to build it. Identify the primary movement, support/bulge, gaze and corrective mechanisms separately; measure which loops move, what they turn or slide about, what stays still, where the closed line lies and how attached layers ride. A study ends in building that construction for the character before any local correction ([build the mechanism first](references/build-the-mechanism-first.md)). The avatars supply the mechanism and passing values for the construction checks; the character's own references and accepted neutral govern its likeness.
 
-When a construction score improves but ridges persist, creases radiate from a corner after a depth fit (material crowding), recorded triangulation differs between poses, dependent geometry moves despite fixed anchors, a support formula has not reproduced saved native samples, or exact plane sections show suspicious gaps, read [construction diagnostics](references/construction-diagnostics.md). When both end poses are established and the in-between poses crease or cut into what lies behind them, build them with [motion paths](references/motion-paths.md). It supplies bounded offline Python checks, explicit native-versus-fixed-chart comparison and independent frame-response checks. Presentation borders, measured shape, predicted support and artistic acceptance remain distinct.
+When a construction score improves but ridges persist, creases radiate from a corner after a depth fit (material crowding), recorded triangulation differs between poses, dependent geometry moves despite fixed anchors, a support formula has not reproduced saved native samples, or exact plane sections show suspicious gaps, read [construction diagnostics](references/construction-diagnostics.md). Build a moving part on its mechanism first; a lid is landed on a hinge and rolled with one pace ([motion paths](references/motion-paths.md)). When an inherited motion's in-between poses crease or cut into what lies behind them, the same page re-times and joins them. It supplies bounded offline Python checks, explicit native-versus-fixed-chart comparison and independent frame-response checks. Presentation borders, measured shape, predicted support and artistic acceptance remain distinct.
 
 For controller velocity, batch explicitly ordered useful work in one bounded run
 and keep fixed prerequisites in code. Inspect actual stage timings during normal

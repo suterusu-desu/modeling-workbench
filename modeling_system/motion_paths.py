@@ -1,4 +1,14 @@
-"""In-between poses built directly from two established poses: pace, path and coherent pieces.
+"""Motion built as a mechanism: a part turned on a hinge, clean in-between paths, pace and coherent pieces.
+
+Build a moving feature as the mechanism reference characters use before fitting any pose: a lid is one piece turning
+on a hinge with one timing, landing on the still opposing lid. The hinge operations derive the end pose from the
+mechanism and carry attached parts with it:
+
+- `hinge_landing`: an edge (a lid margin) turned about a hinge axis onto a landing curve (the opposing margin at rest)
+  at its own axial position, with a weighted band of material carried by the same turn; nothing slides along the axis.
+- `hinge_carry`: attached material (lashes) moved by the hinge change of the host point it sits on, at the host's
+  fraction, with the per-point turn, radial and axial values a native rig needs.
+- `hinge_change`: each point's turn about the axis, change of distance from it and slide along it between two poses.
 
 A blend shape moves every point along its straight chord from a reference pose to an end pose, all at the same pace.
 That is enough when nothing lies behind the moving surface. Where material passes over a convex obstacle (a lid over a
@@ -14,13 +24,16 @@ operations construct in-between poses from the two end poses themselves:
   pivot by the best rotation between its two poses, carrying its non-rigid residual linearly.
 - `keep_clearance` and `end_clearance`: points stay outside an obstacle behind them (an eye behind a lid) by at least
   the clearance they have in their two poses, capped at the margin that matters, with a smooth envelope and push.
-- `schedule_pace`, `shared_schedule` and `smooth_step`: re-time a smoothly weighted region, either onto one shared
-  schedule (so a region moves as one piece instead of shearing against its neighbours) or with a pace floor (a part
-  that must reach its end pose by a given phase), with temporal and spatial fades.
+- `schedule_pace`, `shared_schedule` and `smooth_step`: re-time a smoothly weighted region of an inherited motion,
+  either onto one shared schedule (so a region moves as one piece instead of shearing against its neighbours) or with a
+  pace floor (a part that must reach its end pose by a given phase), with temporal and spatial fades. They repair the
+  timing of a motion that already exists; they do not construct one. A lid given per-region paces (a corner closing
+  first) closes like a zipper; build it on a hinge with one pace instead.
 - `travel_weight`: how much of a rebuilt motion each point takes where it joins the existing one, from the existing
   motion's travel, smoothed over the surface so barely moving neighbours do not alternate.
 
-None of them fits a guide or judges appearance; both end poses are taken as established.
+None of them fits a guide or judges appearance. `hinge_landing` derives its end pose from the hinge; the other
+operations take both end poses as established.
 """
 import numpy as np
 
@@ -430,6 +443,10 @@ def shared_schedule(pace, members, *, weights=None, statistic='median'):
 def schedule_pace(pace, schedule, weights, *, mode='blend'):
     """Re-time a smoothly weighted region of an existing pace.
 
+    This repairs the timing of an inherited motion. It is not a way to construct a moving part: a lid built from
+    per-region paces, a corner floored to close first, closes like a zipper. Build a lid as one piece on a hinge with
+    one pace (`hinge_landing`, then `path_positions` with one pace for every point).
+
     `pace` is (phases, points), monotone per point (as from `motion_pace`). `schedule` is a monotone timing in [0, 1]
     per phase, shared (phases,) or per point (phases, points): `shared_schedule` of the region's neighbours,
     `smooth_step(phases, start, end)`, or a per-point onset `smooth_step(phases[:, None], onset - ramp, onset)`.
@@ -439,8 +456,8 @@ def schedule_pace(pace, schedule, weights, *, mode='blend'):
     - 'blend': (1 - w) pace + w schedule. The region moves as one piece on the schedule. Use it where material shears
       because neighbouring parts keep different timings, for example a corner that stays put until late while the part
       beside it is already half way.
-    - 'floor': max(pace, w schedule). The region is at least as far as the schedule. Use it where a part must reach its
-      end pose by a given phase, for example a corner that closes first, without delaying anything already ahead.
+    - 'floor': max(pace, w schedule). The region is at least as far as the schedule. Use it where a part of an
+      inherited motion must reach its end pose by a given phase without delaying anything already ahead.
 
     Both keep every point's pace monotone. Points with weight 0 keep their exact values.
     """

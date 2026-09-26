@@ -6,7 +6,7 @@ The unit of work is a recoverable modeling decision: a quality question, exact s
 
 Read the private project's current state, user decisions and relevant lessons before selecting geometry. Identify the actual open file and later user edits, saved recovery checkpoint, scene objects, rig controls, units, coordinate frames, topology/modifier order, semantic regions and native owner. Separate historical snapshots from current freshness. Start a decision episode with explicit scope, protected relationships, uncertainties and the next quality question.
 
-Bind intended variation as well as the default pose. Describe what each feature does, which skin/rig mechanism implements it, its neighboring layers, attachment/order/clearance/volume relationships and what the evidence does not establish. Construction from other assets can inform mechanics; the current character's references govern identity. No fixed vertex index, control label, anatomy assumption or scene name transfers automatically.
+Bind intended variation as well as the default pose. Describe what each feature does, which skin/rig mechanism implements it, its neighboring layers, attachment/order/clearance/volume relationships and what the evidence does not establish. Before fitting a moving feature, study how the reference assets construct it and build that mechanism for the character ([build the mechanism first](build-the-mechanism-first.md)); a study ends in building what it found. The current character's references govern identity. No fixed vertex index, control label, anatomy assumption or scene name transfers automatically.
 
 ## Observe the actual situation
 

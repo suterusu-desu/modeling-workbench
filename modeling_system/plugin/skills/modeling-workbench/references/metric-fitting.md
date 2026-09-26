@@ -8,6 +8,12 @@ piecewise-linear finite-element stiffness and lumped area mass from the actual
 chart triangles. It does not choose guides, fitting directions, regularization
 strength or native actions.
 
+The deformers on this page (relaxation, shape-preserving deformation, planar
+re-layout) are bounded clean-up of a surface, not a way to create motion. Several
+real-use cases below repaired a per-point blink that was later replaced by a hinged
+lid ([build the mechanism first](build-the-mechanism-first.md)): when the same kind
+of mark keeps returning in a moving part, change its construction instead.
+
 ```python
 from scipy.sparse import coo_matrix, diags
 from modeling_system.metric_fitting import planar_fem_metric

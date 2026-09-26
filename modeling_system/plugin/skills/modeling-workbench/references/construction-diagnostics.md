@@ -156,3 +156,37 @@ When the end poses look right and the in-between poses crease, cut each moving b
 followed into every pose and inflections are counted per pose. An S across a band (turning one way above its edge and
 the other way at it) is a construction defect of the in-between, not of either end pose. The remedy is usually a clean
 path between the two poses rather than another fitted key; see [motion paths](motion-paths.md).
+
+## How an edge closes
+
+Before judging a closing motion's shading, measure the mechanism. `closing_edges(reference, poses, moving, facing,
+pivot=None, axis=None, parts=3)` takes the open pose, the motion at increasing phases (the last one closed) and two
+index arrays ordered along the moving edge and the edge it closes onto (for a blink the upper and lower lid margins).
+Per pose it reports:
+
+- `facing_travel_max` and `facing_travel_share`: the facing edge's largest travel from rest, absolute and as a share of
+  the rest opening (the median gap between the edges at rest).
+- `closure`: each moving point's closed share of its gap to the facing edge's rest line, as min, median, max, the p10-p90
+  spread and the median of each of `parts` stretches along the edge. One rate gives equal shares; a corner that closes
+  first gives a high share at one end and a wide spread.
+- With `pivot` and `axis`: `turn_share`, each moving point's turn about the hinge as a share of its turn at the last
+  pose, and `roll_deviation`, the moving edge's distance from one roll at the median share (`path_positions`). Material
+  on separate paths and timings, or pushed by stacked corrections, deviates; a lid that turns as one piece does not.
+- At the last pose, `seam_to_facing_rest`: the closed edge's distance from the facing edge's rest line.
+
+The summary carries the largest facing-travel share, the largest closure spread before the last pose, the seam's share
+and, with a hinge, the largest roll deviation. In real use, on one character's saved native arrays, a blink built as
+per-point paths with stacked corrections (rejected on sight) against its hinged rebuild:
+
+| | per-point blink | hinged rebuild |
+|---|---|---|
+| lower-lid travel, largest share of the rest opening | .53 | 0 |
+| turn share of the inner, middle and outer third at mid-blink | .50 / .58 / .84 | .64 / .64 / .65 |
+| closed share of the inner, middle and outer third at closure | .24 / .73 / .49 | .98 / .99 / .99 |
+| distance from one roll, largest share of the opening | .26 | .06 (clearance pushes) |
+| seam to the lower rest line at closure, median share of the opening | .46 | .01 (the landing margin) |
+
+The measures are edge measures only: the lid body between the edges, its shading and the corners need `section_turns`,
+`compare_bends` and matched renders. Gaps are measured to the polyline through the ordered facing points. A deliberate
+difference in rate, or a facing lid that is meant to rise, is a design choice these numbers cannot make; see
+[build the mechanism first](build-the-mechanism-first.md).

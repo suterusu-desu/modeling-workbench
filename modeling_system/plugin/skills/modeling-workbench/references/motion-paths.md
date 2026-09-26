@@ -1,18 +1,47 @@
-# Build in-between poses from two established poses
+# Motion paths: hinged parts, clean in-betweens, re-timing
 
-Use these operations when both end poses of a motion are established (an accepted rest and an accepted end pose)
-and the in-between poses bend, crease or cut into something behind the moving surface. They are `ArrayPreparation`
-operations and plain Python functions in `modeling_system.motion_paths`; they fit no guide and approve no appearance.
+Build a moving part as a mechanism first ([build the mechanism first](build-the-mechanism-first.md)): a lid lands on
+the still opposing lid by turning on a hinge and rolls there with one pace. The hinge operations below derive the end
+pose from the mechanism and carry attached parts with it. The other operations build clean in-betweens between two
+established poses, and re-time or join an inherited motion. All are `ArrayPreparation` operations and plain Python
+functions in `modeling_system.motion_paths`; they fit no guide and approve no appearance.
 
 ## Why in-betweens go wrong
 
-A blend shape moves every point along its straight chord, all at one pace. Reference characters with flat, recessed
-eyes close their lids that way without trouble: nothing lies behind the lid's path. When material has to pass over a
-convex obstacle close behind it (a lid over a round eye, a sheet over a bone), the chord cuts into the obstacle. The
-usual repairs fit extra keys at intermediate phases and stack correction fields on top; each is fitted separately, so
-the in-between sections bend: across a moving band the section turns one way above its edge and the other way at it
-(an S), which shading shows as a crease or shelf even when every key is close to its guide. Measure that with
+A blend shape moves every point along its straight chord, all at one pace. Reference characters close a lid with one
+shape: the lid moves as one piece at one rate, the corners and the lower lid stay still, and their flat, recessed eyes
+leave the straight path clear. Over a convex obstacle close behind the material (a lid over a round eye, a sheet over a
+bone) the chord cuts into the obstacle, so the same one-piece closing needs a turn on a hinge. The usual wrong repair
+fits extra keys at intermediate phases and stacks correction fields on top; each is fitted separately, so the
+in-between sections bend: across a moving band the section turns one way above its edge and the other way at it (an
+S), which shading shows as a crease or shelf even when every key is close to its guide. Measure that with
 `construction_diagnostics.section_turns` before and after a change (see below).
+
+## Hinge: land a lid and carry what rides on it
+
+`hinge_landing(positions, edge, landing, pivot, axis, weights=None, outside=0.)` derives a closed pose from the rest
+pose. Each `edge` point (the lid margin, ordered or not) turns about the hinge line through `pivot` along `axis` to the
+`landing` curve's angle at the same axial position (the opposing margin at rest, sampled densely enough to interpolate
+along the axis) and moves to the landing curve's distance from the axis plus `outside`. Every other point turns and
+moves out by its weight times the edge's values at its own axial position: 1 on the margin and the lid's inner surface,
+falling off above the margin, 0 on what stays. Weight-0 points keep their exact bytes, and no point slides along the
+axis. `public_metrics` reports the edge's turn and radial range, the landed gap to the landing polyline and how many
+edge points lay beyond the landing curve's axial range (they take its end values). Build the in-betweens as one roll to
+this pose: `path_positions` with the same pivot and axis and one pace row per phase for every point.
+
+`hinge_carry(attached, host_reference, host_end, pivot, axis, fraction=1., host_index=None)` moves attached points (lashes,
+a seam, a marking) by the hinge change of their host point (the nearest host point at rest unless `host_index` is
+given): at fraction f each turns by f times the host's turn, moves out by f times its radial change and along the axis by
+f times its axial change. Give the fraction the host's in-betweens use; for a one-pace roll that is the phase itself. The
+returned per-point `turn`, `radial` and `axial` values are what a native node group needs; the formula is in the
+docstring and on the mechanism page. `seat_distance_change_max` reports how far an attached point leaves its host by
+the end pose: rigid carrying holds only as far as neighbouring host points turn alike.
+
+`hinge_change(reference, end, pivot, axis)` gives each point's `turn` (radians, right-handed about the axis, the shorter
+way), `radial` and `axial` change between any two poses, for example to realize an existing closed pose as a hinge in a
+rig. Points on the axis and half turns are refused.
+
+Measure the result with `construction_diagnostics.closing_edges` ([construction diagnostics](construction-diagnostics.md)).
 
 ## Pace: keep when each region moves
 
@@ -25,9 +54,15 @@ Keep the host's own pace wherever something attached to it follows a schedule of
 the lid rim at fixed phases). Re-timing the host, even by smoothing its pace along the band, desynchronizes the
 attachment: in real use a rim that lagged by a few percent opened a gap between the lash and the lid, and rows above
 the rim that lagged the rim let the eye show through the band. Smooth the pace in radial rows only where no attachment
-depends on it, or move the attachment with it.
+depends on it, or move the attachment with it. An attachment that rides a hinge moves with its host through
+`hinge_carry` at the host's own fraction, which removes this problem.
 
-## Re-time a region: shared schedules and pace floors
+## Re-time a region of an inherited motion: shared schedules and pace floors
+
+These operations repair the timing of a motion that already exists. Do not construct a moving part with them: a lid
+rebuilt from two established poses with its corner floored to close first, and its inner end on a later schedule, was
+rejected on sight as a zipper. Its inner, middle and outer thirds had turned .50, .58 and .84 of the way at the same
+phase; the hinged rebuild with one pace, .64, .64 and .65.
 
 An existing motion's pace can shear where neighbouring parts keep different timings: one part still at rest while the
 part beside it is half way, so the material between them creases or a part stands proud of its neighbour. Re-time a
@@ -36,12 +71,13 @@ smoothly weighted region with `schedule_pace(pace, schedule, weights, mode=...)`
 - `mode='blend'` puts the weighted points on one shared `schedule` ((1 - w) pace + w schedule), so the region moves as
   one piece. Take the schedule from the material next to it that already moves right, `shared_schedule(pace, members)`
   (per-phase median, or a weighted mean), or a plain timing `smooth_step(phases, start, end)`.
-- `mode='floor'` raises the weighted points to at least the schedule (max(pace, w schedule)): a part that must reach
-  its end pose by a given phase, for example a corner that closes first. A per-point onset,
-  `smooth_step(phases[:, None], onset - ramp, onset)`, closes a corner progressively from its tip.
+- `mode='floor'` raises the weighted points to at least the schedule (max(pace, w schedule)): a part of the inherited
+  motion that must reach its end pose by a given phase. A per-point onset, `smooth_step(phases[:, None], onset - ramp,
+  onset)`, moves a region progressively from one end.
 
 `weights` are the spatial fade, usually `1 - smooth_step(distance, full, zero)` from the part. Points at weight 0 keep
-their exact pace; both modes keep every point's pace monotone. In real use (a lid rebuilt from two established poses):
+their exact pace; both modes keep every point's pace monotone. In real use, on the per-point lid that was later
+replaced by the hinge:
 
 - A floor whose spatial fade spanned only a few rim spacings brought one rim point to its end pose a column before
   the facing rim met it and left a small notch in the open rim; a fade about twice as wide had none.
@@ -93,7 +129,10 @@ limited to the upper lid's own skin away from the corner, the fine lines faded (
 Rolling keeps each distance from the hinge between its two end values; it does not know the obstacle's real surface.
 Check clearance against the actual obstacle mesh, especially where neighbouring rows move at different paces.
 
-## Hinge: move a part as one piece
+## Swing a part between two established poses
+
+To build a lid, derive its closed pose on the hinge with `hinge_landing` (above). `hinge_motion` serves a different
+case: a part whose two poses already exist and must swing between them as one piece.
 
 `hinge_motion(reference, end, members, pivot, pace, base=None, weights=None)` finds the best rotation about a fixed
 pivot that takes the members' reference positions to their end positions (travel-weighted), turns every point by the
@@ -146,5 +185,6 @@ smallest clearance removed the wrinkles, and a screen with the eye drawn showed 
 Clearance is not a contact certification: check sections, stretch and renders with the obstacle drawn (a view without
 it cannot show the obstacle coming through). It also fixes penetration, not every gap that shows the obstacle. In real
 use, eye visible at a lid corner came from the opening's own end staying open while the rims' paces differed, not from
-the lid passing through the eye: measure the gap between the two rims near the corner through the motion before choosing
-between a clearance push and a timing change (a pace floor that closes the corner first).
+the lid passing through the eye: measure the gap between the two rims near the corner through the motion
+(`closing_edges`). Where the rims close at different rates the construction is the cause; one pace on a hinge removes
+it, and a pace floor on a corner adds a zipper.
