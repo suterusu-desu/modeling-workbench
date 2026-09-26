@@ -54,6 +54,9 @@ class SetupPortabilityTests(unittest.TestCase):
         workspace = self.root/'workspace'; initialize(workspace, 'Synthetic')
         plugin = prepare(self.root/'modeling-workbench', workspace)
         self.assertTrue((plugin/'skills/modeling-workbench/SKILL.md').is_file())
+        from . import __version__
+        manifest = json.loads((plugin/'.codex-plugin/plugin.json').read_text(encoding='utf-8'))
+        self.assertEqual(manifest['version'], __version__)                    # the one version source
         (plugin/'.mcp.json').write_text('local configuration', encoding='utf-8')
         with self.assertRaises(FileExistsError):
             prepare(plugin, workspace)

@@ -66,6 +66,14 @@ Image, mesh and video generation are optional external integrations with separat
 authorization, sources and recoverable job accounting. Credentials and credits
 are never bundled. Existing art requires none of those accounts.
 
+## One environment per workspace
+
+Keep one virtual environment per character workspace with an editable install of its own clone of this repository:
+`python -m venv .venv`, then `.venv` Python `-m pip install -e <clone>`. Upgrading is `git pull` in that clone (reinstall
+only when dependencies change); there is no new environment per release. Use a clone the workspace owns, not a checkout
+someone is editing: the preservation checks pin the installed files by hash, so an edit landing in the middle of a trial
+refuses its measurement. Pull between trials.
+
 ## Transfer and upgrade
 
 Share tools-only exports. Restore character assets/evidence separately, recreate

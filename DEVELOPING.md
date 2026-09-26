@@ -2,7 +2,15 @@
 
 [System design and workflow composition](DESIGN.md) and the [finite integration queue](IMPLEMENTATION-QUEUE.md) distinguish implemented interfaces, installed verification, actual operator use and unsupported content.
 
-Install in an isolated Python environment with `python -m pip install .`. Run `python -m unittest discover -s modeling_system -t .` and `python scripts/check_distribution.py` and `python scripts/check_clean_install.py` before publishing source changes. The clean check installs the wheel and tools archive into new environments outside the checkout, strips inherited credentials/workspace configuration, exercises the shipped direct integration without inference services, and probes the generated plugin. CI runs on Windows, macOS and Linux. Native, provider and artistic acceptance are separate from this synthetic suite.
+Install in an isolated Python environment with `python -m pip install .`, or `python -m pip install -e .` for an
+editable install that follows the checkout. Run `python -m unittest discover -s modeling_system -t .` and `python scripts/check_distribution.py` and `python scripts/check_clean_install.py` before publishing source changes. The clean check installs the wheel and tools archive into new environments outside the checkout, strips inherited credentials/workspace configuration, exercises the shipped direct integration without inference services, and probes the generated plugin. CI runs on Windows, macOS and Linux. Native, provider and artistic acceptance are separate from this synthetic suite; set
+`MODELING_BLENDER` to a Blender executable to also run the tests that drive a background Blender (the live bridge and
+reference adapter, the isolated workers, trial / reopen / retain).
+
+A release is one line and the checks: set `__version__` in `modeling_system/__init__.py` (packaging, the prepared
+plugin manifest and the MCP server read it; no other file carries the version), list any new package file in
+`modeling_system/distribution-files.json`, run the suite and both checks, commit and push. Ship a capability when the
+next real edit uses it, and batch small changes into one release rather than one release per function.
 
 The workbench environment and Blender's embedded Python are separate dependency domains. Do not add the workbench environment's entire `site-packages` directory to a native worker's search path. Compiled extensions must support the worker's Python version, ABI and platform; importing them successfully in offline preparation does not verify native compatibility. See [Blender's bundled-Python guidance](https://github.com/blender/blender/blob/main/doc/python_api/rst/info_tips_and_tricks.rst#bundled-python--extensions) and [Python wheel compatibility tags](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/).
 

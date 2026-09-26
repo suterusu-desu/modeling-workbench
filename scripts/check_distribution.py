@@ -15,8 +15,10 @@ errors=[]
 metadata=tomllib.loads((root/'pyproject.toml').read_text(encoding='utf-8'))
 distribution=tomllib.loads((root/'modeling_system/distribution-pyproject.toml').read_text(encoding='utf-8'))
 plugin=json.loads((root/'modeling_system/plugin/.codex-plugin/plugin.json').read_text(encoding='utf-8'))
-if metadata!=distribution or plugin['version']!=metadata['project']['version']:
-    errors.append(('package metadata','source, archive and plugin versions/dependencies must agree'))
+version=re.search(r"^__version__ = '([^']+)'",(root/'modeling_system/__init__.py').read_text(encoding='utf-8'),re.M)
+if (metadata!=distribution or 'version' in metadata['project'] or 'version' in plugin or not version
+        or metadata.get('tool',{}).get('setuptools',{}).get('dynamic',{}).get('version')!={'attr':'modeling_system.__version__'}):
+    errors.append(('package metadata','the version lives only in modeling_system.__version__; source and archive metadata must agree'))
 inventory=json.loads((root/'modeling_system/distribution-files.json').read_text(encoding='utf-8'))['files']
 for p in (root/'modeling_system').glob('*.py'):
     if p.name not in inventory: errors.append((p.name,'Python module missing from tools export'))

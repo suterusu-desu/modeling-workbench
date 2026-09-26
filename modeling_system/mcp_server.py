@@ -36,7 +36,7 @@ NATIVE_DESCRIPTIONS={
 class ModelingMCP(MCPServer):
     def __init__(self, service):
         self.domain=service
-        version=json.loads((Path(__file__).parent/'plugin'/'.codex-plugin'/'plugin.json').read_text(encoding='utf-8'))['version']
+        from . import __version__ as version
         super().__init__('modeling-workbench',title='Modeling Workbench',version=version,
                          description='Numerical scene reasoning, exact-view reference loops, recoverable Blender trials and motion evidence.')
         for name in service.operations():

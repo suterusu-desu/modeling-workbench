@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modeling-workbench"
-version = "0.2.66"
+dynamic = ["version"]
 description = "Numerical scene reasoning and exact-view character modeling workflows"
 requires-python = ">=3.12"
 dependencies = ["anyio>=4,<5", "mcp>=2.2,<3", "numpy>=2,<3", "scipy>=1.16,<2", "Pillow>=12,<13", "imageio-ffmpeg>=0.6,<1"]
@@ -13,6 +13,9 @@ dependencies = ["anyio>=4,<5", "mcp>=2.2,<3", "numpy>=2,<3", "scipy>=1.16,<2", "
 modeling-workbench-mcp = "modeling_system.mcp_server:main"
 modeling-workbench-init = "modeling_system.init_workspace:main"
 modeling-workbench-doctor = "modeling_system.setup_check:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "modeling_system.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["modeling_system"]

@@ -17,7 +17,7 @@ Use Python 3.12 or newer in a virtual environment on Windows, macOS or Linux.
 Install from this checkout, an extracted tools archive or a built wheel:
 
 ```sh
-python -m pip install .
+python -m pip install .          # or: python -m pip install -e /path/to/your/clone  (upgrade with git pull)
 python -m modeling_system.init_workspace /path/to/character --character "My character"
 python -m modeling_system.setup_check --workspace /path/to/character
 python -m modeling_system.prepare_plugin /path/to/modeling-workbench --workspace /path/to/character

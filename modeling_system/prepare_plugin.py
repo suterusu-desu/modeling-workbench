@@ -24,6 +24,9 @@ def prepare(destination, workspace=None, python=None):
     config={'mcpServers':{'modeling-workbench':{'command':str(interpreter),
         'args':[str(destination/'launch.py'),'--workspace',str(workspace)]}}}
     payloads={relative:(source/relative).read_bytes() for relative in files}
+    from . import __version__
+    manifest=json.loads(payloads['.codex-plugin/plugin.json'].decode('utf-8')); manifest['version']=__version__
+    payloads['.codex-plugin/plugin.json']=(json.dumps(manifest,indent=2)+'\n').encode('utf-8')
     payloads['.mcp.json']=(json.dumps(config,indent=2)+'\n').encode('utf-8')
     for relative,data in payloads.items():
         target=destination/relative
