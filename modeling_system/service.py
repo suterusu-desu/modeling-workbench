@@ -705,6 +705,70 @@ class ModelingService:
         from .bounded_reads import record as read
         return read(self,record,path,offset,limit,max_chars)
 
+    # -- construct, check, guide, show: the construction-first verbs on every transport ------------------------------
+
+    def check_candidate(self, declaration: str, candidate: str, baseline: str | None = None) -> dict:
+        """Check a candidate's saved poses (.npz of <phase>::<object>::co|tri) against a construction declaration (JSON): rest identity, motion outside the region, protected objects, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and the blend shapes needed. A baseline's values are reported beside the candidate's. Numbers can reject a candidate; they never approve it."""
+        from .checks import run_checks
+        path=Path(declaration).resolve(strict=True)
+        return run_checks(json.loads(path.read_text(encoding='utf-8')),candidate,baseline,base=path.parent)
+
+    def register_guide(self, generated: str, reference: str, output: str, exclude: list[dict] | None = None,
+                       scale: float | None = None, up_axis: int = 2) -> dict:
+        """Register a generated guide mesh (.npz with co and tri) onto the accepted neutral (.npz with co and tri): height-ratio scale (or the given scale), then rigid trimmed alignment on stationary anatomy, with exclude boxes ({min, max, mirror}) leaving moving features out. Writes the registered mesh to a new output .npz and returns the transform and the surface distances on the stationary and excluded regions."""
+        import numpy as np
+        from .registration import register_rigid
+        target=Path(output)
+        if target.exists(): raise FileExistsError('Refusing to overwrite an existing registered guide: '+str(target))
+        with np.load(generated) as g, np.load(reference) as r:
+            result=register_rigid(g['co'],r['co'],reference_triangles=r['tri'] if 'tri' in r.files else None,
+                                  exclude=exclude or (),scale='height' if scale is None else scale,up_axis=up_axis)
+            target.parent.mkdir(parents=True,exist_ok=True)
+            np.savez(target,co=result['positions'],**({'tri':g['tri']} if 'tri' in g.files else {}))
+        return {'output':{'path':str(target.resolve()),'sha256':digest(target.read_bytes())},'scale':result['scale'],
+                'rotation':np.asarray(result['rotation']).tolist(),'translation':np.asarray(result['translation']).tolist(),
+                'public_metrics':result['public_metrics'],'limits':result['limits']}
+
+    def construct(self, operation: str, inputs: str, output: str, arguments: dict | None = None) -> dict:
+        """Run one packaged construction or diagnostic array operation (hinge_landing, hinge_lift, hinge_carry, hinge_change, path_positions, keep_clearance, end_clearance, closing_edges, line_depth, section_turns, compare_stretch, rigid_deform, relax_displacement and the other ArrayPreparation operations). Array arguments come from the inputs .npz by name, other arguments from `arguments`; array results are written to a new output .npz and everything else is returned."""
+        import numpy as np
+        from .preparation import ARRAY_OPERATIONS
+        if operation not in ARRAY_OPERATIONS: raise ValueError('Unknown construction operation: '+operation)
+        target=Path(output)
+        if target.exists(): raise FileExistsError('Refusing to overwrite an existing construction output: '+str(target))
+        with np.load(inputs) as data:
+            kwargs={name:data[name] for name in data.files}
+        kwargs.update(arguments or {})
+        result=ARRAY_OPERATIONS[operation](**kwargs)
+        arrays={k:v for k,v in result.items() if isinstance(v,np.ndarray)}
+        target.parent.mkdir(parents=True,exist_ok=True); np.savez(target,**arrays)
+        def plain(value):
+            if isinstance(value,dict): return {k:plain(v) for k,v in value.items() if not isinstance(v,np.ndarray)}
+            if isinstance(value,(list,tuple)): return [plain(v) for v in value]
+            return value.item() if isinstance(value,np.generic) else value
+        return {'operation':operation,'output':{'path':str(target.resolve()),'sha256':digest(target.read_bytes()),'arrays':sorted(arrays)},
+                **plain({k:v for k,v in result.items() if k not in arrays})}
+
+    def study_blink(self, shapes: str, key: str, upper_margin: list[int], lower_margin: list[int], corners: list[int],
+                    pivot: list[float] | None = None, axis: list[float] | None = None, band: list[int] | None = None) -> dict:
+        """Measure how a reference avatar builds its blink, from a study_extract.py extraction (.npz): moving vertices, the lower lid's travel as a share of the upper's, corner travel, the closed line's depth and the lower lid's rest depth in the eye's own width, the upper margin's slide and hinge residuals and, with band candidates, how far the moving band reaches."""
+        from .study import blink_report, load_shapes
+        avatar=load_shapes(shapes)
+        if key not in avatar['keys']: raise ValueError('Shape key not in the extraction: '+key)
+        rest=avatar['rest']
+        return blink_report(rest,rest+avatar['keys'][key],upper_margin,lower_margin,corners,pivot=pivot,axis=axis,band=band)
+
+    def overlay_on_drawing(self, render: str, drawing: str, render_points: list[list[float]], drawing_points: list[list[float]],
+                           output: str, crop: list[int] | None = None, lines: list[dict] | None = None, alpha: float = .25) -> dict:
+        """Overlap a render and a drawing in the drawing's frame, aligned by the similarity taking two landmarks of the render (pixel x, y; for an eye its two corners) onto the drawn ones; the drawing lies over the render with its strokes stronger, optional polylines on top. Never side by side."""
+        from .review_sheets import aligned_overlay
+        return aligned_overlay(render,drawing,render_points,drawing_points,output,crop=crop,lines=lines or (),alpha=alpha)
+
+    def review_sheet(self, rows: list[dict], columns: list[str], output: str, title: str | None = None) -> dict:
+        """Compose a matched review sheet: one labeled row per entry ({label, images: [path or null, ...]}), one headed column per state or view, every source pinned by hash, unmatched sizes reported."""
+        from .review_sheets import compose_review_sheet
+        return compose_review_sheet(rows,columns,output,title=title)
+
 # Every public effectful/fact-producing Python method uses the same journal as
 # MCP/CLI. Reads are intentionally not recorded. Facade calls establish scope;
 # nested public operations belong to the enclosing operation's complete result.

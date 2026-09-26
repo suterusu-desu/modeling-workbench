@@ -79,6 +79,13 @@ lane.reopen('lift03')
 lane.retain('lift03', target=new_checkpoint, label=label, review=review)
 ```
 
+The construction-first verbs are also service operations, so the CLI and the MCP server expose them
+(`check_candidate`, `register_guide`, `construct`, `study_blink`, `overlay_on_drawing`, `review_sheet`):
+
+```sh
+python -m modeling_system check_candidate --workspace /path/to/character --input check.json
+```
+
 Use `ModelingService` for owner-controlled operations, or the packaged
 `direct_session.create_session` for continuing work in an existing session setup:
 
@@ -116,6 +123,7 @@ an exact review dependency waits.
 - [Native jobs and retention](modeling_system/plugin/skills/modeling-workbench/references/operation-recipes.md): material fields, qualified native jobs and synchronous checkpoint retention, with [parts set aside from view](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md#parts-set-aside-from-view) in the live display and the retained file.
 - [Preservation and connected repair](modeling_system/plugin/skills/modeling-workbench/references/preservation-and-lessons.md): source-bound constraints consumed by fitters, final evaluated measurements, a pre-launch check of pinned sources, an offline preview of the declared cells and scoped tolerance when connected repair is necessary.
 - [Preparation and native setup](modeling_system/plugin/skills/modeling-workbench/references/preparation-and-bootstrap.md): array contracts, correspondence, [planar and 3D-surface finite-element metrics, crowded-material relaxation, shape-preserving deformation, optionally inside per-vertex guide intervals, and planar re-layout of collapsed material, harmonic or keeping a reference layout](modeling_system/plugin/skills/modeling-workbench/references/metric-fitting.md), [motion paths](modeling_system/plugin/skills/modeling-workbench/references/motion-paths.md) (hinged parts, rolled in-betweens, obstacle clearance, re-timing and smooth joins for an inherited motion, material section bends), [pose guides from generated variants joined onto an accepted neutral](modeling_system/plugin/skills/modeling-workbench/references/guide-synthesis.md) (front depth maps, thin-relief removal, variant change and spread, smooth pinned depth fields, tolerance bands, alignment on still skin with trimmed refits, clearance in front of the character's own anatomy, retreat between poses, forward-only volume fits, smooth fits into a tolerance band, guide surfaces), projected triangle contact, support, [material-crowding, local-fold and bend-map](modeling_system/plugin/skills/modeling-workbench/references/construction-diagnostics.md) diagnostics and measured setup reuse, including repeated bootstrap in a long-lived visible session.
+- [Construction and failure notes](modeling_system/plugin/skills/modeling-workbench/references/notes.md): what real modeling taught, as symptom, cause and remedy, read before an edit.
 - [Evidence and experience](modeling_system/plugin/skills/modeling-workbench/references/retained-learning.md): immutable actual observations, scoped visual reviews with [matched review sheets](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md), relevance-ranked retrieval, conditional techniques and failure evidence available in later scopes.
 - [Recovery](modeling_system/plugin/skills/modeling-workbench/references/intervention-and-recovery.md): exact original receipts, effect reconciliation, [session settlement](modeling_system/plugin/skills/modeling-workbench/references/operating-session.md) of a task whose capability raised after its effect, and protection from duplicate native effects or overwriting later edits.
 - [Optional reference generation](modeling_system/plugin/skills/modeling-workbench/references/generation.md): source-bound image, mesh and video jobs with separate authorization and accounting, including [multi-view mesh jobs](modeling_system/plugin/skills/modeling-workbench/references/generation.md) that bind each provider slot to a reviewed image and can refuse single-image meshes. Existing art needs no generation account.

@@ -1,5 +1,9 @@
 # Learning that reaches the next decision
 
+The store is an optional log of scoped reviews and lessons. Knowledge that every agent must meet before an edit
+belongs in the curated [construction and failure notes](notes.md), which are read by default; retrieval here is
+lexical and can miss the lesson that matters.
+
 OperatingSession retains each actual visual review in the workspace's existing
 content-addressed store. Later scopes retrieve relevant reviews automatically;
 they need no copied history file or custom projector. Exact receipt identity,

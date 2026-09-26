@@ -25,7 +25,10 @@ corresponding sections during the edit itself.
 Read the workspace's current page (`PROJECT.md`, from the [current-page template](references/current-page.md)): the
 mechanism, the accepted rest, the last owner-approved state, open owner decisions and the next action. Read the pages
 below for the task at hand, not the whole skill. [Portable setup](references/portable-setup.md) installs and binds a
-workspace; [getting started](references/getting-started.md) walks a first session.
+workspace; [getting started](references/getting-started.md) walks a first session. The verbs are Python calls and
+also service operations on the CLI (`python -m modeling_system <operation> --input args.json`) and MCP:
+`check_candidate`, `register_guide`, `construct`, `study_blink`, `overlay_on_drawing`, `review_sheet`, the generation
+ledger and the `native_*` operations.
 
 ## The verbs
 
@@ -65,10 +68,10 @@ them, guarded by `checks.standard_policy` ([preservation](references/preservatio
 recover an interrupted effect from its receipts, never by replaying it
 ([intervention and recovery](references/intervention-and-recovery.md)).
 
-**notes** - construction and failure knowledge that every agent should meet lives in the pages above (symptoms,
-causes, remedies, real-use numbers). Record new scoped lessons with their evidence through
-[retained learning](references/retained-learning.md) and close out a proven method with
-[method integration](references/method-integration.md).
+**notes** - [construction and failure notes](references/notes.md): what real modeling taught, as symptom, cause and
+remedy. Read the ones for the feature you are changing; add a note when a general finding changes what gets built.
+The workspace store keeps scoped reviews and lessons as an optional log ([retained learning](references/retained-learning.md),
+[method integration](references/method-integration.md)); it is not where every agent looks.
 
 ## Rules that hold everywhere
 
