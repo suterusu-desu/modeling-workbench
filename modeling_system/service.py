@@ -36,7 +36,8 @@ class ModelingService:
         self.store=self.wb.store;self.ledger=Ledger(self.store)
         self.policy_path=authority_path(self.workspace,self.binding,'provider policy','MESH-GENERATION.json')
         self.references=References(self.wb,self.ledger,self.policy_path);self.motion=Motion(self.wb,self.binding.get('media_root'))
-        self.native=native or (NativeBridge(self.workspace) if self.binding.get('native_adapter')=='blender_json_v1' else UnconfiguredNative())
+        self.native=native or (NativeBridge(self.workspace,port=int(self.binding.get('native_bridge_port') or 9876))
+            if self.binding.get('native_adapter')=='blender_json_v1' else UnconfiguredNative())
 
     def execute(self, operation, arguments):
         started=time.perf_counter()

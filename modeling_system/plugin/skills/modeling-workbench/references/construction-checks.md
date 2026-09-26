@@ -90,6 +90,9 @@ hinged region, 6 vertices, at most .001). Both checks ran in about three seconds
 
 ## Guards for native trials
 
+`trials.Trials` takes the declaration directly: every trial is measured and retention refuses a failing check
+([trial, reopen, retain](trial-reopen-retain.md)). For the session route:
+
 ```python
 from modeling_system.checks import standard_policy
 

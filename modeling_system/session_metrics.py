@@ -59,15 +59,15 @@ def session_metrics(directory):
         'parameterized_implementations': dict(implementations),
         'tasks_without_recipe_identity': sum(not row.get('task', {}).get('workbench', {}).get('recipe') for row in results.values()),
         'outcomes': dict(Counter(row['status'] for row in results.values())),
-        'astra_interventions': dict(Counter(row['kind'] for row in interventions)),
-        'reported_astra_seconds': sum(row.get('seconds') or 0 for row in interventions),
+        'owner_interventions': dict(Counter(row['kind'] for row in interventions)),
+        'reported_owner_seconds': sum(row.get('seconds') or 0 for row in interventions),
         'interventions_without_duration': sum(row.get('seconds') is None for row in interventions),
         'visual_review_submissions': len(reviews), 'incomplete_event_lines': incomplete,
         'visual_reviews_without_timing': sum(row.get('operation_handle') not in timed_reviews for row in reviews),
         'action_routes': dict(routes), 'owner_choices_by_lane': dict(lanes), 'owner_choices': choices,
         'open_intervention_timers': [row['token'] for row in timers if row['status'] == 'running'],
         'timed_interventions': sum(row.get('seconds') is not None for row in interventions),
-        'avoided_astra_turns': None,
+        'avoided_owner_turns': None,
         'coverage': 'Controller times, routes, parameterized implementation use, native recipe stages and review submissions are automatic. Routes record explicit owner selections and fixed continuations. Historical route names remain unchanged in action_routes. begin_review measures evidence opening through submission; missing timers are counted explicitly. Other explicit timers measure elapsed work, not model tokens. Unreported effort remains unknown. Native and cycle totals overlap components. Retention is not user acceptance; no speedup is inferred.'}
 
 
@@ -80,5 +80,5 @@ def compare_sessions(baseline, current, *, comparison_scope):
                 and not row['visual_reviews_without_timing']
                 and row['timed_interventions'] for row in (before, after))
     return {'comparison_scope': comparison_scope, 'baseline': before, 'current': after,
-            'reported_astra_seconds_difference': after['reported_astra_seconds'] - before['reported_astra_seconds'] if known else None,
+            'reported_owner_seconds_difference': after['reported_owner_seconds'] - before['reported_owner_seconds'] if known else None,
             'limits': 'Only recorded intervals and outcomes are compared. Different model quality or task difficulty can explain differences. Unreported work and avoided turns remain unknown.'}

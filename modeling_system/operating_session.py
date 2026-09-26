@@ -66,7 +66,7 @@ def _binding_path(directory):
 
 
 def _reviews(service, directory):
-    """Immutable submissions let Astra review while an unrelated task runs.
+    """Immutable submissions let the owner review while an unrelated task runs.
 
     The queue owner alone writes work-queue.json. Feedback is a separate index of
     existing episode operation receipts, reread at each decision boundary.
@@ -543,7 +543,7 @@ class OperatingSession(WorkQueue):
         # metrics explicitly count this submission as unmeasured review work.
 
     def record_intervention(self, *, kind, reason, evidence, seconds=None, timer=None):
-        """Retain actual Astra work; time is explicitly reported, never inferred."""
+        """Retain the owner's actual work; time is explicitly reported, never inferred."""
         from .session_metrics import INTERVENTION_KINDS
         if (kind not in INTERVENTION_KINDS or not reason or not evidence or
                 seconds is not None and (type(seconds) not in (float, int)
@@ -554,7 +554,7 @@ class OperatingSession(WorkQueue):
         data = {'kind': kind, 'reason': reason, 'seconds': seconds, 'evidence': pinned}
         if timer is not None:
             data['timer'] = timer
-        result = self.service._run_episode_callback(self.episode, 'record_astra_intervention', data,
+        result = self.service._run_episode_callback(self.episode, 'record_owner_intervention', data,
             lambda: {**deepcopy(data), 'status': 'completed',
                      'submitted_at': datetime.now(timezone.utc).isoformat()})
         write_json(self.directory / 'interventions' / (result['operation_handle'] + '.json'), result)

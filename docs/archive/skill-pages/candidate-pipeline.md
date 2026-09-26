@@ -102,7 +102,7 @@ handler time, outcomes, verified retention tasks and visual review submissions.
 Native time includes its fixed prerequisites. Cycle totals overlap component
 times; do not add them together.
 
-Record other actual Astra work with `session.record_intervention(kind=..., reason=...,
+Record other actual owner work with `session.record_intervention(kind=..., reason=...,
 evidence=..., seconds=...)`. Kinds: `correspondence_preparation`,
 `capability_development`, `catalog_preparation`, `recovery`, `evidence_interpretation`.
 Omit duration when unknown. These are episode-linked records. Image reviews are

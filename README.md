@@ -67,8 +67,20 @@ carries this process to another agent without requiring conversation history.
 
 ## Direct operation and batching
 
+Change the native file with three plain calls, `trial`, `reopen` and `retain`
+([trial, reopen, retain](modeling_system/plugin/skills/modeling-workbench/references/trial-reopen-retain.md)):
+
+```python
+from modeling_system.trials import Trials
+lane = Trials(service, owner, trials_dir, blender=blender, reference=reference,
+              objects=['Face'], poses=poses, declaration='eye-declaration.json')
+lane.trial('lift03', source=live_checkpoint, construction='build_lift.py')
+lane.reopen('lift03')
+lane.retain('lift03', target=new_checkpoint, label=label, review=review)
+```
+
 Use `ModelingService` for owner-controlled operations, or the packaged
-`direct_session.create_session` for continuing work:
+`direct_session.create_session` for continuing work in an existing session setup:
 
 ```python
 from modeling_system.direct_session import create_session

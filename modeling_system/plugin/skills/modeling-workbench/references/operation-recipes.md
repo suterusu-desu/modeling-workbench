@@ -154,4 +154,4 @@ uses the existing explicit intervention timer.
 Metrics include parameterized implementation use, tasks without recipe identity,
 native stage durations/call counts, skipped redundant opens and unmeasured review
 submissions. Elapsed intervals include interruptions; they are not token usage.
-Do not infer Astra savings from shorter selection latency or incomplete work accounting.
+Do not infer the owner's time savings from shorter selection latency or incomplete work accounting.

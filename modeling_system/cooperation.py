@@ -99,7 +99,7 @@ def request_stop(directory, *, reason):
 
 def run_cooperatively(session, *, max_steps, feedback_timeout=0, on_status=None,
                       on_handoff=None, cancelled=None):
-    """Run useful operations while Astra reviews, optionally awaiting feedback.
+    """Run useful operations while the owner reviews, optionally awaiting feedback.
 
     The caller supervises this finite ordinary run and joins/stops it before
     ending its turn. No scheduler, agent, automation or inference is created.
@@ -161,7 +161,7 @@ def run_cooperatively(session, *, max_steps, feedback_timeout=0, on_status=None,
                 remaining = feedback_timeout - waited
                 start = time.monotonic()
                 controller._status('waiting_feedback', cooperation=result['cooperation'],
-                                   reason='Astra review pending; no other applicable work remains')
+                                   reason='Owner review pending; no other applicable work remains')
                 while not stopped() and _feedback_stamp(session.directory) == before:
                     left = remaining - (time.monotonic() - start)
                     if left <= 0:

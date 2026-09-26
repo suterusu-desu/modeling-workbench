@@ -53,14 +53,13 @@ crowding and section bends with [construction diagnostics](references/constructi
 simple motion that explains it, travel ratios, corners and the closed line ([study the avatars](references/study-avatars.md)).
 A study ends in building what it found.
 
-**trial / reopen / retain** - change the native file only through `NativeJob` isolated runs, independent reopen and
-`RetainCheckpoint`, under one native owner with fresh-state guards
-([isolated Blender](references/isolated-blender.md), [native adapters](references/native-adapters.md)). Guard trials with
-the declaration's standard checks (`checks.standard_policy`) instead of hand-written adapters
-([preservation](references/preservation-and-lessons.md)). Retain a mechanism only after its whole motion has been watched
-against the last owner-approved state; an unseen checkpoint is an experiment. The current session route is
-[operating sessions](references/operating-session.md) with [parameterized methods](references/operation-recipes.md) and
-[preparation](references/preparation-and-bootstrap.md).
+**trial / reopen / retain** - change the native file only through three plain calls
+([trial, reopen, retain](references/trial-reopen-retain.md)): an isolated trial of the clean live source measured by the
+declaration's standard checks, an independent reopen, and retention through the live owner, which refuses without a
+passed reopen, passing checks and a recorded review of the watched motion. An unseen checkpoint is an experiment.
+[Isolated Blender](references/isolated-blender.md) and [native adapters](references/native-adapters.md) describe the
+runner and the adapter boundary; [operating sessions](references/operating-session.md) remain for workspaces that use
+them, guarded by `checks.standard_policy` ([preservation](references/preservation-and-lessons.md)).
 
 **log** - operations, reviews and job accounting are journaled in the workspace store ([episodes](references/episodes.md));
 recover an interrupted effect from its receipts, never by replaying it

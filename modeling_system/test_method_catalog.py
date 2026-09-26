@@ -98,7 +98,7 @@ class MethodTests(unittest.TestCase):
             session.record_review('candidate',expected_basis=opened['basis'],
                 judgment={'disposition':'useful','scope':'fixture','reason':'Inspected actual returned image','next_question':'motion'},
                 evidence=[{'kind':'file','path':str(self.base.base.image),'role':'image'}])
-        self.assertEqual(session.metrics()['reported_astra_seconds'],9.)
+        self.assertEqual(session.metrics()['reported_owner_seconds'],9.)
         self.assertEqual(session.metrics()['visual_reviews_without_timing'],0)
 
     def test_exact_conditions_and_missing_support_do_not_invent_options(self):
@@ -117,8 +117,8 @@ class MethodTests(unittest.TestCase):
             evidence = [{'kind': 'file', 'path': str(self.base.base.image), 'role': 'Actual source'}]
             first = session.end_intervention(token, evidence=evidence)
             self.assertEqual(session.end_intervention(token, evidence=evidence), first)
-        self.assertEqual(session.metrics()['reported_astra_seconds'], 12.5)
-        self.assertEqual(session.metrics()['astra_interventions']['catalog_preparation'], 1)
+        self.assertEqual(session.metrics()['reported_owner_seconds'], 12.5)
+        self.assertEqual(session.metrics()['owner_interventions']['catalog_preparation'], 1)
 
     def test_experience_is_fresh_private_and_batched_with_choices(self):
         path = self.base.root/'private-lesson.md'

@@ -2,8 +2,8 @@
 
 These pages left the operator skill when it became a short router around the construction-first verbs. Their modules
 were never or rarely used in real modeling, belonged to an orchestration layer built for an inference service that has
-since been removed, or recorded development history rather than operation. The pages are kept here, unchanged, for
-anyone who still uses the modules; the modules themselves remain in the package until they are archived on a tagged
+since been removed, or recorded development history rather than operation. The pages are kept here for anyone who still uses the
+modules; the modules themselves remain in the package until they are archived on a tagged
 commit.
 
 | Page | Why it left the skill |

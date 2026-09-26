@@ -42,7 +42,7 @@ class PipelineTests(unittest.TestCase):
         metrics = session.metrics()
         self.assertEqual(metrics['retained_tasks'], ['retain'])
         self.assertEqual(metrics['visual_review_submissions'], 2)
-        self.assertIsNone(metrics['avoided_astra_turns'])
+        self.assertIsNone(metrics['avoided_owner_turns'])
 
     def test_failed_candidate_never_runs_other_variant_or_verification(self):
         self.base.results['first'] = {'status': 'failed', 'workbench': {'checks': {}, 'findings': []}}
@@ -78,8 +78,8 @@ class PipelineTests(unittest.TestCase):
         session.record_intervention(kind='correspondence_preparation', reason='Resolved ambiguous source branch', seconds=12.5,
             evidence=[{'kind': 'file', 'path': str(self.base.base.image), 'role': 'retained evidence'}])
         metrics = session.metrics()
-        self.assertEqual(metrics['astra_interventions'], {'correspondence_preparation': 1})
-        self.assertEqual(metrics['reported_astra_seconds'], 12.5)
+        self.assertEqual(metrics['owner_interventions'], {'correspondence_preparation': 1})
+        self.assertEqual(metrics['reported_owner_seconds'], 12.5)
 
     def test_task_factory_refuses_missing_evidence_or_uncovered_write(self):
         args = dict(key='inspect', revision='1', lane='diagnosis', handler='inspect',

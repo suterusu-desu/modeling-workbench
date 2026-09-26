@@ -2,9 +2,9 @@
 
 The package includes `isolated_blender.py` and its standalone `blender_worker.py`.
 Qualified owner-selected native capabilities may use this runner for isolated
-construction/reopen jobs. Installing it grants no modeling authority. Astra
-does not invoke Blender directly; source/guide/preservation qualification and
-the single native owner remain the controller's responsibility.
+construction/reopen jobs. Installing it grants no modeling authority. Jobs do
+not drive the live Blender; source/guide/preservation qualification and the
+single native owner remain the caller's responsibility.
 
 The selected handler can invoke the workbench interpreter with
 `-m modeling_system.isolated_blender JOB.json`, or supply the installed

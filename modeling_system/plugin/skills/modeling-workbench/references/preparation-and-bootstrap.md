@@ -203,4 +203,4 @@ When a small fixed set of views is all required to resolve one question, keep th
 capture bundle in code inside the selected operation. The owner chooses discretionary
 work and meaningful alternatives; an underdetermined choice between equivalent
 camera bundles should not block that operation. Actual image interpretation still
-belongs to Astra, and a successful diagnostic is not a retained visual gain.
+belongs to the owner, and a successful diagnostic is not a retained visual gain.

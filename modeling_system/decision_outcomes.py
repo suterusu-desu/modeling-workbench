@@ -29,7 +29,7 @@ def decision_outcomes(directory, reviews=None):
             'failure_class': 'execution' if entry['status'] == 'failed' else
                 'uncertain_effect' if entry['status'] == 'needs_reconciliation' else
                 'appearance_rejected' if review and review['judgment']['disposition'] == 'rejected' else None,
-            'astra_effort': 'See measured session intervals; unrecorded work remains unknown'})
+            'owner_effort': 'See measured session intervals; unrecorded work remains unknown'})
     return {'cases': rows, 'case_count': len(rows),
             'with_decision': sum(row['decision'] is not None for row in rows),
             'reviewed': sum(row['review'] is not None for row in rows),
