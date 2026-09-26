@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
-                           shared_schedule, smooth_step, travel_weight, hinge_change, hinge_landing, hinge_carry)
+                           shared_schedule, smooth_step, travel_weight, hinge_change, hinge_landing, hinge_carry, hinge_lift)
 from .preparation import ARRAY_OPERATIONS
 
 
@@ -443,6 +443,59 @@ class HingeConstructionTests(unittest.TestCase):
         self.assertLess(report['roll_deviation_share_max'], 1e-9)
         self.assertLess(report['seam_to_facing_rest_share_max'], .002)
         np.testing.assert_allclose(kept['positions'][:, 3 * n:], np.broadcast_to(rest[3 * n:], (11, n, 3)), atol=1e-12)
+
+
+class HingeLiftTests(unittest.TestCase):
+    """A lower margin that sags below its corners, raised on the same hinge as the upper lid."""
+
+    def setUp(self):
+        self.x = np.linspace(-.6, .6, 13); n = len(self.x)
+        self.sag = 15. * (1 - (self.x / .6) ** 2)                             # degrees lower in the middle
+        self.upper = cylinder_points(self.x, 1.1, -40.)
+        self.lower = cylinder_points(self.x, 1.1, 30. + self.sag)
+        self.below = cylinder_points(self.x, 1.15, 45. + self.sag)
+        self.rest = np.r_[self.upper, self.lower, self.below]
+        self.up_idx, self.lo_idx, self.below_idx = np.arange(n), np.arange(n, 2 * n), np.arange(2 * n, 3 * n)
+        self.corners = np.array([n, 2 * n - 1])                                # the lower margin's two ends
+
+    def test_the_middle_rises_to_the_kept_share_and_the_band_follows(self):
+        weights = np.r_[np.zeros(len(self.x)), np.ones(len(self.x)), np.full(len(self.x), .5)]
+        result = hinge_lift(self.rest, self.lo_idx, self.corners, [0., 0., 0.], [1., 0., 0.], keep_share=.4,
+                            weights=weights)
+        m = result['public_metrics']; out = result['positions']
+        self.assertAlmostEqual(m['lifted_depth_share'], .4 * m['rest_depth_share'], places=9)
+        np.testing.assert_array_equal(out[self.corners], self.rest[self.corners])  # the corners stay
+        np.testing.assert_array_equal(out[self.up_idx], self.rest[self.up_idx])   # weight 0 keeps its bytes
+        np.testing.assert_allclose(out[:, 0], self.rest[:, 0], atol=1e-12)        # nothing slides along the axis
+        np.testing.assert_allclose(np.linalg.norm(out[:, 1:], axis=1), np.linalg.norm(self.rest[:, 1:], axis=1),
+                                   atol=1e-12)                                    # it stays on its circle
+        np.testing.assert_allclose(result['turn'][self.below_idx], .5 * result['edge_turn'], atol=1e-12)
+        self.assertEqual(m['unreachable_edge_points'], 0)
+
+    def test_the_upper_lid_lands_on_the_lifted_edge_and_both_roll_at_one_rate(self):
+        from .construction_diagnostics import closing_edges
+        lifted = hinge_lift(self.rest, self.lo_idx, self.corners, [0, 0, 0], [1, 0, 0], keep_share=.3,
+                            weights=np.r_[np.zeros(len(self.x)), np.ones(len(self.x)), np.full(len(self.x), .5)])
+        weights = np.r_[np.ones(len(self.x)), np.zeros(2 * len(self.x))]
+        closed = hinge_landing(lifted['positions'], self.up_idx, lifted['positions'][self.lo_idx], [0, 0, 0], [1, 0, 0],
+                               weights=weights, outside=.001)['positions']
+        phases = np.linspace(0, 1, 9)
+        poses = path_positions(self.rest, closed, np.repeat(phases[:, None], len(self.rest), axis=1),
+                               pivot=[0, 0, 0], axis=[1, 0, 0])['positions']
+        report = closing_edges(self.rest, poses[1:], self.up_idx, self.lo_idx, pivot=[0, 0, 0], axis=[1, 0, 0],
+                               against='pose')
+        self.assertLess(report['summary']['seam_to_facing_share_max'], .002)
+        for row in report['poses']:
+            parts = row['turn_share']['parts_median']; self.assertLess(max(parts) - min(parts), 1e-9)
+
+    def test_refusals_and_registration(self):
+        with self.assertRaisesRegex(ValueError, 'keep_share'):
+            hinge_lift(self.rest, self.lo_idx, self.corners, [0, 0, 0], [1, 0, 0], keep_share=1.5)
+        with self.assertRaisesRegex(ValueError, 'corner'):
+            hinge_lift(self.rest, self.lo_idx, np.array([3, 3]), [0, 0, 0], [1, 0, 0], keep_share=.5)
+        with self.assertRaisesRegex(ValueError, 'runs along'):
+            hinge_lift(self.rest, self.lo_idx, self.corners, [0, 0, 0], [0, 0, 1], keep_share=.5)
+        self.assertIn('hinge_lift', ARRAY_OPERATIONS)
 
 
 if __name__ == '__main__':

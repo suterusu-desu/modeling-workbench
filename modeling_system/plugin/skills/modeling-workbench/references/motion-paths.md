@@ -41,7 +41,17 @@ the end pose: rigid carrying holds only as far as neighbouring host points turn 
 way), `radial` and `axial` change between any two poses, for example to realize an existing closed pose as a hinge in a
 rig. Points on the axis and half turns are refused.
 
-Measure the result with `construction_diagnostics.closing_edges` ([construction diagnostics](construction-diagnostics.md)).
+`hinge_lift(positions, edge, corners, pivot, axis, keep_share=..., up=(0, 0, 1), across=(1, 0, 0), weights=None,
+fade=0.)` raises a facing edge's middle on the same hinge, for a design whose lower lid meets the upper part way: each
+edge point turns about the axis, keeping its distance from it and its axial position, until its sag below the line
+between the two `corners` (measured in the view plane of `up` and `across`, as `line_depth`) is `keep_share` of its rest
+sag. `fade` eases the turn to 0 toward the corners along the axis so the band below does not kink there; `weights`
+carry the band below the margin and the lid's inner surface. Land the upper margin on the lifted edge with
+`hinge_landing` and roll both with one pace: both are turns about the same hinge. Keep the closed line's depth a
+measured design choice (`line_depth` on the approved closed drawing).
+
+Measure the result with `construction_diagnostics.closing_edges` ([construction diagnostics](construction-diagnostics.md));
+with a rising facing edge, measure against its pose (`against='pose'`).
 
 ## Pace: keep when each region moves
 

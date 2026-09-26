@@ -683,3 +683,67 @@ def hinge_carry(attached, host_reference, host_end, pivot, axis, *, fraction=1.,
             'limits': 'Rigid only as far as neighbouring host points turn alike; the seat change measures how far an '
                       'attached point leaves its host by the end pose. The host motion must itself be a roll about the '
                       'same hinge at the same fraction. No contact or appearance qualification.'}
+
+
+def hinge_lift(positions, edge, corners, pivot, axis, *, keep_share, up=(0., 0., 1.), across=(1., 0., 0.),
+               weights=None, fade=0.):
+    """Raise a facing edge's middle by turning it about the same hinge, so it keeps a share of its sag.
+
+    Reference avatars close an eye on a shallow line: the lower margin's middle rises on the same timing as the upper
+    lid while the corners stay. `edge` indexes the facing margin, `corners` the two points where the lids meet. Each
+    edge point turns about the hinge line through `pivot` along `axis`, keeping its distance from the axis and its
+    axial position, until its sag below the corner line (heights along `up`, positions along `across`, as in
+    `construction_diagnostics.line_depth`) is `keep_share` of its rest sag: 1 leaves it, 0 brings the edge up to the
+    corner line. `fade` (a distance along the axis) eases the turn to 0 toward both corners so the band below does not
+    kink there. Every point then turns by its weight times the edge's turn at its own axial position (`weights`,
+    default 1 on the edge and 0 elsewhere: 1 on the margin and the lid's inner surface, falling off below it). Land the
+    other edge on the lifted one with `hinge_landing` and roll both with one pace (`path_positions`): both are turns
+    about the same hinge. Returns `positions`, per-point `turn`, the edge's `edge_turn` and the rest and lifted depths.
+    """
+    from .construction_diagnostics import line_depth
+    P = np.asarray(positions, float)
+    if P.ndim != 2 or P.shape[1:] != (3,) or not len(P) or not np.isfinite(P).all():
+        raise ValueError('Finite positions are required')
+    idx, ends = np.asarray(edge), np.asarray(corners)
+    if (idx.ndim != 1 or idx.dtype.kind not in 'iu' or len(idx) < 2 or len(np.unique(idx)) != len(idx)
+            or idx.min() < 0 or idx.max() >= len(P)):
+        raise ValueError('At least two distinct edge indices of the supplied points are required')
+    if ends.shape != (2,) or ends.dtype.kind not in 'iu' or ends.min() < 0 or ends.max() >= len(P) or ends[0] == ends[1]:
+        raise ValueError('Two distinct corner indices are required')
+    if not (np.isfinite(keep_share) and 0 <= keep_share <= 1) or not (np.isfinite(fade) and fade >= 0):
+        raise ValueError('keep_share must lie in [0, 1] and fade must be a nonnegative distance')
+    w = np.zeros(len(P)) if weights is None else np.asarray(weights, float)
+    if weights is None:
+        w[idx] = 1.
+    if w.shape != (len(P),) or not np.isfinite(w).all() or (w < 0).any() or (w > 1).any():
+        raise ValueError('Weights must be one value in [0, 1] per point')
+    frame = _hinge_frame(pivot, axis, P[idx]); centre, k, e1, e2 = frame
+    s, rho, th = _hinge_coordinates(P, frame); _off_axis(rho[idx], 'An edge point')
+    depth = line_depth(P[idx], P[ends[0]], P[ends[1]], up=up, across=across)
+    u = np.asarray(up, float) / np.linalg.norm(up)
+    target = P[idx] @ u + (1 - float(keep_share)) * depth['sag']
+    base = (centre + s[idx][:, None] * k) @ u
+    reach = float(np.hypot(e1 @ u, e2 @ u)); alpha = float(np.arctan2(e2 @ u, e1 @ u))
+    if reach < 1e-12:
+        raise ValueError('The hinge axis runs along `up`: turning about it cannot change heights')
+    q = (target - base) / (rho[idx] * reach); unreachable = int(np.count_nonzero(np.abs(q) > 1 + 1e-12))
+    q = np.clip(q, -1, 1); options = np.stack([alpha + np.arccos(q), alpha - np.arccos(q)])
+    change = _wrap(options - th[idx]); edge_turn = change[np.argmin(np.abs(change), axis=0), np.arange(len(idx))]
+    edge_turn[np.isin(idx, ends)] = 0.
+    if fade > 0:
+        s0, s1 = sorted(s[ends])
+        edge_turn = edge_turn * smooth_step(s[idx] - s0, 0., fade) * smooth_step(s1 - s[idx], 0., fade)
+    order = np.argsort(s[idx], kind='stable')
+    turn = w * np.interp(s, s[idx][order], edge_turn[order]); turn[idx] = w[idx] * edge_turn
+    out = P.copy(); moved = np.abs(turn) > 0
+    out[moved] = _hinge_place(s[moved], rho[moved], th[moved] + turn[moved], frame)
+    after = line_depth(out[idx], out[ends[0]], out[ends[1]], up=up, across=across)
+    metrics = {'edge_points': int(len(idx)), 'moved_points': int(moved.sum()), 'unreachable_edge_points': unreachable,
+               'rest_depth_share': depth['depth_share'], 'target_depth_share': float(keep_share) * depth['depth_share'],
+               'lifted_depth_share': after['depth_share'], 'lift_max': float((depth['sag'] - after['sag']).max()),
+               'edge_turn_degrees_max': float(np.degrees(np.abs(edge_turn).max()))}
+    return {'positions': out, 'turn': turn, 'edge_turn': edge_turn, 'public_metrics': metrics,
+            'objective': 'Each edge point turned about the hinge until its sag below the corner line is keep_share of '
+                         'its rest sag; every point takes its weight times the edge turn at its axial position',
+            'limits': 'Heights are measured in the chosen view plane. Whether the closed line should be shallower is a '
+                      'design decision measured against the approved drawing. No guide or appearance qualification.'}

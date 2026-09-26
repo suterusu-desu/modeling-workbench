@@ -4,6 +4,11 @@ The native bridge imports the selected installation under an isolated package na
 
 The reusable package owns recorded geometry, numerical queries, source lineage, decisions, response analysis, operation journals, episode leases and transport schemas. A private workspace owns its native scene/rig integration. No specific scene names, controls, vertex identities, coordinate scale, guide registry or external helper paths ship in the tools repository.
 
+The package ships a generic reference adapter and a live bridge ([guides and display](guide-and-show.md)): a workspace
+that describes its working mesh, guides with roles, controls and an optional restore hook can bind them with
+`python -m modeling_system.live bind` instead of writing an adapter. A private adapter remains the route for richer
+native operations.
+
 Set `native_adapter` to `blender_json_v1` only after the private adapter is ready. `native_configuration` contains `entrypoint: {path, sha256}`, `dependencies: [{path, sha256}, ...]`, and `operations: [...]`. Paths resolve relative to the workspace. All executable dependencies must be pinned. The default is `unconfigured`; unsupported operations fail explicitly.
 
 The entrypoint exports `execute(operation, arguments)` and returns the standard `{ok: true, result: ...}` or `{ok: false, error: {code, message, recovery, details}}` envelope. It runs inside Blender through the existing local JSON bridge. It receives `_workspace` and `_owner`; the public arguments must conform to `operation_schemas()` in `native_bridge.py`. Adapters are trusted local code, not a security sandbox. The dispatcher verifies pinned input bytes and advertised operations; it does not establish anatomical correctness or implement an adapter's native invariants on its behalf.

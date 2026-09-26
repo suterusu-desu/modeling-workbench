@@ -841,7 +841,7 @@ class ModelingService:
 
     def export_replay(self, motion: str, output_dir: str, fps: int = 60, normal_cycles: int = 3,
                       slow_cycles: int = 1, slow_speed: float = .25, panel_size: list[int] | None = None) -> dict:
-        """Encode normal/slow, whole/close-up comparisons from pinned source frames, with decode verification and frame mapping."""
+        """Encode normal/slow comparisons (one column per manifest column, before/after by default) from pinned source frames, with decode verification and frame mapping."""
         return self.motion.encode(motion,output_dir,fps,normal_cycles,slow_cycles,slow_speed,panel_size)
 
     def record_outcome(self, question: str, character: dict, method: dict, evidence: list[str], applicability: str) -> dict:

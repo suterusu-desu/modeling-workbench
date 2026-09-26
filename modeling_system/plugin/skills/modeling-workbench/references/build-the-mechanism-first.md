@@ -108,8 +108,9 @@ Found in real use:
   projecting the lid onto a guide surface copied the guide's facets. Turn the lid; do not re-lay or project it.
 - A roll about the eye's centre swings skin beyond the eye's outline the wrong way: roll over the eye, chords beside it.
 - With the lower lid still, the closed line follows the lower lid's rest curve. A deep lower lid then closes on a deep U.
-  The reference avatars close on a shallow line by raising the middle of the lower margin on the same timing; which
-  closed line the character should have is a design decision, measured against the approved closed drawing.
+  The reference avatars close on a shallow line by raising the middle of the lower margin on the same timing
+  (`hinge_lift`); which closed line the character should have is a design decision, measured against the approved
+  closed drawing (`line_depth`, and the `closed_depth` check).
 - The attachment's rig value is already the geometric phase: mapping it through the lid's timing curve again ran the
   lash ahead of the lid. A surface-deform binding of the lashes to the skin stood the lash fins upright; carry them on
   the hinge instead.

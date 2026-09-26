@@ -1,4 +1,4 @@
-"""Matched visual review sheets: labeled grids of actual images. No rendering, selection or judgment.
+"""Matched visual review sheets and landmark-aligned overlays of actual images. No rendering, selection or judgment.
 
 A review compares actual renders at matched views, poses and states. This module only arranges the supplied
 images, pins their exact bytes for review evidence and reports anything that would make the comparison
@@ -6,6 +6,7 @@ unmatched (missing images, differing image sizes). The owner still looks at ever
 """
 from pathlib import Path
 import hashlib
+import numpy as np
 from PIL import Image, ImageDraw
 
 
@@ -84,3 +85,71 @@ def rows_from_frames(frames, *, views, poses, states, tolerance=1e-6):
                 images.append(match[0] if match else None)
             rows.append({'label': f'{view} {pose}', 'images': images})
     return rows
+
+
+def similarity_from_landmarks(source, target):
+    """The 2D similarity (scale, rotation, translation) taking two source points onto two target points exactly:
+    a function mapping (N, 2) points and its parameters. For a render and a drawing, use two landmarks both show at
+    the same place, such as the two corners of an eye."""
+    s, t = (np.asarray(p, float) for p in (source, target))
+    if s.shape != (2, 2) or t.shape != (2, 2) or not np.isfinite([s, t]).all() or np.allclose(s[0], s[1]):
+        raise ValueError('Two distinct source points and two target points are required')
+    zs, zt = s[:, 0] + 1j * s[:, 1], t[:, 0] + 1j * t[:, 1]
+    a = (zt[1] - zt[0]) / (zs[1] - zs[0]); b = zt[0] - a * zs[0]
+
+    def apply(points):
+        z = np.asarray(points, float); z = z[:, 0] + 1j * z[:, 1]; w = a * z + b
+        return np.c_[w.real, w.imag]
+    return apply, {'scale': float(abs(a)), 'rotation_degrees': float(np.degrees(np.angle(a))),
+                   'translation': [float(b.real), float(b.imag)]}
+
+
+def aligned_overlay(render, drawing, render_points, drawing_points, output, *, crop=None, alpha=.25, stroke_alpha=.85,
+                    stroke_below=95., lines=()):
+    """Overlap a render and a drawing in the drawing's frame, aligned on two landmarks, never side by side.
+
+    The render is resampled into the drawing's pixel frame by the similarity taking `render_points` onto
+    `drawing_points` (pixel x, y of the same two landmarks in each image), so the drawing keeps its own pixels. The
+    drawing is laid over the render at `alpha`, its dark strokes (luminance below `stroke_below`) rising to
+    `stroke_alpha`. `crop` (x0, y0, x1, y1 in drawing pixels) limits the output. `lines` are polylines drawn on top:
+    {'points': [[x, y], ...], 'frame': 'drawing' | 'render', 'color': [r, g, b], 'width': 2}. Returns the output
+    path and hash, the similarity and the sources' hashes.
+    """
+    output = Path(output)
+    if output.suffix.lower() != '.png':
+        raise ValueError('Overlays are written as .png')
+    if output.exists():
+        raise FileExistsError('Refusing to overwrite an existing overlay: ' + str(output))
+    if not (0 <= alpha <= 1 and 0 <= stroke_alpha <= 1):
+        raise ValueError('Alphas must lie in [0, 1]')
+    to_drawing, parameters = similarity_from_landmarks(render_points, drawing_points)
+    to_render, _ = similarity_from_landmarks(drawing_points, render_points)
+    with Image.open(drawing) as d:
+        art = np.asarray(d.convert('RGB'), float)
+    with Image.open(render) as r:
+        shot = r.convert('RGB')
+    height, width = art.shape[:2]
+    # Inverse mapping: every drawing pixel looks up its render pixel (an affine map for PIL).
+    origin = to_render(np.array([[0., 0.]]))[0]; ex = to_render(np.array([[1., 0.]]))[0] - origin
+    ey = to_render(np.array([[0., 1.]]))[0] - origin
+    moved = np.asarray(shot.transform((width, height), Image.Transform.AFFINE,
+                                      (ex[0], ey[0], origin[0], ex[1], ey[1], origin[1]), Image.Resampling.BICUBIC), float)
+    darkness = np.clip((stroke_below - art.mean(axis=2)) / max(stroke_below, 1e-9), 0, 1)
+    weight = (alpha + (stroke_alpha - alpha) * darkness)[..., None]
+    picture = Image.fromarray(np.clip(moved * (1 - weight) + art * weight, 0, 255).astype(np.uint8))
+    draw = ImageDraw.Draw(picture)
+    for line in lines:
+        points = np.asarray(line['points'], float)
+        if line.get('frame', 'drawing') == 'render':
+            points = to_drawing(points)
+        draw.line([tuple(p) for p in points], fill=tuple(int(c) for c in line.get('color', (255, 0, 0))),
+                  width=int(line.get('width', 2)))
+    if crop is not None:
+        picture = picture.crop(tuple(int(v) for v in crop))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    picture.save(output)
+    return {'path': str(output.resolve()), 'sha256': _sha(output), 'similarity_render_to_drawing': parameters,
+            'sources': {'render': {'path': str(Path(render).resolve()), 'sha256': _sha(render)},
+                        'drawing': {'path': str(Path(drawing).resolve()), 'sha256': _sha(drawing)}},
+            'interpretation': 'Two-landmark alignment only: the landmarks coincide exactly, everything else shows how '
+                              'the render and the drawing differ; the comparison and its judgment are the reviewer\'s'}

@@ -194,3 +194,8 @@ The measures are edge measures only: the lid body between the edges, its shading
 `compare_bends` and matched renders. Gaps are measured to the polyline through the ordered facing points. A deliberate
 difference in rate, or a facing lid that is meant to rise, is a design choice these numbers cannot make; see
 [build the mechanism first](build-the-mechanism-first.md).
+
+`line_depth(points, corner_a, corner_b, up=None, across=None)` measures how deep a line sags below the straight line
+between its two corners in a view plane, as a share of the corner distance: a closed seam, a lower lid at rest, or a
+line traced from a drawing (2D pixels, with `up=(0, -1)` because image rows run down). The scale-free share compares a
+model with its drawing and with reference avatars, each in its own eye width.

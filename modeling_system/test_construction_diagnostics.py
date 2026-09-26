@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from .construction_diagnostics import (closing_edges, compare_bends, compare_stretch, edge_values_at_vertices,
-                                       local_reversals, sample_residuals, section_turns)
+                                       line_depth, local_reversals, sample_residuals, section_turns)
 from .geometry import plane_sections, compare
 
 
@@ -337,3 +337,21 @@ class SectionTurnTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'nonzero normal'):
             section_turns(rest, rest[None], tri, origin=[0, 0, 0], normal=[0, 0, 0])
 
+
+class LineDepthTests(unittest.TestCase):
+    def test_depth_below_the_corner_line_in_3d_and_in_image_pixels(self):
+        x = np.linspace(-1., 1., 21); line = np.c_[x, np.zeros_like(x), -.2 * (1 - x ** 2)]       # sags .2 in the middle
+        result = line_depth(line, line[0], line[-1])
+        self.assertAlmostEqual(result['depth'], .2); self.assertAlmostEqual(result['width'], 2.)
+        self.assertAlmostEqual(result['depth_share'], .1); self.assertEqual(result['deepest'], 10)
+        tilted = line_depth(line + np.c_[np.zeros_like(x), np.zeros_like(x), .3 * x], line[0] + [0, 0, -.3],
+                            line[-1] + [0, 0, .3])
+        self.assertAlmostEqual(tilted['depth'], .2)                               # measured from the tilted corner line
+        pixels = np.c_[100 + 50 * x, 400 + 20 * (1 - x ** 2)]                     # image rows run down
+        drawn = line_depth(pixels, pixels[0], pixels[-1], up=(0., -1.))
+        self.assertAlmostEqual(drawn['depth'], 20.); self.assertAlmostEqual(drawn['depth_share'], .2)
+        self.assertEqual(line_depth(pixels, pixels[0], pixels[-1])['depth'], 0.)  # the wrong up sees no sag
+        with self.assertRaisesRegex(ValueError, 'coincide'):
+            line_depth(line, line[0], line[0] + [0, 0, 1])
+        with self.assertRaisesRegex(ValueError, 'matching finite'):
+            line_depth(line, line[0][:2], line[-1])

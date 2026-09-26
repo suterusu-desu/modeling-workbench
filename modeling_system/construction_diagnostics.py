@@ -482,3 +482,33 @@ def closing_edges(reference, poses, moving, facing, *, pivot=None, axis=None, pa
                       'compare_bends and matched renders. Gaps are to the polyline through the ordered facing points. A '
                       'deliberate difference in rate or a moving facing side is a design choice these numbers cannot '
                       'make.'}
+
+
+def line_depth(points, corner_a, corner_b, *, up=None, across=None):
+    """How deep a line sags below the straight line between its two corners, in a view plane.
+
+    `points` are the line's points, 3D or 2D (a line traced from a drawing), and `corner_a`, `corner_b` the two corners
+    (for an eye, where the lids meet). Heights are measured along `up` and positions along `across` (defaults: z and x
+    for 3D, (0, 1) and (1, 0) for 2D; for image pixels, whose rows run down, pass up=(0, -1)). Returns the largest sag
+    below the corner line, the corner distance in the view plane, their ratio (`depth_share`, the scale-free depth used
+    to compare a model with a drawing or an avatar) and each point's sag (0 above the line).
+    """
+    P = np.asarray(points, float); a, b = np.asarray(corner_a, float), np.asarray(corner_b, float)
+    d = P.shape[1] if P.ndim == 2 else 0
+    if d not in (2, 3) or not len(P) or a.shape != (d,) or b.shape != (d,) or not np.isfinite(P).all() \
+            or not np.isfinite(a).all() or not np.isfinite(b).all():
+        raise ValueError('Points and both corners need matching finite 2D or 3D coordinates')
+    u = np.asarray(up if up is not None else ((0., 0., 1.) if d == 3 else (0., 1.)), float)
+    x = np.asarray(across if across is not None else ((1., 0., 0.) if d == 3 else (1., 0.)), float)
+    if u.shape != (d,) or x.shape != (d,) or np.linalg.norm(u) < 1e-12 or np.linalg.norm(x) < 1e-12:
+        raise ValueError('Up and across need nonzero vectors of the same dimension as the points')
+    u, x = u / np.linalg.norm(u), x / np.linalg.norm(x)
+    (xa, ha), (xb, hb) = (a @ x, a @ u), (b @ x, b @ u)
+    if abs(xb - xa) < 1e-12:
+        raise ValueError('The corners coincide across the view')
+    line = ha + (P @ x - xa) * (hb - ha) / (xb - xa)
+    sag = np.clip(line - P @ u, 0, None)
+    width = float(np.hypot(xb - xa, hb - ha))
+    return {'depth': float(sag.max()), 'width': width, 'depth_share': float(sag.max() / width), 'sag': sag,
+            'deepest': int(sag.argmax()),
+            'limits': 'A projected measure in the chosen view plane; it does not follow the line in depth.'}

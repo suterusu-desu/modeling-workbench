@@ -22,10 +22,10 @@ class Motion:
         m=json.loads(path.read_text(encoding='utf-8'))
         if not m.get('frames'):
             raise ValueError('Comparison manifest has no frames')
-        seen=set();views=set()
+        seen=set();views=set();sides=self.columns(m)
         for frame in m['frames']:
             if not math.isfinite(frame['blink']):raise ValueError('Finite pose controls required')
-            for side in ('before','after'):
+            for side in sides:
                 for view,asset in frame[side].items():
                     if not isinstance(asset,dict) or 'path' not in asset:continue
                     views.add(view)
@@ -38,6 +38,15 @@ class Motion:
                  'limits':m.get('source_limits',m.get('limits'))}
         key=self.store.put('motion',payload)
         return {'motion':key,'views':payload['views'],'coverage':payload['coverage'],'distinct_images':len(seen)}
+
+    @staticmethod
+    def columns(manifest):
+        """The manifest's side-by-side columns: its `columns` list (for example variants A, B, C) or before/after."""
+        sides=manifest.get('columns') or ['before','after']
+        if (not isinstance(sides,list) or not 1<=len(sides)<=6 or len(set(sides))!=len(sides)
+                or not all(isinstance(s,str) and s for s in sides)):
+            raise ValueError('Columns must be one to six distinct names')
+        return sides
 
     def compare(self, baseline_observations, candidate_observations, phases, object_name=None, reference_mapping=None, correspondence='triangles'):
         if not baseline_observations or len(baseline_observations)!=len(candidate_observations) or len(phases)!=len(candidate_observations):
@@ -202,17 +211,17 @@ class Motion:
                 index=min(range(len(m['frames'])),key=lambda k:abs(m['frames'][k]['blink']-b))
                 schedule.append(dict(time_seconds=len(schedule)/fps,source_pose=index,phase=phase,speed=speed,label=label,
                                      requested_control=b,stored_control=m['frames'][index]['blink']))
-        ffmpeg=imageio_ffmpeg.get_ffmpeg_exe();outputs=[]
+        ffmpeg=imageio_ffmpeg.get_ffmpeg_exe();outputs=[];sides=self.columns(m);labels=m.get('labels',{})
         for view in item['views']:
-            first=m['frames'][0]['before'][view]['stored']
+            first=m['frames'][0][sides[0]][view]['stored']
             with Image.open(self.store.resolve_blob(first)) as im:original=im.size
             pw,ph=panel_size or [960,round(960*original[1]/original[0])]
             pw,ph=int(pw)//2*2,int(ph)//2*2
             if min(pw,ph)<32 or max(pw,ph)>2048:raise ValueError('Panel dimensions outside supported range')
-            size=(pw*2,ph+80);tiles=[]
+            size=(pw*len(sides),ph+80);tiles=[]
             for frame in m['frames']:
-                tile=Image.new('RGB',(pw*2,ph),(20,25,32))
-                for column,side in enumerate(('before','after')):
+                tile=Image.new('RGB',(pw*len(sides),ph),(20,25,32))
+                for column,side in enumerate(sides):
                     with Image.open(self.store.resolve_blob(frame[side][view]['stored'])) as im:
                         fitted=ImageOps.contain(im.convert('RGB'),(pw,ph),Image.Resampling.LANCZOS)
                         tile.paste(fitted,(column*pw+(pw-fitted.width)//2,(ph-fitted.height)//2))
@@ -225,10 +234,10 @@ class Motion:
             try:
                 for row in schedule:
                     im=Image.new('RGB',size,(20,25,32));im.paste(tiles[row['source_pose']],(0,36));draw=ImageDraw.Draw(im)
-                    draw.text((12,10),m['labels']['before'],fill='white');draw.text((pw+12,10),m['labels']['after'],fill='white')
+                    for column,side in enumerate(sides):draw.text((column*pw+12,10),labels.get(side,side),fill='white')
                     draw.text((12,ph+48),f"{row['label']} | {row['phase']} | stored {row['stored_control']:.0%} | {len(m['frames'])} captured poses",fill='white')
                     process.stdin.write(im.tobytes())
-                process.stdin.close();error=process.stderr.read().decode(errors='replace');code=process.wait()
+                process.stdin.close();error=process.stderr.read().decode(errors='replace');process.stderr.close();code=process.wait()
                 if code:raise RuntimeError(error)
             finally:
                 if process.poll() is None:process.kill();process.wait()

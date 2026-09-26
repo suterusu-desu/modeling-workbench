@@ -185,6 +185,19 @@ class StandardCheckTests(unittest.TestCase):
         report = run_checks(minimal, no_tri)
         self.assertEqual((report['status'], self.status(report)['folds']), ('unknown', 'unknown'))
 
+    def test_the_closed_line_depth_is_measured_against_the_declared_target(self):
+        corners = [int(row(LOWER)[0]), int(row(LOWER)[-1])]
+        flat = dict(self.declaration, closing=dict(self.declaration['closing'], closed_depth={'target': 0., 'corners': corners}))
+        report = self.run_on(hinged(), flat)
+        depth = next(c for c in report['checks'] if c['id'] == 'closed_depth_error')
+        self.assertEqual(depth['status'], 'pass')
+        self.assertLess(depth['detail']['closed_depth_share'], .001)          # the seam rests just outside the lower line
+        deep = dict(self.declaration, closing=dict(self.declaration['closing'], closed_depth={'target': .2, 'corners': corners}))
+        self.assertIn('closed_depth_error', self.failing(self.run_on(hinged(), deep)))
+        with self.assertRaisesRegex(ValueError, 'closed_depth needs'):
+            run_checks(dict(self.declaration, closing=dict(self.declaration['closing'], closed_depth={'target': .1})),
+                       states(hinged()), base=self.root)
+
     def test_states_load_from_a_saved_file_in_phase_order(self):
         np.savez(self.root / 'poses.npz', **states(hinged()))
         loaded = load_states(self.root / 'poses.npz')

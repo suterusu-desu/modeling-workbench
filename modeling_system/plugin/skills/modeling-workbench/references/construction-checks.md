@@ -29,6 +29,7 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   "closing": {"moving": [...upper margin, ordered...], "facing": [...lower margin, ordered...],
               "pivot": [0.1, -0.2, 0.6], "axis": [0.95, 0.30, 0.10]},
   "carrier": {"tolerance": 0.0007},
+  "arrays": {"candidate": "evaluated.npz", "baseline": "source-evaluated.npz"},
   "limits": {"facing_travel_share": 0.25}
 }
 ```
@@ -40,7 +41,9 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   which suits an eyeball; the obstacle must be star-shaped from it.
 - `symmetry`: the mirror axis (0, 1 or 2) and `plane` (default 0), for an object that holds both sides.
 - `closing`: the moving and facing edges, ordered along the edge, and optionally the hinge (`pivot` on the axis,
-  `axis`) for the roll check; `parts` (default 3) stretches along the edge.
+  `axis`) for the roll check; `parts` (default 3) stretches along the edge; `closed_depth` ({"target": share,
+  "corners": [i, j]}, optionally `up` and `across`) the closed line's intended depth below the corner line, measured
+  on the approved closed drawing with `line_depth`.
 - `carrier`: the tolerance within which blend shapes must reproduce the motion; `weights` maps phases to shape weights
   when they differ from the phase values.
 - `limits`: overrides of the defaults below; `arrays` renames the trial's pose files.
@@ -60,6 +63,7 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 | `closing_spread` | largest difference between stretches of the edge, before closure: in turn share about the hinge when one is declared, else in closed share | .1 |
 | `seam_share` | the closed edge's median distance from the facing edge, share of the opening | .05 |
 | `roll_deviation_share` | the moving edge's distance from one roll about the hinge, share of the opening | .1 |
+| `closed_depth_error` | the closed seam's depth below the corner line (share of the corner distance) minus the declared target | .02 |
 | `carrier_shapes` | blend shapes needed: one straight shape, or with a mid shape driven at 4s(1-s) | 2 |
 
 `clearance_shortfall`, `folds` and `reversing_vertices` count defects a baseline can already have. With a baseline, the

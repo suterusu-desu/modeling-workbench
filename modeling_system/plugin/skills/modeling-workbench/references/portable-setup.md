@@ -50,8 +50,12 @@ Supply Blender and a [qualified scene adapter](native-adapters.md). The socket
 transport expects a local bridge accepting `execute_code` JSON on loopback
 (default port 9876), returning captured stdout in `result.result`. The workbench
 extracts its framed operation result. Another bridge protocol is insufficient.
-Pin the entrypoint and dependencies and qualify the actual local rig; no
-universal adapter is bundled.
+Pin the entrypoint and dependencies and qualify the actual local rig. The bundled
+reference adapter and live bridge cover the common loop (inspect, open, pose by
+custom properties or shape keys, a guide overlapped as a blue wire, save), bound
+with `python -m modeling_system.live bind` and started with `... live launch`;
+a rig that needs setup after loading supplies a restore hook. See
+[guides and display](guide-and-show.md).
 
 The [isolated runner](isolated-blender.md) copies inputs, isolates profiles and
 records jobs. Blender's embedded Python is separate from offline preparation:

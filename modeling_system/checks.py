@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .construction_diagnostics import closing_edges, local_reversals
+from .construction_diagnostics import closing_edges, line_depth, local_reversals
 from .motion_paths import keep_clearance
 
 LIMITS = {
@@ -33,6 +33,7 @@ LIMITS = {
     'closing_spread': .1,           # largest difference in closed share between stretches of the edge before closure
     'seam_share': .05,              # closed edge's median distance from the opposing edge, share of the opening
     'roll_deviation_share': .1,     # distance from one roll about the hinge, share of the opening
+    'closed_depth_error': .02,      # closed line's depth below the corner line minus the declared target, share of width
     'carrier_shapes': 2.,           # blend shapes needed to carry the motion within the declared tolerance
 }
 # Defects a baseline may already have: with a baseline the limit is an allowance over the baseline's value, so a candidate
@@ -114,6 +115,10 @@ def validate_declaration(declaration):
     if closing is not None and (not isinstance(closing, dict) or 'moving' not in closing or 'facing' not in closing
                                 or ('pivot' in closing) != ('axis' in closing)):
         raise ValueError('Closing needs the moving and facing edges, and both a pivot and an axis or neither')
+    depth = (closing or {}).get('closed_depth')
+    if depth is not None and (not isinstance(depth, dict) or not _nonnegative(depth.get('target'))
+                              or len(depth.get('corners', [])) != 2):
+        raise ValueError('closed_depth needs a nonnegative target share and the two corner vertices')
     carrier = d.get('carrier')
     if carrier is not None and (not isinstance(carrier, dict) or not _positive(carrier.get('tolerance'))):
         raise ValueError('The carrier check needs a positive tolerance')
@@ -145,6 +150,7 @@ def applicable_checks(declaration):
     if d.get('closing'):
         ids += ['facing_travel_share', 'closing_spread', 'seam_share']
         ids += ['roll_deviation_share'] if 'pivot' in d['closing'] else []
+        ids += ['closed_depth_error'] if d['closing'].get('closed_depth') else []
     ids += ['carrier_shapes'] if d.get('carrier') else []
     return ids
 
@@ -274,6 +280,14 @@ def _measure(d, states, base, baseline=None):
         seam = rows[-1]['seam_to_facing']
         out['seam_share'] = (seam['median'] / s['rest_opening_median'], {
             'rest_opening': s['rest_opening_median'], 'largest_share': seam['share_of_opening_max']})
+        if c.get('closed_depth'):
+            spec = c['closed_depth']; a, b = (int(v) for v in spec['corners'])
+            view = {k: spec[k] for k in ('up', 'across') if k in spec}
+            closed = line_depth(P[-1][moving_edge], P[-1][a], P[-1][b], **view)
+            rest = line_depth(P[0][facing_edge], P[0][a], P[0][b], **view)
+            out['closed_depth_error'] = (abs(closed['depth_share'] - float(spec['target'])), {
+                'closed_depth_share': closed['depth_share'], 'target': float(spec['target']),
+                'facing_rest_depth_share': rest['depth_share']})
         if 'pivot' in c:
             out['roll_deviation_share'] = (s['roll_deviation_share_max'], {
                 'turn_share_parts_median_per_pose': {phases[r['pose'] + 1]: r['turn_share']['parts_median']
