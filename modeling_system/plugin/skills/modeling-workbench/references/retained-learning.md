@@ -92,7 +92,7 @@ counterexamples and conditional evidence together, then fills by relevance;
 neither successes nor failures can monopolize context just by their relationship.
 Whole-passage byte limits can still leave gaps, which are reported by relationship
 in the action context. Exact dependency or selection-policy changes invalidate
-both stages. See [typed control](typed-control.md) for configuration,
+both stages. The `retained_context` module documents configuration,
 coverage and interruption recovery. Relevance is not guide admission, appearance
 approval or proof that a mechanism caused improvement.
 

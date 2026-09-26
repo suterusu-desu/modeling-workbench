@@ -1,119 +1,89 @@
 ---
 name: modeling-workbench
-description: Operate the local modeling workbench for numerical scene inspection, exact-view image and mesh reference loops, guide-constrained Blender trials, and generated-video motion comparison. Use with an explicitly bound private character workspace; assets, identity, scope and generation authority remain there.
+description: Operate the local modeling workbench for a character in Blender - study how reference avatars build a moving feature and build that mechanism, register generated guide meshes and show them overlapped on the live model, check candidates against a short declaration, and run guarded trials, reopen and retention. Use with an explicitly bound private character workspace; assets, identity, scope and generation authority remain there.
 ---
 
+## The loop
 
-Before changing how anything moves (a blink, a jaw, a mouth, an expression), read
-[build the mechanism first](references/build-the-mechanism-first.md). Study how the
-reference avatars construct the feature and build that mechanism, for example a lid
-turning as one piece on a hinge with one timing. Keep the rest pose exactly on the
-accepted neutral. Pose guides fit the mechanism's few parameters and check it by
-overlap and volume; they are not per-point targets at every pose. Fix a motion
-defect by changing the mechanism, never by stacking per-phase fields or patches.
+The owner's loop: discover the problem area; inspect it and feed the inspection into image generation; pair it with
+all of the character's references (everything, including manga and anime art: "the soul of the character"); the new
+image reveals the inspected area with the character's likeness; generate a mesh to fit that likeness; register it onto
+the character and fit to it, shown overlapped: the editable character solid orange, the guide a blue wire cage in the
+same coordinates, never side by side. Where no guide does the job, solve the geometry so it truly represents the drawn
+image, within a tolerance of the character's references.
 
-Use [portable setup](references/portable-setup.md) on another machine or character.
-The complete workbench skill ships with the package and has no external skill or
-inference-service dependency. Keep character materials, identity, scope and native
-bindings in an explicitly bound private workspace.
+Moving features come first as mechanisms: before changing how anything moves (a blink, a jaw, a mouth, an expression),
+read [build the mechanism first](references/build-the-mechanism-first.md). Study how the reference avatars construct
+the feature and build that mechanism, for example a lid turning as one piece on a hinge with one timing. Keep the rest
+pose exactly on the accepted neutral. Pose guides fit the mechanism's few parameters and check it by overlap and
+volume; they are not per-point targets at every pose. Fix a motion defect by changing the mechanism, never by stacking
+per-phase fields or patches. Static shape (the rest pose, smoothing, joins) is fitted to registered guides, depth and
+corresponding sections during the edit itself.
 
-The owner chooses and executes qualified native operations directly through
-`ModelingService`, `NativeJob`, `RetainCheckpoint` or a [direct session](references/operating-session.md).
-One native writer owns fresh state, effects and recovery. Do not bypass native
-source/owner guards. A session adds the episode journal, modeling contracts,
-preservation, scoped review and experience; it does not delegate to another model.
+## Start
 
-Use explicit task priorities for multiple eligible choices and code for fixed
-prerequisites and continuation. [Cooperative intervals](references/cooperation.md)
-allow useful independent work while an exact review dependency waits. Unknown
-conditions remain blocked. Intervals stay finite within current authorization.
+Read the workspace's current page (`PROJECT.md`, from the [current-page template](references/current-page.md)): the
+mechanism, the accepted rest, the last owner-approved state, open owner decisions and the next action. Read the pages
+below for the task at hand, not the whole skill. [Portable setup](references/portable-setup.md) installs and binds a
+workspace; [getting started](references/getting-started.md) walks a first session.
 
-Preserve the [retained modeling method](references/method.md). Use registered
-guides, depth and corresponding sections when fitting static shape; motion follows
-the mechanism-first order above. Protect achieved
-evaluated shapes through motion using [consumed preservation constraints](references/preservation-and-lessons.md).
-Declare what a moving feature may do once and let [standard construction checks](references/construction-checks.md)
-measure every candidate and guard its trial and retention, instead of writing a per-trial adapter. Register generated
-guides, give each a role and show them overlapped live, as renders, videos and drawing overlays with
-[guides and display](references/guide-and-show.md).
-When local repair conflicts with preserved outcomes, solve connected controls
-within qualified guide tolerances and restore the affected outcomes before retention.
+## The verbs
 
-Use [candidate pipelines](references/candidate-pipeline.md), [parameterized methods](references/operation-recipes.md)
-and [explicit typed arguments](references/typed-control.md) to reuse qualified
-mechanisms. Fixed native work retains source checks, independent reopen and
-durable no-replay phases. A completed effect survives report repair.
+**guide** - acquire and register guides. Request images with `request_reference`, claim, dispatch and reconcile mesh
+jobs without ever submitting a duplicate of an uncertain job ([generation](references/generation.md); never a mesh from
+a single image). Register a generated mesh onto the accepted neutral on stationary anatomy, and give every guide a role
+(identity, pose check, detail): [guides and display](references/guide-and-show.md). Join several generated variants of
+a pose onto the accepted neutral with a tolerance band: [guide synthesis](references/guide-synthesis.md).
 
-Use [preparation and scoped setup](references/preparation-and-bootstrap.md) for
-array contracts, contact queries and measured native setup reuse. Author missing
-mechanisms against actual evidence. Record useful techniques and failures through
-[retained learning](references/retained-learning.md) with applicability, sources,
-limits and counterexamples; do not leave them only in conversation.
+**show** - keep the work visible: any registered guide overlapped live in Blender through the reference adapter and
+live bridge, overlap renders, motion videos (normal speed, then slow; several columns for variants), landmark-aligned
+overlays on drawings ([guides and display](references/guide-and-show.md)) and matched review sheets. Numbers can reject
+a candidate; approval comes from looking at the whole motion.
 
-Read current project authority before effects. Keep source installation, native
-adapter qualification and actual use distinct. Preserve old receipts and ledgers
-as history; start new direct sessions with current catalogs. Never replay an
-uncertain effect or reinterpret an old inferred task as authorized direct work.
+**construct** - build the mechanism: hinged lid landing on the opposing lid (still or lifted in the middle), one-pace
+roll, clearance, attached parts carried on the edge ([motion paths](references/motion-paths.md)). Deformers and guide
+volume fits are bounded clean-up of a surface, not the way to create motion ([metric fitting](references/metric-fitting.md)).
 
-Start with `inspect_situation`. Read current modeling authority and retrieve relevant lessons by mechanism. Use `synchronize_scene` or `query_live_geometry` for current numerical evidence; `native_inspect_live` reports invalidation without silently making old geometry current. Scene changes invalidate the representation, and explicit synchronization refreshes it. Complete stored arrays remain queryable historically with declared coverage, including base-only and evaluated geometry distinctions. A current result is verified at the reported instant. The editing owner is stable across an experiment. A changed expected state or unresolved execution requires reconciliation, not blind repetition.
+**check** - measure every candidate the same way from one declaration: rest identity, motion outside the region,
+protected objects, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and how many blend
+shapes carry the motion ([construction checks](references/construction-checks.md)). Diagnose persistent creases,
+crowding and section bends with [construction diagnostics](references/construction-diagnostics.md).
 
-Use `capture_view_bundle` for the actual mesh preview being inspected, including its angle, zoom, pose and optional pixel crop. It links the image, wider context, geometry, guide, depth and sections. `record_observation` and `ingest_capture` retain completed evidence without recapturing or moving the view. `project_points` accounts for the recorded crop; projected points are not automatically visible surface hits.
+**study** - learn the construction from the reference avatars: extract their shapes and measure the moving band, the
+simple motion that explains it, travel ratios, corners and the closed line ([study the avatars](references/study-avatars.md)).
+A study ends in building what it found.
 
-For the feedback loop, use `request_reference` with that actual screenshot plus authoritative character images. Assign their roles explicitly: the screenshot controls view, zoom, location and pose; character references control likeness, proportions, feature design and style. Faulty mesh anatomy is the subject of correction, not an identity constraint. Review whether the proposed local part actually belongs to the character, not merely whether it is smooth or well framed. Preparation returns concrete input paths and settings for the installed image-generation transport. Persist `claim_job` before dispatch and attach real outputs using `reconcile_job`. Keep the same job after an uncertain response or restart; recover an existing result before another submission. Preparation alone neither submits nor spends credits. The user's existing authorization supplies scope; no additional approval ceremony is implied.
+**trial / reopen / retain** - change the native file only through `NativeJob` isolated runs, independent reopen and
+`RetainCheckpoint`, under one native owner with fresh-state guards
+([isolated Blender](references/isolated-blender.md), [native adapters](references/native-adapters.md)). Guard trials with
+the declaration's standard checks (`checks.standard_policy`) instead of hand-written adapters
+([preservation](references/preservation-and-lessons.md)). Retain a mechanism only after its whole motion has been watched
+against the last owner-approved state; an unseen checkpoint is an experiment. The current session route is
+[operating sessions](references/operating-session.md) with [parameterized methods](references/operation-recipes.md) and
+[preparation](references/preparation-and-bootstrap.md).
 
-Review output likeness, pose and view through `review_reference`, including useful regions, drift and a guard band. Mesh and video requests use the latest usable image review. A rejected image remains blocked even when an older positive review exists; a new proposal needs its own lineage. Keep distinct poses in separate mesh-generation jobs. Video is explicitly silent and can use the same close framing; verify motion against wider context. `analyze_video` nominates changing frames for inspection, not automatic guide creation.
+**log** - operations, reviews and job accounting are journaled in the workspace store ([episodes](references/episodes.md));
+recover an interrupted effect from its receipts, never by replaying it
+([intervention and recovery](references/intervention-and-recovery.md)).
 
-When a pose guide comes from several generated runs and must constrain a character whose neutral is accepted, keep what the runs agree on as a change from their own neutral pose, join it onto the accepted neutral and qualify it with a per-place tolerance band: see [guide synthesis](references/guide-synthesis.md).
+**notes** - construction and failure knowledge that every agent should meet lives in the pages above (symptoms,
+causes, remedies, real-use numbers). Record new scoped lessons with their evidence through
+[retained learning](references/retained-learning.md) and close out a proven method with
+[method integration](references/method-integration.md).
 
-Inspect the actual reconstructed surface before numerical qualification. A dense output can omit the requested skin or turn painted shadow into false relief. Use `reject_guide` for an unusable result; provider completion does not make it a fitting target. Qualify supported interior regions with stable unaffected anchors, explicit pose and registration evidence. Exclude artificial fragment borders, back surfaces and unsupported lash/shadow relief. Do not register moving or faulty landmarks so tightly that the intended correction disappears. Native integration uses the reviewed registered mesh and complete target provenance. Generated pixels alone do not establish depth or anatomy. Current registered guide/depth/section relationships must constrain every actual correction.
+## Rules that hold everywhere
 
-Use `begin_experiment`, `propose_change` and `apply_trial` for a recoverable correction. Native shape-key edits and recorded advanced scripts share the same owner, state and preservation checks. Retain complete influenced-region and boundary evidence when evaluated modifiers spread an edit beyond its raw controls. Independent native reopen evidence and comparison precede local retention; user appearance acceptance remains separate.
+- Current workspace authority, then the owner's latest words, govern. Package defaults and old receipts authorize nothing.
+- One native writer owns the live file; every change passes the owner and expected-state guards. Do not bypass them.
+- The accepted neutral is the likeness authority. A generated guide supports a pose or a detail; it does not redefine
+  the character. A user rejection stands over any earlier review.
+- Compare by overlap in the same coordinates, at matched views and poses, against the guide and the last approved state.
+- A new capability that the next edit needs belongs in the workbench, with tests, not in a private script.
+- Credentials, character material and native bindings stay in the private workspace.
 
-For actual displacement support, dependent attachments, exact-source export checks or ambiguous recovery, read [intervention and recovery evidence](references/intervention-and-recovery.md). Existing proposal/resolve, execution-receipt and workspace operations now retain those checks. Historical evidence, an after-the-fact screenshot and a matching animation anchor cannot establish qualified displacement or current delivery. Source review changes invalidate dependent targets without discarding completed outputs.
+## Other references
 
-Use `native_capture_motion` and `ingest_motion_capture` for independently captured closing, contact and reopening at locked close-up framing plus wider context. `assess_motion_continuity` checks ordered native controls, distinct capture receipts and explicit reviewed video-phase mappings; optional before/after geometry comparisons use matched poses and views. Equal timestamps or aperture do not prove mechanical correspondence. Retain unmapped intermediate captures rather than inventing video timestamps. `import_motion` and `export_replay` preserve existing matched sequences with normal/slow playback and exact frame access; a replay that reverses cached closing geometry is labeled accordingly. Finite phase coverage is not demonstrated naturalness. A new local correction still needs its own full-motion comparison.
-
-Keep useful stages visible with actual artifacts: inspected mesh, identity references, generated proposal, reconstructed support, registered depth evidence and resulting motion. Label rejected, pending and qualified stages explicitly. On recovery restore the latest review surface, not an older comparison left open in the browser. Infrastructure checks are reported separately from visible character improvement.
-
-Persist separate character and method results with `record_outcome`. Retain narrowly proven gains at every modeling phase even while character quality is unresolved. Use the [method integration procedure](references/method-integration.md) to link episode judgments, exact operational recipes, failures, mechanism-based retrieval and actual use. Closing an episode requires an explicit integration disposition; saving and recovery never wait for it. `retrieve_experience` includes prior failures and their applicability; it does not turn historical experiments into current authority. Complete records and arrays are available through the linked evidence resources when a compact result is insufficient.
-
-Before a generation or qualification decision call `operation_context` and expand its exact source passages. Supply the observed failure/use case. Select the route using the private project policy; package defaults and prior completed jobs do not authorize a new dispatch. Preserve source-bound identity, current usable review, displayed cost and fixed job recovery. See [generation procedure](references/generation.md).
-
-Use `runtime_status()` to distinguish source loaded into this process, current disk source and actual schema. A supplied version label does not prove adoption. CLI and fresh Python use the same shared source. Installed cache and operator-loaded skill require separate verification after reinstall; existing owners can use fresh Python until a new task verifies MCP pickup.
-
-For sustained work start with `decision_workspace()` and read [the episode procedure](references/episodes.md). It gives exact Python/CLI bootstrap, schema and crash recovery. Current jobs and judgments are composed from their own records; no historical snapshot becomes current Blender by opening an episode. Both existing public Python calls and the MCP/CLI route now retain operation facts; use `run_episode_operation` to link them automatically to a particular decision. Read operations through `execute` create no operation receipt.
-
-Provider transport, account and credit authorization belong to the bound workspace. Verify actual configured route and live account state before a permitted dispatch; never infer spending authority from installation or a transferable package.
-
-For a bounded topology sequence, exact ancestry, save-aware rollback or library import, read [isolated native transactions](references/native-transactions.md). Public preparation retains plans; only the sole native owner invokes the background helpers with verified content adapters. Unsupported character content stays on its qualified existing route. A partial transaction is inspected and recovered from original checkpoints, never replayed automatically.
-
-When several provider jobs depend on reviewed outputs or diagnostic results, use [provider workflows](references/provider-workflows.md). Compose existing exact job handles, inspect current dependencies and preview remaining known quotes per denomination. A stale ancestor blocks descendants even across completed jobs. Busy or uncertain jobs are reconciled under their original handles. Unknown future prices remain unknown; a quote or workflow never supplies dispatch authority.
-
-For counterfactual screening, evidence reuse, local method promotion, exact ordered motion and portable transfer, read [responses and transfer](references/responses-and-transfer.md). These are implemented shared-core operations with explicit adapter/dependency limits. They do not grant new modeling scope, native ownership or generation credits.
-
-`operation_context` and `select_generation_route` are genuinely read-only, including through CLI/MCP; they do not create journal/context records. Use `capture_operation_context` when you intentionally retain a decision context and exact source bytes. That explicit action keeps automatic operation facts. Do not assume every local operation is read-only.
-
-The default episode summary is bounded to 24,000 compact JSON characters. It preserves current judgments, constraints, qualified support/exclusions and all unresolved effects; catalogs and completed payloads have executable bounded expansions. Check `incomplete_decision_coverage`: overflow reports exact counts and required drilldowns, not sufficient context for mutation. Follow the returned operation/arguments; `next` pages detect changed live indexes, while immutable reads bind a content ID. Display MCP `structuredContent` once, or parse its text fallback when absent; do not print the whole dual-representation envelope. Canonical `detail="links"/"full"` remains available for explicit full reads and editing. See the episode procedure for window examples. Authored context can predate effects; applied/saved is not appearance acceptance.
-
-For missing-target or side-effect diagnosis, use `analyze_repair` and read [the repair-analysis procedure](references/repair-analysis.md). It composes qualified target support, coupled XYZ responses, complete declared layer coverage, fit/preservation constraints and localized acquisition nominations. Missing ranges, layers or targets remain diagnostics; a local linear fit does not approve native geometry or authorize generation.
-
-When targets change or an accurately predicted native field fails the shape review, use `inspect_control_coverage` and [the control-family diagnostic](references/control-coverage.md). Complete forward influence does not establish reverse target ancestry, useful admissible freedom or good form. Recover missing control paths, retain actual exclusion reasons and test a justified revised mechanism before repeating the fit.
-
-For repeated offline coverage/repair studies, `recipe_template` and [diagnostic recipes](references/recipes.md) retain pinned inputs, dependencies, exact review evidence and recoverable step receipts. Inspect the instance to resume after interruption; run one ready step through its existing execution facade. Changed evidence or corrected reviews invalidate affected uses. This bounded recipe supports no native or provider execution and does not replace episode judgments.
-
-When a candidate inventory inherits a deformation mask, labels are nonfinite, or fit-only gradients miss joins, use `inspect_target_domain` and [target-domain coverage](references/target-domain.md). Geometric candidacy, authored-mask membership, numeric labels, reviewed region correspondence and selected fit are separate facts. Inspect each transition-check family by its actual meaning; no count automatically admits targets or proves smoothness.
-
-When a proposed surface correspondence crosses unsupported stations or competing branches, use `inspect_surface_correspondence` and [ordered correspondence evidence](references/surface-correspondence.md). Preserve all alternatives and excluded foreground, check source-edge order separately from selected-section connectivity, and keep missing comparable evidence unknown. Disconnected planar cuts do not establish disconnected 3D anatomy or exclude an out-of-plane route. No reported relation grants target admission.
-
-For a local connectivity question use [bounded graph paths](references/graph-paths.md); preserve node and edge exclusions, ambiguous alternatives and exhausted budgets. Use [lazy component catalogs](references/component-catalog.md) to locate an exact triangle and fetch only the required connected-part members. Graph adjacency, full-mesh connectivity, selected-region connectivity and anatomy are separate evidence.
-
-When a topology-changing operation emits exact element ancestry, use [topology lineage](references/topology-lineage.md) to retain and compose its mapping and remap selectors conservatively. No native producer is inferred from an offline lineage declaration. For completed or interrupted effects, use `inspect_execution_receipt` and [execution contracts](references/execution-contracts.md) before deciding what actually happened. Owner-authored isolated workers can use the standalone completion helper without switching the live native adapter. Preserve the original failed receipt and attach later verification separately.
-
-Study the construction of the reference avatars to build it. Identify the primary movement, support/bulge, gaze and corrective mechanisms separately; measure which loops move, what they turn or slide about, what stays still, where the closed line lies and how attached layers ride. A study ends in building that construction for the character before any local correction ([build the mechanism first](references/build-the-mechanism-first.md)). The avatars supply the mechanism and passing values for the construction checks; the character's own references and accepted neutral govern its likeness.
-
-When a construction score improves but ridges persist, creases radiate from a corner after a depth fit (material crowding), recorded triangulation differs between poses, dependent geometry moves despite fixed anchors, a support formula has not reproduced saved native samples, or exact plane sections show suspicious gaps, read [construction diagnostics](references/construction-diagnostics.md). Build a moving part on its mechanism first; a lid is landed on a hinge and rolled with one pace ([motion paths](references/motion-paths.md)). When an inherited motion's in-between poses crease or cut into what lies behind them, the same page re-times and joins them. It supplies bounded offline Python checks, explicit native-versus-fixed-chart comparison and independent frame-response checks. Presentation borders, measured shape, predicted support and artistic acceptance remain distinct.
-
-For controller velocity, batch explicitly ordered useful work in one bounded run
-and keep fixed prerequisites in code. Inspect actual stage timings during normal
-work. Use scoped revalidation only with fresh dependency evidence from a qualified
-adapter; preserve the atomic native guard. See [controller operation](references/controller.md).
+[Retained method](references/method.md) (orient, observe, acquire, qualify, intervene, retain),
+[control coverage](references/control-coverage.md) and [repair analysis](references/repair-analysis.md) (offline
+diagnoses of control reach and coupled responses). Use `runtime_status()` to confirm which installation is loaded, and
+`operation_context` for the procedures that apply to a generation or qualification decision.

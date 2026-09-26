@@ -79,8 +79,8 @@ does not guarantee nonnegative interpolation weights or absence of overshoot.
 Preserve direct guide support versus interpolation and the objective's actual
 quantity: displacement smoothing and final-surface fitting differ. Metric and
 affine tests do not approve target correspondence, native realization or visible
-quality. See [preparation](preparation-and-bootstrap.md) and
-[connected-patch correspondence](surface-correspondence.md).
+quality. See [preparation](preparation-and-bootstrap.md) and the connected-patch
+correspondence operation `inspect_surface_correspondence`.
 
 ## Surface metric on recorded 3D triangles
 

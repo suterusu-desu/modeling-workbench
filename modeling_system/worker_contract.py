@@ -140,7 +140,7 @@ def _role(value, name):
 class WorkerContract:
     """Declare, preflight, check, then finalize; the completion file is written last.
 
-    See references/execution-contracts.md for the adoption snippet and manifest layout.
+    The repository's docs/archive/skill-pages/execution-contracts.md keeps the adoption snippet and manifest layout.
     """
 
     def __init__(self, output_dir, *, completion_file=None, required_artifacts=None, required_checks=None,

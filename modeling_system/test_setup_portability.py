@@ -27,7 +27,7 @@ class SetupPortabilityTests(unittest.TestCase):
         moved = self.root/'moved workspace'
         shutil.move(str(original), moved)
         self.assertFalse((moved/'.agents/skills/typesafe-ai').exists())
-        self.assertTrue((moved/'.agents/skills/modeling-workbench/references/cooperation.md').is_file())
+        self.assertTrue((moved/'.agents/skills/modeling-workbench/references/build-the-mechanism-first.md').is_file())
         binding = (moved/'modeling-workspace.json').read_text(encoding='utf-8')
         for path in (original, original.resolve()):
             for locator in (str(path), json.dumps(str(path))[1:-1], path.as_posix()):
