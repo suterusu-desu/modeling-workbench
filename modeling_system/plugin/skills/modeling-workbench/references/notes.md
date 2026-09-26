@@ -39,6 +39,16 @@ blink puts the upper edge past the lower (the avatars: 3-15 % of the opening), a
 dedicated closed variants of the strong expressions and the blink switched off while they play, as the avatars ship
 them; declare the combinations so `combination_seam` measures each.
 
+**The mouth bends, slides and turns late ("putty mouth").** Cause: the blink's mistake on the mouth: one control
+driving an open shape plus guide keys gated to phases of it, and teeth that slide before they turn. Remedy: a rigid jaw
+turn about a hinge in front of the ear, skin following it by a weight, a separate upper-lip lift, stored as one
+straight shape; guides fit its angle, weight and lift and check the in-between by overlap. The [face audit](face-checks.md)
+refuses phase-gated keys and measures the hinge.
+
+**A face shape moves the eyelid.** Cause: a mouth, cheek or brow shape whose falloff reaches the lid. Remedy: each
+shape owns one region; the squint and the smile-closed lid are lid shapes on the eye's own rows (`still_travel_share`
+on the lid margin).
+
 ## Guides and fitting
 
 **Every key sits near its guide and the motion still looks wrong.** Cause: pose guides used as per-point targets at

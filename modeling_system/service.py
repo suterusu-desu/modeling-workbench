@@ -764,6 +764,11 @@ class ModelingService:
                                              travel=np.linalg.norm(avatar['keys'][key],axis=1))
         return report
 
+    def audit_face(self, declaration: str) -> dict:
+        """Audit a face construction from a declaration over study extractions (face_checks): each shape's region and still lid margin, one straight path per control with no phase-gated keys, a rigid jaw turn about a hinge behind and above the lips that the skin follows by a weight, bounded lip falloff not on a topology seam, visemes as base-shape mixes in the right slots with PP closing and FF touching the teeth, left/right splits, lips and teeth in allowed combinations, and single-frame shapes with full-state clips."""
+        from .face_checks import run_face_audit
+        return run_face_audit(declaration)
+
     def overlay_on_drawing(self, render: str, drawing: str, render_points: list[list[float]], drawing_points: list[list[float]],
                            output: str, crop: list[int] | None = None, lines: list[dict] | None = None, alpha: float = .25) -> dict:
         """Overlap a render and a drawing in the drawing's frame, aligned by the similarity taking two landmarks of the render (pixel x, y; for an eye its two corners) onto the drawn ones; the drawing lies over the render with its strokes stronger, optional polylines on top. Never side by side."""

@@ -2,11 +2,14 @@
 
 Extract the avatar's shapes with the `study_extract.py` NativeJob worker (rest positions, every shape key as a world
 delta, topology, vertex groups and bones), load them with `load_shapes`, and measure the feature's construction:
-which loop is the margin (`order_loop`, `rings`), whether the loops around it are closed quad loops (`loop_topology`), which simple motion explains it (`motion_models`: one slide, a turn
-about a named axis, the best free axis), how far the moving band reaches (`band_profile`) and, for a blink, the numbers
-the construction checks use (`blink_report`: moving vertices, opposing-lid travel, corner travel, closed-line depth).
-The avatars are the passing examples: run the same checks on them and on the character. Measurements, not targets:
-the character's own references govern its likeness.
+which loop is the margin (`order_loop`, `rings`), whether the loops around it are closed quad loops
+(`loop_topology`), which simple motion explains it (`motion_models`: one slide, a turn about a named axis, the best
+free axis), how far the moving band reaches (`band_profile`) and, for a blink, the numbers the construction checks use
+(`blink_report`: moving vertices, opposing-lid travel, corner travel, closed-line depth). For the face: whether a part
+turns rigidly and where its hinge is (`rigid_motion`), how much of a jaw turn the skin follows (`jaw_weights`), which
+mix of base shapes a viseme is (`viseme_mix`) and rings counted out from the lip seam (`seam_rings`); the face
+construction audit (`face_checks`) runs the checks. The avatars are the passing examples: run the same checks on them
+and on the character. Measurements, not targets: the character's own references govern its likeness.
 """
 import json
 from collections import deque
@@ -275,3 +278,59 @@ def blink_report(rest, end, upper_margin, lower_margin, corners, *, pivot=None, 
     if band is not None:
         report['band'] = band_profile(P0, P1, up_m, band, up=up, across=across, width=width)
     return report
+
+
+def rigid_motion(rest, end):
+    """The rigid turn that best carries a part from `rest` to `end` (least squares): `rotation`, `translation`,
+    `angle_degrees`, `axis`, a point on the hinge axis (`hinge_point`, None under half a degree) and the RMS distance of
+    the part from the rigid result (`residual_rms`). The avatars' lower teeth turned 7-9.4 degrees rigidly (residual
+    .0005-.006 of the mouth width) about an axis 2.4 mouth widths behind the lips."""
+    X, Y = np.asarray(rest, float), np.asarray(end, float)
+    cx, cy = X.mean(0), Y.mean(0)
+    U, _, Vt = np.linalg.svd((X - cx).T @ (Y - cy))
+    R = Vt.T @ np.diag([1., 1., np.sign(np.linalg.det(Vt.T @ U.T))]) @ U.T
+    t = cy - R @ cx
+    angle = float(np.degrees(np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))))
+    w = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]); axis = w / max(np.linalg.norm(w), 1e-300)
+    point = None
+    if angle > .5:
+        point = np.linalg.lstsq(np.eye(3) - R, t - axis * (axis @ t), rcond=None)[0]
+    return {'rotation': R, 'translation': t, 'angle_degrees': angle, 'axis': axis, 'hinge_point': point,
+            'residual_rms': float(np.sqrt(((X @ R.T + t - Y) ** 2).sum(1).mean()))}
+
+
+def jaw_weights(positions, delta, rotation, translation):
+    """How much of a jaw turn each vertex follows: w = d.p / |p|^2 against the turn's displacement p = R x + t - x, and
+    the share of its motion off that direction (|d - w p| / |d|). The avatars' skin below the lip followed the jaw by a
+    weight falling from the chin (median .10-.23, top decile over .58), with a median off-share of .11-.23."""
+    P, D = np.asarray(positions, float), np.asarray(delta, float)
+    p = P @ np.asarray(rotation, float).T + np.asarray(translation, float) - P
+    w = (D * p).sum(1) / np.maximum((p * p).sum(1), 1e-300)
+    off = np.linalg.norm(D - w[:, None] * p, axis=1) / np.maximum(np.linalg.norm(D, axis=1), 1e-300)
+    return w, off
+
+
+def viseme_mix(basis, target):
+    """The non-negative mix of base shapes (`basis`: {name: delta}) nearest a viseme's delta, and the relative residual
+    |d - B w| / |d|. Most of the avatars' visemes were exact mixes of five vowel shapes."""
+    from scipy.optimize import nnls
+    names = list(basis); B = np.stack([np.asarray(basis[k], float).ravel() for k in names], 1)
+    d = np.asarray(target, float).ravel(); norm = float(np.linalg.norm(d))
+    if norm == 0:
+        return {'weights': {}, 'relative_residual': 0., 'empty': True}
+    w, _ = nnls(B, d)
+    return {'weights': {k: float(x) for k, x in zip(names, w) if x > 1e-6},
+            'relative_residual': float(np.linalg.norm(d - B @ w) / norm), 'empty': False}
+
+
+def seam_rings(edges, seam, count, *, limit=64):
+    """Ring number of every vertex by edge steps from the seam vertices (0 on the seam), up to `limit` rings; others
+    NaN. Used to report how a lip shape's motion falls off ring by ring from the seam outward."""
+    nb = _neighbours(edges, count); ring = np.full(count, np.nan)
+    front = [int(v) for v in seam]; ring[front] = 0
+    for k in range(1, limit + 1):
+        nxt = {u for v in front for u in nb[v] if np.isnan(ring[u])}
+        if not nxt:
+            break
+        ring[list(nxt)] = k; front = list(nxt)
+    return ring

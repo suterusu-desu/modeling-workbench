@@ -80,7 +80,8 @@ lane.retain('lift03', target=new_checkpoint, label=label, review=review)
 ```
 
 The construction-first verbs are also service operations, so the CLI and the MCP server expose them
-(`check_candidate`, `register_guide`, `construct`, `study_blink`, `overlay_on_drawing`, `review_sheet`):
+(`check_candidate`, `register_guide`, `construct`, `study_blink`, `bake_poses`, `audit_face`, `overlay_on_drawing`,
+`review_sheet`):
 
 ```sh
 python -m modeling_system check_candidate --workspace /path/to/character --input check.json
@@ -120,6 +121,7 @@ an exact review dependency waits.
 - [Study the avatars](modeling_system/plugin/skills/modeling-workbench/references/study-avatars.md): a read-only extraction worker for a reference avatar's mesh and shape keys, and measures of how it builds a moving feature: which simple motion explains it, how far the moving band reaches, travel ratios, corner travel, the closed line's depth and whether the loops around the opening are closed quad loops.
 - [Guides and display](modeling_system/plugin/skills/modeling-workbench/references/guide-and-show.md): registration of a generated guide on stationary anatomy, guide roles (identity, pose check, detail), a reference adapter and live bridge that show any registered guide overlapped on a visible Blender without a private adapter, overlap renders, motion videos with several columns and landmark-aligned overlays on drawings.
 - [Bake to blend shapes](modeling_system/plugin/skills/modeling-workbench/references/bake.md): the fewest shapes that carry a built motion (the end pose plus correctives driven by bumps of the same weight), per-phase error and clearance, the clip curve, and an FBX exported and round-tripped through Blender.
+- [Face construction audit](modeling_system/plugin/skills/modeling-workbench/references/face-checks.md): every face shape, control and combination checked from one declaration over extracted shapes: regions and a still lid margin, one straight path per control with no phase-gated keys, a rigid jaw hinge the skin follows by a weight, bounded lip falloff, visemes as base-shape mixes in the right slots, left/right splits, lips and teeth in combinations, single-frame shapes and full-state clips.
 - [Standard construction checks](modeling_system/plugin/skills/modeling-workbench/references/construction-checks.md): one short declaration (region, accepted rest, protected objects, clearance obstacles, symmetry, closing edges and corners, moving band, gaze limits, a carried lash strip, combined closed poses, blend-shape tolerance) measures every candidate's saved poses and generates the guard for native trials and retention, without a per-trial adapter.
 - [Native jobs and retention](modeling_system/plugin/skills/modeling-workbench/references/operation-recipes.md): material fields, qualified native jobs and synchronous checkpoint retention, with [parts set aside from view](modeling_system/plugin/skills/modeling-workbench/references/native-adapters.md#parts-set-aside-from-view) in the live display and the retained file.
 - [Preservation and connected repair](modeling_system/plugin/skills/modeling-workbench/references/preservation-and-lessons.md): source-bound constraints consumed by fitters, final evaluated measurements, a pre-launch check of pinned sources, an offline preview of the declared cells and scoped tolerance when connected repair is necessary.

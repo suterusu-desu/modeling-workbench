@@ -11,6 +11,7 @@ from PIL import Image
 from .init_workspace import initialize
 from .service import ModelingService
 from . import test_checks as eye
+from . import test_face_checks as face
 from . import test_registration as heads
 
 
@@ -28,7 +29,7 @@ class ServiceVerbTests(unittest.TestCase):
     def test_the_verbs_are_service_operations(self):
         ops = set(self.service.operations())
         self.assertLessEqual({'check_candidate', 'register_guide', 'construct', 'study_blink', 'overlay_on_drawing',
-                              'review_sheet'}, ops)
+                              'review_sheet', 'bake_poses', 'audit_face'}, ops)
 
     def test_construct_then_check(self):
         np.savez(self.root / 'lid.npz', positions=eye.REST, edge=eye.row(eye.UPPER), landing=eye.REST[eye.row(eye.LOWER)],
@@ -59,6 +60,11 @@ class ServiceVerbTests(unittest.TestCase):
         self.assertEqual(set(clip['frames'][0]['weights']), {'blink', 'blink_mid'})
         with np.load(report['bake_file']) as bake:
             self.assertEqual(sorted(bake.files), ['Skin::faces', 'Skin::rest', 'Skin::shape::blink', 'Skin::shape::blink_mid'])
+
+    def test_audit_a_face(self):
+        report = self.run_op('audit_face', {'declaration': str(face.save_extractions(self.root))})
+        self.assertEqual(report['status'], 'pass')
+        self.assertAlmostEqual(report['report']['jaw']['behind'], 2.4, places=6)
 
     def test_register_a_guide(self):
         case = heads.RegistrationTests(); case.setUp()

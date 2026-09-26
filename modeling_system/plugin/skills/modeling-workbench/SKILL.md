@@ -27,7 +27,8 @@ mechanism, the accepted rest, the last owner-approved state, open owner decision
 below for the task at hand, not the whole skill. [Portable setup](references/portable-setup.md) installs and binds a
 workspace; [getting started](references/getting-started.md) walks a first session. The verbs are Python calls and
 also service operations on the CLI (`python -m modeling_system <operation> --input args.json`) and MCP:
-`check_candidate`, `register_guide`, `construct`, `study_blink`, `overlay_on_drawing`, `review_sheet`, the generation
+`check_candidate`, `register_guide`, `construct`, `study_blink`, `bake_poses`, `audit_face`, `overlay_on_drawing`,
+`review_sheet`, the generation
 ledger and the `native_*` operations.
 
 ## The verbs
@@ -50,11 +51,13 @@ volume fits are bounded clean-up of a surface, not the way to create motion ([me
 
 **check** - measure every candidate the same way from one declaration: rest identity, motion outside the region,
 protected objects, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and how many blend
-shapes carry the motion ([construction checks](references/construction-checks.md)). Diagnose persistent creases,
+shapes carry the motion ([construction checks](references/construction-checks.md)); for the face, every shape, control
+and combination through the [face audit](references/face-checks.md). Diagnose persistent creases,
 crowding and section bends with [construction diagnostics](references/construction-diagnostics.md).
 
 **study** - learn the construction from the reference avatars: extract their shapes and measure the moving band, the
-simple motion that explains it, travel ratios, corners and the closed line ([study the avatars](references/study-avatars.md)).
+simple motion that explains it, travel ratios, corners, the closed line, loop topology, the jaw hinge and viseme mixes
+([study the avatars](references/study-avatars.md)).
 A study ends in building what it found.
 
 **trial / reopen / retain** - change the native file only through three plain calls

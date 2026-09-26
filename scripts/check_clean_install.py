@@ -56,7 +56,8 @@ with tempfile.TemporaryDirectory(prefix='workbench-portability-') as temporary:
         # The public integration must import and execute from the installed
         # distribution, without the private project, inherited auth or sys.path.
         run([python, '-I', '-m', 'unittest', 'modeling_system.test_direct_session',
-             'modeling_system.test_checks','modeling_system.test_trials', 'modeling_system.test_setup_portability',
+             'modeling_system.test_checks', 'modeling_system.test_face_checks', 'modeling_system.test_trials',
+             'modeling_system.test_setup_portability',
              'modeling_system.test_isolated_blender', 'modeling_system.test_decisions.PackagedMethodTests'], stage)
         if mode == 'wheel':
             run([python, '-I', '-c',

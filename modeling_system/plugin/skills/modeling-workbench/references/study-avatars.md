@@ -47,8 +47,14 @@ report = blink_report(rest, closed, upper_margin, lower_margin, corners, pivot=e
   line's depth and the lower lid's rest depth below the corner line (all in the eye's own width), the upper margin's
   motion models and the band profile.
 
+For the face: `rigid_motion(rest, end)` fits a part's rigid turn (angle, axis, a point on the hinge, residual),
+`jaw_weights(positions, delta, R, t)` how much of that turn each vertex follows and how much of its motion is off it,
+`viseme_mix(basis, target)` a viseme's nearest non-negative mix of base shapes, and `seam_rings(edges, seam, count)`
+ring numbers out from the lip seam. The [face audit](face-checks.md) runs the checks built on them.
+
 Run the same numbers on the character's candidate and put the ones that matter into its declaration
-([standard construction checks](construction-checks.md)): the avatars are the passing examples.
+([standard construction checks](construction-checks.md), [face audit](face-checks.md)): the avatars are the passing
+examples.
 
 ## What three avatars showed
 
