@@ -21,7 +21,8 @@ lane.retain('lift03', target=workspace / 'checkpoints' / 'lifted-lower-lid.blend
 ```
 
 **trial** runs an isolated copy of `source`, which must be the file open and clean in the owner's live Blender (so
-later user work cannot be overwritten). With `construction`, the packaged worker saves the source's poses, runs the
+later user work cannot be overwritten). A source that is not live is refused before the tag is used: the journal
+records the refusal and what is live, and the same tag can be run once the right file is open. With `construction`, the packaged worker saves the source's poses, runs the
 construction script (it installs the change, with the runner's `JOB`, `OUT_DIR` and `bpy`), saves the candidate's poses
 and leaves the candidate at rest; with `script`, a workspace's own trial script runs instead and must write
 `evaluated.npz` (and `source-evaluated.npz`) itself. Extra job keys go in `job`, extra pinned files in

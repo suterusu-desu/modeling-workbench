@@ -60,7 +60,11 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   height as a lower bound: over the limit it fails, within it the check is unknown.
 - `lash`: a separate strip carried on the lid: its `object` and matching `roots` and `tips` (one per lash), optionally
   `host` (the skin vertex under each root; default the nearest vertex of the moving edge) and its own `pivot`/`axis`
-  (default the closing hinge).
+  (default the closing hinge). Saved poses carry no strands, so pair them with `lash_pairs(lash_rest, skin_rest,
+  margin, carrier=..., points=...)`: lash points grouped by the skin point that carries them (the hosts the carry
+  used, default the nearest margin vertex), each group's point on the margin (within `on_margin`, .0005) its root, the
+  others its tips. On a real lid (a band plus loose strands) it gave 70 roots and 2,488 pairs and every lash check
+  passed; pairings that ignored the carrier put a root 3.6 mm off the margin or crossed groups.
 - `combinations`: poses files (the declaration's object; the last phase is the combined closed pose, for example blink
   plus an expression) whose seam is measured against the facing edge; `up` in `closing` (default +z) gives the sign.
 - `carrier`: the tolerance within which blend shapes must reproduce the motion; `weights` maps phases to shape weights
@@ -95,7 +99,11 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 
 `clearance_shortfall`, `folds` and `reversing_vertices` count defects a baseline can already have. With a baseline, the
 limit is an allowance over the baseline's value: a candidate is not failed for what it inherited, the report still shows
-the inherited value, and a rebuild is not held to its predecessor's geometry. The other checks describe the construction
+the inherited value, and a rebuild is not held to its predecessor's geometry. With a baseline both runs follow the same
+moving vertices for reversals (the baseline's cut, a fifth of its largest chord), so a vertex whose path did not change
+is not counted in one run only when the largest chord changes; the detail lists the new reversers (`new_examples`),
+the inherited ones and those no longer reversing, and for folds the triangles newly folded and unfolded at each phase,
+so an allowance or a waiver can name them. The other checks describe the construction
 itself and stay absolute, so a rebuild of a failed mechanism has to pass them. A design that wants the lower lid to rise
 raises `facing_travel_share` in the declaration, where the choice is visible. The seam and, without a hinge, the closed
 share are measured against the facing edge where it is at each phase (`closing_edges(..., against='pose')`); with a

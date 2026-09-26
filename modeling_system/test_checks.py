@@ -154,6 +154,40 @@ class StandardCheckTests(unittest.TestCase):
         skin = hinged().copy(); skin[3][row(UPPER)[6]] = skin[1][row(UPPER)[6]]
         self.assertIn('reversing_vertices', self.failing(self.run_on(skin)))
 
+    def test_with_a_baseline_reversals_follow_the_baselines_movers_and_list_what_is_new(self):
+        def lid(scale):
+            skin = hinged().copy(); d = skin - REST
+            skin[:, row(1)] = REST[row(1)] + .8 * d[:, row(1)]                     # a band just under the mover cut
+            skin[2][row(1)] = REST[row(1)]                                          # that goes back at mid-blink
+            for r in (2, UPPER):
+                skin[:, row(r)] = REST[row(r)] + scale * d[:, row(r)]
+            return skin
+        baseline, candidate = lid(1.), lid(.85)            # the lid now closes a little less far; the band is unchanged
+        alone = next(c for c in self.run_on(candidate)['checks'] if c['id'] == 'reversing_vertices')
+        self.assertEqual(alone['observed'], 13.)            # on its own cut the unchanged band is followed
+        report = self.run_on(candidate, baseline=states(baseline))
+        rev = next(c for c in report['checks'] if c['id'] == 'reversing_vertices')
+        self.assertEqual((rev['status'], rev['observed'], rev['baseline_observed']), ('pass', 0., 0.))
+        self.assertEqual(rev['detail']['mover_cut_from'], 'baseline')
+        new = candidate.copy(); v = row(2)[6]; new[3][v] = new[1][v]              # one vertex newly goes back
+        rev = next(c for c in self.run_on(new, baseline=states(baseline))['checks'] if c['id'] == 'reversing_vertices')
+        self.assertEqual((rev['status'], rev['detail']['new_vs_baseline'], rev['detail']['new_examples']), ('fail', 1, [int(v)]))
+
+    def test_with_a_baseline_folds_list_the_triangles_newly_folded_and_unfolded(self):
+        def pleat(skin, column):
+            skin = skin.copy(); v, below = row(2)[column], row(UPPER)[column]
+            skin[2][v] = 2 * skin[2][below] - skin[2][v]
+            return skin
+        report = self.run_on(pleat(hinged(), 3), baseline=states(pleat(hinged(), 8)))
+        folds = next(c for c in report['checks'] if c['id'] == 'folds')
+        self.assertEqual(folds['status'], 'pass')                                 # the same count ...
+        self.assertEqual(folds['observed'], folds['baseline_observed'])
+        detail = folds['detail']                                                  # ... in a different place
+        self.assertGreater(detail['new_per_phase']['0.5'], 0)
+        self.assertEqual(detail['new_per_phase']['0.5'], detail['unfolded_per_phase']['0.5'])
+        self.assertTrue(all(row(2)[3] in t for t in detail['new_folded_triangles']['0.5']))
+        self.assertTrue(all(row(2)[8] in t for t in detail['unfolded_triangles']['0.5']))
+
     def test_defects_inherited_from_the_baseline_pass_and_new_ones_fail(self):
         inherited = self.run_on(pleated(hinged()), baseline=states(pleated(hinged())))
         folds = next(c for c in inherited['checks'] if c['id'] == 'folds')
@@ -321,6 +355,29 @@ class EyeCheckTests(unittest.TestCase):
         self.assertLess(turn['observed'], .1)                         # no turn of its own on the lid
         self.assertGreater(turn['detail']['absolute_max'], 60.)        # while the lid rolls it through the blink
         self.assertAlmostEqual(self.check(report, 'lash_travel')['detail']['ratio_median'], 1.01, places=4)
+
+    def test_lash_pairs_from_rest_positions_group_by_carrier_and_root_on_the_margin(self):
+        from .checks import lash_pairs
+        margin = row(UPPER); n = len(margin)
+        roots = REST[margin] + [0., -.0002, 0.]                                # on the margin
+        strands = [roots + k * np.array([0., -.02, .01]) for k in (1, 2, 3)]     # strands, no faces
+        stray = REST[margin[6]] + [0., -.004, .002] + np.outer([0, 1, 2], [0., -.02, .01])   # a clump 4 mm off
+        lash = np.concatenate([roots, *strands, stray])
+        carrier = np.r_[np.tile(margin, 4), np.full(3, row(2)[6])]
+        pairs = lash_pairs(lash, REST, margin, carrier=carrier)
+        self.assertEqual((pairs['groups'], pairs['groups_with_root'], pairs['groups_without_root']), (n + 1, n, 1))
+        self.assertEqual(sorted(set(pairs['roots'])), list(range(n)))
+        self.assertEqual(len(pairs['tips']), 3 * n)
+        self.assertTrue(all(pairs['host'][k] == margin[pairs['roots'][k]] for k in range(len(pairs['roots']))))
+        self.assertLess(pairs['root_distance_max'], .0005)
+        default = lash_pairs(lash, REST, margin)                              # carried by the nearest margin vertex
+        self.assertEqual(default['groups_without_root'], 0)
+        carried = hinge_carry(lash, REST[margin], CLOSED[margin], CENTRE, AXIS, fraction=PHASES)['positions']
+        declaration = self.declare(closing=self.closing, lash={'object': 'Lash', **{k: pairs[k] for k in ('roots', 'tips', 'host')}})
+        report = run_checks(declaration, {**states(hinged()), **{f'{g}::Lash::co': carried[k] for k, g in enumerate(PHASES)}})
+        self.assertEqual(self.status(report, 'lash_travel', 'lash_turn', 'lash_length', 'lash_timing'), ['pass'] * 4)
+        with self.assertRaisesRegex(ValueError, 'one skin vertex per lash point'):
+            lash_pairs(lash, REST, margin, carrier=carrier[:-1])
 
     def test_a_lash_left_behind_lagging_flipping_or_stretching_fails(self):
         behind = self.lash_report(fraction=.7 * np.asarray(PHASES))

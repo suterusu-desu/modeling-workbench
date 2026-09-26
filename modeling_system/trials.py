@@ -50,9 +50,11 @@ class Trials:
         self.directory.mkdir(parents=True, exist_ok=True)
 
     # -- records -----------------------------------------------------------------------------------------------------
-    def _log(self, verb, tag, record):
+    def _log(self, verb, tag, record, *, reason=None):
         line = {'at': datetime.now(timezone.utc).isoformat(), 'verb': verb, 'tag': tag, 'status': record.get('status'),
-                'record': str(self.directory / tag / f'{verb}.json')}
+                'record': str(self.directory / tag / f'{verb}.json') if reason is None else None}
+        if reason is not None:
+            line['reason'] = reason
         with (self.directory / 'journal.jsonl').open('a', encoding='utf-8') as stream:
             stream.write(json.dumps(line) + '\n')
 
@@ -88,14 +90,33 @@ class Trials:
                 'workbench': {'native': True}, 'payload': {'job': spec, 'runner': runner, 'live_source': live_source}}
         return NativeJob(self.service, self.directory / tag, python=self.python)(item, self._context(tag, verb))
 
+    def _check_live(self, tag, source_ref):
+        """The live owner must hold `source`, saved and clean; refuse (journaled) otherwise, naming what is live."""
+        from .native_recipes import returned_live
+        live = returned_live(self.service, self.service.execute('native_inspect_live',
+                                                                {'owner': self.owner, 'refresh_scene': False}))
+        saved = (live.get('saved_file') or {}).get('sha256')
+        problems = [p for p, bad in (
+            (f"the live owner is {live.get('owner')!r}", live.get('owner') != self.owner),
+            (f"the live file is {live.get('file')}, not {source_ref['path']}",
+             Path(live['file']).resolve() != Path(source_ref['path']).resolve()),
+            ('the live file has unsaved changes', live.get('dirty') is not False),
+            ('the saved live file differs from the source', saved != source_ref['sha256'])) if bad]
+        if problems:
+            reason = '; '.join(problems)
+            self._log('trial', tag, {'status': 'refused'}, reason=reason)
+            raise ValueError(f'Trial {tag!r} refused before it started ({reason}); the tag stays unused')
+
     def trial(self, tag, *, source, construction=None, script=None, job=None, dependencies=()):
         """Run the change on an isolated copy of `source` and measure it with the declaration's standard checks."""
         if (construction is None) == (script is None):
             raise ValueError('Give a construction script (run between pose exports) or a complete trial script')
         if (self.directory / tag).exists():
             raise ValueError(f'Tag {tag!r} was already used; inspect its receipts and choose a new tag')
+        source_ref = file_ref(source)
+        self._check_live(tag, source_ref)                  # before the tag folder: a refusal leaves the tag unused
         (self.directory / tag).mkdir(parents=True)
-        source_ref = file_ref(source); extra = dict(job or {}); pinned = [Path(p) for p in dependencies]
+        extra = dict(job or {}); pinned = [Path(p) for p in dependencies]
         if construction is not None:
             extra['construction'] = str(Path(construction).resolve(strict=True)); pinned.append(Path(construction))
             pinned.append(HERE / 'native_poses.py'); script = HERE / 'trial_worker.py'

@@ -225,7 +225,7 @@ def _clearance_row(P, points, O, entry, minimum, phases):
             'not_in_front_of_obstacle': int(np.count_nonzero(~np.isfinite(gaps[0])))}
 
 
-def _measure(d, states, base, baseline=None):
+def _measure(d, states, base, baseline=None, mover_cut=None):
     """{check id: (observed or None, detail)} for one set of poses."""
     phases = list(states)
     if float(phases[0]) != 0.:
@@ -291,17 +291,22 @@ def _measure(d, states, base, baseline=None):
     else:
         tri = np.asarray(tri).astype(np.int64)
         tri = tri[inside[tri].all(axis=1)] if len(tri) else tri
-        counts = [int(np.count_nonzero(local_reversals(P[0], P[g], tri))) if len(tri) else 0 for g in range(len(P))]
-        out['folds'] = (float(max(counts)), {'per_phase': dict(zip(phases, counts)), 'region_triangles': int(len(tri))})
+        folded = [np.flatnonzero(local_reversals(P[0], P[g], tri)) if len(tri) else np.zeros(0, int) for g in range(len(P))]
+        counts = [len(f) for f in folded]
+        out['folds'] = (float(max(counts)), {'per_phase': dict(zip(phases, counts)), 'region_triangles': int(len(tri)),
+                                             '_folded': {g: {tuple(int(v) for v in tri[i]) for i in f}
+                                                         for g, f in zip(phases, folded)}})
 
     offset = P[:, region] - P[0, region]; chord = offset[-1]; length = np.linalg.norm(chord, axis=1)
-    movers = length > MOVER_SHARE * max(float(length.max()), 1e-300)
-    progress = np.einsum('gnk,nk->gn', offset[:, movers], chord[movers]) / length[movers] ** 2
+    cut = float(mover_cut) if mover_cut is not None else MOVER_SHARE * max(float(length.max()), 1e-300)
+    movers = length > cut
+    progress = np.einsum('gnk,nk->gn', offset[:, movers], chord[movers]) / np.maximum(length[movers], 1e-300) ** 2
     fall = (progress[:-1] - progress[1:]).max(axis=0) if len(progress) > 1 else np.zeros(int(movers.sum()))
     back = fall > REVERSAL_SHARE
     out['reversing_vertices'] = (float(np.count_nonzero(back)), {
         'followed_movers': int(movers.sum()), 'moved_vertices': int(np.count_nonzero(travel[:, region].max(axis=0) > 0)),
-        'largest_fall': float(fall.max()) if len(fall) else 0., 'examples': region[movers][back][:12].tolist()})
+        'mover_cut': cut, 'largest_fall': float(fall.max()) if len(fall) else 0.,
+        'examples': region[movers][back][:12].tolist(), '_reversing': set(region[movers][back].tolist())})
 
     if d.get('symmetry'):
         from scipy.spatial import cKDTree
@@ -459,6 +464,39 @@ def _lash(states, P, lash, c, margin, base):
             'lash_timing': (float(timing.max()), {'per_phase': dict(zip(phases, map(float, timing)))})}
 
 
+def lash_pairs(lash_rest, skin_rest, margin, *, carrier=None, on_margin=.0005, points=None):
+    """Root and tip pairs for the `lash` declaration, from rest positions alone (saved poses carry no strands).
+
+    Lash points are grouped by the skin point that carries them: `carrier` (one skin vertex per lash point, the hosts
+    the carry used, for example `hinge_carry`'s) or, by default, the nearest vertex of the ordered `margin`. A group's
+    root is its point nearest the margin line, if within `on_margin`; every other point of the group is a tip paired
+    with it and hosted by the carrier, except points within `on_margin` of the root (a lash needs a length to have a
+    direction). Groups with no point on the margin are skipped and counted. `points` limits the pairing to some of the
+    lash object's points (one eye of a lash object that holds both); indices stay the object's. Found in real use:
+    taking a group's nearest point as the root without the `on_margin` test put a root 3.6 mm off the margin (travel
+    ratio 1.055), and pairing each lash point with the nearest on-margin lash point crossed groups (116 degree turns)."""
+    from scipy.spatial import cKDTree
+    L, S = np.asarray(lash_rest, float), np.asarray(skin_rest, float); M = np.asarray(margin, np.int64)
+    if len(M) < 2 or M.min() < 0 or M.max() >= len(S):
+        raise ValueError('The margin needs at least two vertices of the skin, in order')
+    host = (M[cKDTree(S[M]).query(L)[1]] if carrier is None else np.asarray(carrier, np.int64))
+    if host.shape != (len(L),) or host.min() < 0 or host.max() >= len(S):
+        raise ValueError('The carrier needs one skin vertex per lash point')
+    use = np.zeros(len(L), bool); use[np.arange(len(L)) if points is None else np.asarray(points, np.int64)] = True
+    off = np.full(len(L), np.inf); off[use] = np.linalg.norm(L[use] - _polyline_nearest(L[use], S[M]), axis=1)
+    roots, tips, hosts, skipped, root_off = [], [], [], 0, []
+    for h in np.unique(host[use]):
+        group = np.flatnonzero(use & (host == h)); r = group[np.argmin(off[group])]
+        if off[r] > on_margin:
+            skipped += 1
+            continue
+        others = group[np.linalg.norm(L[group] - L[r], axis=1) >= on_margin]
+        roots += [int(r)] * len(others); tips += others.tolist(); hosts += [int(h)] * len(others); root_off.append(off[r])
+    return {'roots': roots, 'tips': tips, 'host': hosts, 'groups': int(len(np.unique(host[use]))),
+            'groups_with_root': int(len(root_off)), 'groups_without_root': skipped,
+            'root_distance_max': float(max(root_off)) if root_off else None}
+
+
 def _polyline_nearest(points, line):
     a, b = line[:-1], line[1:]; ab = b - a; length2 = np.maximum((ab * ab).sum(1), 1e-300)
     t = np.clip(np.einsum('msk,sk->ms', points[:, None, :] - a[None], ab) / length2[None], 0, 1)
@@ -481,6 +519,24 @@ def _combinations(d, P, moving, facing, opening, base):
     return worst, {'combinations': rows}
 
 
+def _compare_sets(measured, before, shown=50):
+    """Which reversing vertices and folded triangles are new against the baseline and which it had; private sets out."""
+    rev, fold = measured['reversing_vertices'][1], measured['folds'][1]
+    now = rev.pop('_reversing'); folded = fold.pop('_folded', None)
+    if not before:
+        return
+    was = before['reversing_vertices'][1].pop('_reversing')
+    rev.update(mover_cut_from='baseline', new_vs_baseline=len(now - was), new_examples=sorted(now - was)[:shown],
+               inherited=len(now & was), no_longer_reversing=len(was - now))
+    had = before['folds'][1].pop('_folded', None)
+    if folded is not None and had is not None:
+        common = [g for g in folded if g in had]
+        new = {g: sorted(folded[g] - had[g]) for g in common}; gone = {g: sorted(had[g] - folded[g]) for g in common}
+        fold.update(new_per_phase={g: len(v) for g, v in new.items()}, unfolded_per_phase={g: len(v) for g, v in gone.items()},
+                    new_folded_triangles={g: [list(t) for t in v[:shown]] for g, v in new.items() if v},
+                    unfolded_triangles={g: [list(t) for t in v[:shown]] for g, v in gone.items() if v})
+
+
 def run_checks(declaration, candidate, baseline=None, *, base=None):
     """Measure a candidate's poses against a declaration.
 
@@ -494,8 +550,12 @@ def run_checks(declaration, candidate, baseline=None, *, base=None):
     cand = load_states(candidate)
     base_states = load_states(baseline) if baseline is not None else None
     limits = {**LIMITS, **d.get('limits', {})}
-    measured = _measure(d, cand, base, base_states)
     before = _measure(d, base_states, base) if base_states is not None else {}
+    # With a baseline both runs follow the same movers (the baseline's cut), so a vertex whose path did not change
+    # is not counted in one run and not the other when the largest chord changes.
+    cut = before['reversing_vertices'][1]['mover_cut'] if before else None
+    measured = _measure(d, cand, base, base_states, mover_cut=cut)
+    _compare_sets(measured, before)
     rows = []
     for key in applicable_checks(d):
         observed, detail = measured[key]

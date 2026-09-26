@@ -36,6 +36,30 @@ class TrialLaneTests(unittest.TestCase):
             lane.retain('t', target=root / 'x.blend', label='x', review={'judgment': 'j', 'watched': ['v']})
 
 
+    def test_a_trial_of_a_source_that_is_not_live_is_refused_before_it_uses_the_tag(self):
+        from .trials import Trials
+        import hashlib
+        root = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, root, True)
+        live_file = root / 'current.blend'; live_file.write_bytes(b'live'); stale = root / 'older.blend'; stale.write_bytes(b'old')
+
+        class Service:
+            workspace = root
+
+            def execute(self, operation, arguments):
+                assert operation == 'native_inspect_live'
+                return {'expected_state': 's', 'file': str(live_file), 'owner': 'o', 'dirty': False,
+                        'saved_file': {'sha256': hashlib.sha256(b'live').hexdigest()}}
+        lane = Trials(Service(), 'o', root / 'trials', blender='b', reference={'working': 'F'}, objects=['F'],
+                      poses={'0': {}})
+        for _ in range(2):                                   # refused twice: the tag was never used
+            with self.assertRaisesRegex(ValueError, 'refused before it started .*the live file is .*current.blend'):
+                lane.trial('attempt-1', source=stale, construction=__file__)
+        self.assertFalse((root / 'trials' / 'attempt-1').exists())
+        self.assertEqual([(line['tag'], line['status'], line['record']) for line in lane.journal()],
+                         [('attempt-1', 'refused', None)] * 2)
+        self.assertIn('current.blend', lane.journal()[0]['reason'])
+
+
 @unittest.skipUnless(BLENDER and Path(BLENDER).is_file(), 'set MODELING_BLENDER to a Blender executable')
 class NativeTrialTests(unittest.TestCase):
     @classmethod
