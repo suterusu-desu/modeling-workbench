@@ -12,6 +12,10 @@ plugin manifest and the MCP server read it; no other file carries the version), 
 `modeling_system/distribution-files.json`, run the suite and both checks, commit and push. Ship a capability when the
 next real edit uses it, and batch small changes into one release rather than one release per function.
 
+Modules with no recorded use left the package in 0.2.68; the tag `archive/0.2.67` keeps the last version that
+contains them, with their tests and pages (see `docs/archive/skill-pages`). Bring one back, with a test, when a real
+edit needs it.
+
 The workbench environment and Blender's embedded Python are separate dependency domains. Do not add the workbench environment's entire `site-packages` directory to a native worker's search path. Compiled extensions must support the worker's Python version, ABI and platform; importing them successfully in offline preparation does not verify native compatibility. See [Blender's bundled-Python guidance](https://github.com/blender/blender/blob/main/doc/python_api/rst/info_tips_and_tricks.rst#bundled-python--extensions) and [Python wheel compatibility tags](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/).
 
 Keep SciPy-heavy fitting and analysis in recorded-array preparation and pass immutable results to the native capability. For small native geometry queries, prefer Blender-provided facilities such as `mathutils.kdtree`. If a new native dependency is necessary, qualify its imports in the actual worker runtime through the existing controller before scene effects, and retain that runtime identity with the capability. An import failure is a failed operation; source and effect receipts determine whether a corrected attempt can proceed. A selected task alone does not establish native execution.

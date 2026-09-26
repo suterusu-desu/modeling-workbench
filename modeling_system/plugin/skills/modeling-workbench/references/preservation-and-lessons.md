@@ -71,9 +71,9 @@ alter a relevant solve and reject a counterexample. Payload inclusion alone
 cannot prove a private solver correctly implements its constraints.
 
 Pass the policy to `OperatingSession(preservation=policy,
-require_preservation=True)` and `CandidatePipeline(preservation=policy,
-preservation_adapter="adapter-name")`. Standalone tasks use `policy.bind_task`.
-The pipeline freezes and carries the requirement identity and actual predecessor
+require_preservation=True)`; tasks bind it with `policy.bind_task`, and
+[trial, reopen, retain](trial-reopen-retain.md) applies the standard checks directly.
+The session freezes and carries the requirement identity and actual predecessor
 result through preparation, application, verification, review and retention.
 Verification can acquire missing evidence; promotion requires passing relevant
 checks. A failed check preserves the completed effect without replay. Existing

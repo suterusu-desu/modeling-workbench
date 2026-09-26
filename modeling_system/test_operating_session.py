@@ -302,26 +302,9 @@ class OperatingTests(unittest.TestCase):
         self.assertIn('context_record', result['service_result'])
         self.assertEqual(len([c for c in calls(self.service.store, self.episode) if c['operation']=='execute_modeling_task']), 1)
 
-    def test_existing_recipe_keeps_its_own_step_journal_in_same_episode(self):
-        from .test_recipes import RecipeTests
-        fixture = RecipeTests(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
-        self.service, self.episode, self.root = fixture.s, fixture.episode, fixture.root
-        recipe = fixture.create()
-        item = self.item('diagnostic'); item['handler'] = 'service'
-        item['payload'] = {'operation': 'run_recipe_step', 'arguments': {
-            'recipe': recipe['recipe'], 'step': 'coverage', 'expected_revision': recipe['revision']}}
-        self.items = [item]
-        session = self.session(report=lambda item, result: self.report(item))
-        self.assertEqual(session.run(max_steps=2)['status'], 'completed')
-        records = calls(self.service.store, self.episode)
-        self.assertIn('inspect_control_coverage', [row['operation'] for row in records])
-        self.assertIn('execute_modeling_task', [row['operation'] for row in records])
-        state = self.service.inspect_recipe(recipe['recipe'])
-        self.assertEqual(fixture.rows(state)['coverage']['status'], 'reusable')
-
     def test_complete_capability_map_and_read_operations(self):
         value = protocol()
-        self.assertGreaterEqual(len(value['capabilities']), 40)
+        self.assertGreaterEqual(len(value['capabilities']), 30)
         self.assertTrue(all(row['control']['lanes'] for row in value['capabilities']))
         count = len(calls(self.service.store))
         self.service.execute('operating_protocol', {})

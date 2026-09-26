@@ -21,4 +21,4 @@ version = {attr = "modeling_system.__version__"}
 include = ["modeling_system"]
 
 [tool.setuptools.package-data]
-modeling_system = ["recipe_templates/*.json", "capabilities.json", "procedures.json", "distribution-files.json", "distribution-pyproject.toml", "requirements-lock.txt", "plugin/launch.py", "plugin/.codex-plugin/plugin.json", "plugin/skills/modeling-workbench/*.md", "plugin/skills/modeling-workbench/references/*.md"]
+modeling_system = ["capabilities.json", "procedures.json", "distribution-files.json", "distribution-pyproject.toml", "requirements-lock.txt", "plugin/launch.py", "plugin/.codex-plugin/plugin.json", "plugin/skills/modeling-workbench/*.md", "plugin/skills/modeling-workbench/references/*.md"]

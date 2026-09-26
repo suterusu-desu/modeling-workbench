@@ -56,8 +56,8 @@ names their required checks. Unknown or failed checks block dependent use.
 Retention declares a candidate prerequisite and `visual_review` plus independent
 reopen evidence. User acceptance is separate from operator retention.
 
-Use candidate pipelines (`candidate_pipeline`), [parameterized operations](operation-recipes.md)
-and explicit typed arguments (`capability_calls`) to reuse mechanisms. Catalogs
+Use [native jobs and retention](operation-recipes.md) and explicit typed arguments (`capability_calls`) to reuse
+mechanisms. Catalogs
 must omit inapplicable methods or expose missing support as blocked work. Never
 replace an unknown condition with automatic success to keep a queue moving.
 

@@ -292,21 +292,6 @@
       }
     },
     {
-      "name": "Dependency-bound numerical intervention response",
-      "route": "register_response / predict_response / compare_prediction / adapt_ancestry_response / check_reuse",
-      "implementation": "core with explicit sparse/pointwise and historical ancestry adapters",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
-      "control": {
-        "lanes": [
-          "diagnosis",
-          "repair",
-          "verification"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
       "name": "Evidence-linked method integration and promotion",
       "route": "record_outcome / reconcile_episode / promote_procedure / retrieve_experience",
       "implementation": "core",
@@ -314,19 +299,6 @@
       "control": {
         "lanes": [
           "experience"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Exact ordered source motion schedule",
-      "route": "schedule_ordered_motion",
-      "implementation": "core",
-      "verification": "See automated synthetic tests. Native, provider and appearance outcomes require separate workspace evidence.",
-      "control": {
-        "lanes": [
-          "review"
         ],
         "execution": "Existing service or qualified workspace capability in the episode journal",
         "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
@@ -386,33 +358,6 @@
       }
     },
     {
-      "name": "Recoverable reusable offline diagnostic recipes",
-      "route": "recipe_template / create_recipe / inspect_recipe / revise_recipe_inputs / run_recipe_step / review_recipe_step / recover_recipe_step",
-      "implementation": "core",
-      "verification": "Synthetic tests cover pinned inputs, invalidation, review dependencies, scoped instances and recovery without replay. Actual operator adoption is separately evidenced; no native/provider execution.",
-      "control": {
-        "lanes": [
-          "diagnosis",
-          "preparation"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Independent target-domain and named transition coverage",
-      "route": "inspect_target_domain",
-      "implementation": "core",
-      "verification": "Synthetic regressions distinguish candidate selection, mask membership, unknown numeric labels, reviewed region correspondence and independent edge-check families. Native target admission and appearance remain unproved.",
-      "control": {
-        "lanes": [
-          "diagnosis"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
       "name": "Missing completion receipt recovery without effect replay",
       "route": "reconcile_operation",
       "implementation": "core",
@@ -426,59 +371,6 @@
       }
     },
     {
-      "name": "Ordered surface alternatives and selected-section connectivity",
-      "route": "inspect_surface_correspondence",
-      "implementation": "core",
-      "verification": "Synthetic counterexamples preserve unsupported stations, foreground alternatives, exact source-edge gaps, ambiguous branches and unknown coverage. Planar disconnection does not prove full-surface disconnection; no anatomical admission or continuous correspondence claim.",
-      "control": {
-        "lanes": [
-          "diagnosis"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Exact declared topology lineage",
-      "route": "record_topology_lineage / compose_topology_lineage / remap_topology_selection",
-      "implementation": "core",
-      "verification": "Synthetic split, merge, deletion, introduced ancestry and composition regressions. Requires an independently verified native producer for actual topology changes; receipt binding alone does not prove native lineage.",
-      "control": {
-        "lanes": [
-          "preparation",
-          "verification"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Bounded paths in selected recorded graphs",
-      "route": "inspect_graph_path",
-      "implementation": "core",
-      "verification": "Pinned graph and independent node/edge selections, shortest-path ambiguity and explicit budget exhaustion. A possible graph route does not prove anatomical or continuous surface correspondence.",
-      "control": {
-        "lanes": [
-          "diagnosis"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Lazy recorded component catalogs",
-      "route": "build_component_catalog / read_component_catalog / locate_component / select_component",
-      "implementation": "core",
-      "verification": "Exact stored topology identity, declared connectivity, compact metrics and bounded member selection; read/locate/select do not write. Connected components are not automatically semantic regions.",
-      "control": {
-        "lanes": [
-          "diagnosis"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
       "name": "Execution receipt and worker completion contracts",
       "route": "inspect_execution_receipt / worker_contract.WorkerContract / worker_contract.verify_manifest",
       "implementation": "core",
@@ -486,59 +378,6 @@
       "control": {
         "lanes": [
           "verification",
-          "recovery"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Prepared raw-mesh batches and exact native ancestry",
-      "route": "prepare_mesh_batch / native_mesh_batch.execute_batch / record_topology_lineage",
-      "implementation": "Core preparation plus owner-run isolated native helper",
-      "verification": "Full typed preflight, exact vertex lineage/FACE ownership and native roundtrip; unsupported mesh content refused. Native fixture and installed-byte adoption remain explicit evidence, not a character quality claim.",
-      "control": {
-        "lanes": [
-          "repair"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Native transaction inspection and later-save-aware rollback",
-      "route": "inspect_native_transaction / native_mesh_batch.SaveBoundary / native_mesh_batch.rollback_batch",
-      "implementation": "Read-only public recovery inspection and owner-run native guard",
-      "verification": "Exact native precision, original file bytes, owner/session and save events; original partial effects and rollback attempts remain durable. No automatic replay or rollback after later work.",
-      "control": {
-        "lanes": [
-          "recovery"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Measured library dependency closure and explicit namespaces",
-      "route": "prepare_library_import / native_library.describe / native_library.append",
-      "implementation": "Core plan plus owner-run append and pinned content adapters",
-      "verification": "Budgets, shared-ID namespaces, actual parent/driver/shared data links, imported content and original-host preservation. Bundled adapter covers raw meshes/objects, collections and embedded Principled/Output materials; richer/embedded types need explicit qualification.",
-      "control": {
-        "lanes": [
-          "preparation"
-        ],
-        "execution": "Existing service or qualified workspace capability in the episode journal",
-        "judgment": "The owner chooses qualified operations and supplies actual visual interpretation"
-      }
-    },
-    {
-      "name": "Provider workflow composition and exact cost previews",
-      "route": "create_provider_workflow / bind_provider_nodes / inspect_provider_workflow / quote_provider_node / preview_provider_cost",
-      "implementation": "Core composition over existing jobs, reviews, diagnostic recipes and episode ledger",
-      "verification": "Synthetic source/review/diagnostic invalidation, instance isolation, atomic binding, uncertain-job recovery and exact denomination sums; no provider calls, funding or dispatch authority. Native/provider job results remain separately verified.",
-      "control": {
-        "lanes": [
-          "preparation",
           "recovery"
         ],
         "execution": "Existing service or qualified workspace capability in the episode journal",
@@ -601,8 +440,8 @@
       }
     },
     {
-      "name": "Parameterized material methods and native operation recipes",
-      "route": "ParameterizedCatalog / bind_array_method / material_operations / NativeJob / RetainCheckpoint / OperatingSession.begin_review",
+      "name": "Native jobs and checkpoint retention",
+      "route": "NativeJob / RetainCheckpoint / trials.Trials / OperatingSession.begin_review",
       "implementation": "core and exact qualified private bindings",
       "verification": "Synthetic landmark/motion/active-surface, native freshness and review-workload tests; saved-array and actual native adoption are separately retained by workspaces.",
       "control": {
@@ -615,6 +454,90 @@
         ],
         "execution": "Existing sole-owner OperatingSession handlers with returned live-state continuity and independent reopen requirements",
         "judgment": "The owner selects applicable methods; native singletons execute directly with guards; actual evidence is reviewed"
+      }
+    },
+    {
+      "name": "Mechanism-first construction: hinged parts",
+      "route": "motion_paths.hinge_landing / hinge_lift / hinge_carry / hinge_change / path_positions / keep_clearance",
+      "implementation": "core",
+      "verification": "See automated synthetic tests (and the Blender-backed ones with MODELING_BLENDER). Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair"
+        ],
+        "execution": "Plain Python calls; native effects only through the sole owner",
+        "judgment": "The owner chooses the mechanism and judges the watched motion"
+      }
+    },
+    {
+      "name": "Standard construction checks and trial guards",
+      "route": "checks.run_checks / checks.standard_policy / construction_diagnostics.closing_edges / line_depth",
+      "implementation": "core",
+      "verification": "See automated synthetic tests (and the Blender-backed ones with MODELING_BLENDER). Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair"
+        ],
+        "execution": "Plain Python calls; native effects only through the sole owner",
+        "judgment": "The owner chooses the mechanism and judges the watched motion"
+      }
+    },
+    {
+      "name": "Guide registration",
+      "route": "registration.register_rigid / apply_registration",
+      "implementation": "core",
+      "verification": "See automated synthetic tests (and the Blender-backed ones with MODELING_BLENDER). Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair"
+        ],
+        "execution": "Plain Python calls; native effects only through the sole owner",
+        "judgment": "The owner chooses the mechanism and judges the watched motion"
+      }
+    },
+    {
+      "name": "Live overlap display",
+      "route": "reference_adapter / live_bridge / live bind|launch / overlap_views / review_sheets.aligned_overlay",
+      "implementation": "core, Blender side",
+      "verification": "See automated synthetic tests (and the Blender-backed ones with MODELING_BLENDER). Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair"
+        ],
+        "execution": "Plain Python calls; native effects only through the sole owner",
+        "judgment": "The owner chooses the mechanism and judges the watched motion"
+      }
+    },
+    {
+      "name": "Reference avatar study",
+      "route": "study_extract / study.load_shapes / motion_models / band_profile / blink_report",
+      "implementation": "core",
+      "verification": "See automated synthetic tests (and the Blender-backed ones with MODELING_BLENDER). Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair"
+        ],
+        "execution": "Plain Python calls; native effects only through the sole owner",
+        "judgment": "The owner chooses the mechanism and judges the watched motion"
+      }
+    },
+    {
+      "name": "Trial, reopen and retain",
+      "route": "trials.Trials.trial / reopen / retain (trial_worker, reopen_poses, native_poses)",
+      "implementation": "core over NativeJob and RetainCheckpoint",
+      "verification": "See automated synthetic tests (and the Blender-backed ones with MODELING_BLENDER). Native, provider and appearance outcomes require separate workspace evidence.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "repair"
+        ],
+        "execution": "Plain Python calls; native effects only through the sole owner",
+        "judgment": "The owner chooses the mechanism and judges the watched motion"
       }
     }
   ],

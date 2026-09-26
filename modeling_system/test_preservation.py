@@ -8,7 +8,6 @@ import unittest
 from .controller import fingerprint, read_json, write_json
 from .preservation import PreservationPolicy, file_ref
 from .operating_session import OperatingSession, PROFILES
-from .candidate_pipeline import CandidatePipeline
 from . import test_decisions as fixtures
 
 
@@ -210,18 +209,6 @@ class PreservationTests(unittest.TestCase):
         self.assertIn('required_preservation',observed)
         self.assertNotIn(self.root.as_posix(),json.dumps(observed['required_preservation']))
 
-    def test_pipeline_carries_outcomes_and_allows_verification_to_resolve_missing_measurements(self):
-        pipeline=CandidatePipeline(self.root/'pipeline',revision='1',candidates=lambda s,p:[self.item('fit','appearance_edit')],
-            verify=lambda s,p:[self.item('verify','verification')],retain=lambda s,p:[self.item('retain','retention')],
-            early_review=False,preservation=self.policy,preservation_adapter='fit')
-        first=pipeline(self.state,{})[0]
-        result={'status':'completed','preservation':{'policy':self.policy.revision,'status':'unknown','evidence':[]}}
-        outcomes={'fit':{'task':first,'definition':fingerprint(first),'status':'completed','result':result}}
-        second=pipeline(self.state,outcomes)[-1]
-        self.assertEqual(second['workbench']['preservation']['outcomes'],['shell'])
-        self.assertNotIn('preservation',second['workbench']['consumes']['fit'])
-        self.policy.preflight(second,outcomes)
-
     def test_workspace_requirement_cannot_be_forgotten_but_does_not_block_harmless_work(self):
         tasks=[self.item('edit','appearance_edit'),self.item('read')]
         session=OperatingSession(self.root/'queue',service=self.service,episode=self.episode,owner='native owner',
@@ -240,40 +227,5 @@ class PreservationTests(unittest.TestCase):
         task['payload']['job']['dependency_hashes']={r['path']:r['sha256'] for r in self.outcome['constraints'].values()}
         prepared,consumption=self.policy.prepare(task,{})
         self.assertEqual(prepared['payload']['constraint_inputs'],consumption['consumed'])
-
-    def test_full_pipeline_keeps_constraints_through_save_review_and_retention(self):
-        def follow(key,profile):
-            def factory(state,previous):
-                task=self.item(key,profile)
-                if previous:task['payload']['candidate']=previous['result']['subject']
-                return [task]
-            return factory
-        pipeline=CandidatePipeline(self.root/'pipeline',revision='full',
-            prepare=follow('prepare','analysis'),candidates=follow('fit','appearance_edit'),
-            verify=follow('verify','verification'),retain=follow('retain','retention'),early_review=False,
-            preservation=self.policy,preservation_adapter='fit')
-        def handler(item,context):
-            self.ran.append(item['id'])
-            inputs=item['payload']['constraint_inputs']['shell']
-            values=read_json(inputs['baseline']['path'])['values']
-            if item['id']=='verify':result={'status':'completed','subject':item['payload']['candidate']}
-            else:result=self.result(item['id']+'.json',values)
-            evidence={'kind':'file','path':result['subject']['path'],'role':'Saved synthetic result'}
-            result['workbench']={'checks':{name:{'status':'pass','evidence':[evidence]}
-                for name in PROFILES[item['workbench']['profile']]['outputs']},'findings':[]}
-            return result
-        session=self.session(pipeline,handler)
-        session.run(max_steps=5)
-        self.assertEqual(self.ran,['prepare','fit','verify'])
-        basis=session.review_basis('verify')
-        session.record_review('verify',expected_basis=basis,
-            judgment={'disposition':'useful','scope':'synthetic region','reason':'Reviewed saved fixture','next_question':'Retain fixture'},
-            evidence=[{'kind':'file','path':str(self.base.image),'role':'Actual synthetic review evidence'}])
-        session.run(max_steps=1)
-        self.assertEqual(self.ran,['prepare','fit','verify','retain'])
-        saved=read_json(session.path)['results']['retain']['result']
-        self.assertEqual(saved['preservation']['status'],'pass')
-        self.assertEqual(saved['workbench']['checks']['preservation']['status'],'pass')
-
 
 if __name__=='__main__':unittest.main()

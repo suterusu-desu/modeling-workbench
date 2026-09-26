@@ -3,34 +3,9 @@
 For array contracts, complete projected triangle contact, bounded reports and
 measured scoped native setup, see [preparation and bootstrap](preparation-and-bootstrap.md).
 
-Register a mechanism once, then bind character data and qualified alternatives.
-Use `ParameterizedCatalog` for scope-specific parameters without copying Python
-factories. Its implementation functions receive `(state, previous, parameters)`.
-An implementation can also be `{build, candidates, ...}` with stage functions of
-that signature; `catalog.followup("candidates")` keeps the selected parameters and
-actual predecessor result through CandidatePipeline without another choice.
-Bindings supply `id`, `implementation`, a meaningful `description`, `parameters`
-and optional exact `conditions`. Missing support excludes a binding; identical
-mechanism/parameter aliases are refused. No Cartesian strength sweep is generated.
-
-`bind_array_method` is a ready-made implementation for `ArrayPreparation`:
-
-```python
-from modeling_system.method_catalog import ParameterizedCatalog, bind_array_method
-from modeling_system.preparation import ArrayPreparation
-
-methods = ParameterizedCatalog({"arrays": bind_array_method}, qualified_bindings)
-# Each binding's parameters:
-# {task, revision, question, method, operation, inputs, reads, writes,
-#  optional parameters, lane, handler}
-# inputs[name] = {path, sha256, array}; every hash is a current task read.
-# Use catalog=methods (or a CandidatePipeline stage),
-# handlers={"arrays": ArrayPreparation(run / "prepared")}, in OperatingSession.
-```
-
-Offer alternatives that answer different live questions, such as explicit
-attachment-pair motion versus a guide-material fit where both are qualified.
-Use applicability conditions to exclude missing correspondence. A single qualified native operation runs directly under its owner. `MethodCatalog.followup(stage)` marks the declared continuation of the actual chosen method; multiple alternatives require explicit owner choice.
+Change the native file with the plain [trial, reopen and retain](trial-reopen-retain.md) calls; the
+method catalogs and candidate pipelines that once fed an operating session's queue were archived. The
+material fields, native jobs and retention below are what those calls and existing sessions use.
 
 ## Material fields and verification
 
@@ -109,8 +84,7 @@ Supply `display.mode="GUIDE_WIRE"`; pose refresh must be false. Diagnostic modes
 arbitrary scripts and geometry changes are outside this operation. There is no
 silent fallback to another route or second native writer.
 
-The reusable `native_retention.run_retention` orchestrator invokes adapter hooks
-for fresh owner/expected-state verification, one rollback plus registry backup,
+An adapter's `retain_checkpoint` operation performs fresh owner/expected-state verification, one rollback plus registry backup,
 candidate open, runtime-only restoration with full content comparison, declared
 controls/display, and a new clean save. It verifies source, candidate, reopen,
 registry and implementation dependencies again before save and final completion.
@@ -122,8 +96,7 @@ fresh guards at those boundaries and does not qualify for this shortcut.
 
 Phase intent is persisted before effects. The transaction identity comes from
 the controller attempt and handler location; an existing identity refuses even
-after success. `native_retention.inspect_receipt(root, owner, transaction_id)`
-reads historical evidence without observing Blender or replaying work. Reconcile
+after success. The adapter's receipt records the phases; reading it observes no Blender and replays no work. Reconcile
 an interrupted or lost response using that receipt, the exact files and a fresh
 observation through the existing controller. Never automatically restore an old
 rollback over later user work. Target absence checks protect the cooperative

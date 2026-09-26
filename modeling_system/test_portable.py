@@ -148,27 +148,3 @@ class PortableTests(unittest.TestCase):
         self.assertEqual(view['authority_changed_since_entry'][0]['comparison'],'content changed')
 
 if __name__=='__main__':unittest.main()
-
-class OrderedMotionTests(unittest.TestCase):
-    def test_exact_boundary_repeated_cycles_and_independent_reopening(self):
-        with tempfile.TemporaryDirectory() as d:
-            root=Path(d);s=ModelingService(store=root/'store')
-            rows=[{'index':i,'pose':{'time':t,'label':label,'controls':{'blink':b}},'before_state':'b'+str(i),'after_state':'a'+str(i)}
-                  for i,(t,label,b) in enumerate([(0,'open',0),(.05,'closing',.7),(.065,'closing',.75),(.1,'contact',1),(.2,'reopening',.7),(.4,'open rest',0)])]
-            path=root/'plan.json';path.write_text(json.dumps({'frames':rows}))
-            r=s.schedule_ordered_motion(str(path))
-            self.assertTrue(r['all_samples_each_cycle'])
-            self.assertEqual(len(r['cycles']),4)
-            schedule=json.loads(s.store.resolve_blob(r['schedule']).read_bytes())
-            for i in range(3):
-                boundary=next(x for x in schedule if x['cycle_index']==i and x['cycle_frame']==18)
-                self.assertEqual(boundary['source_index'],1)
-            self.assertTrue(any(x['source_index']==4 and x['phase']=='reopening' for x in schedule))
-
-    def test_too_short_samples_are_reported_without_continuous_claim(self):
-        with tempfile.TemporaryDirectory() as d:
-            root=Path(d);s=ModelingService(store=root/'store')
-            rows=[{'pose':{'time':t,'label':str(i)},'before_state':'b'+str(i),'after_state':'a'+str(i)} for i,t in enumerate([0,.001,.002,.4])]
-            path=root/'plan.json';path.write_text(json.dumps({'frames':rows}))
-            r=s.schedule_ordered_motion(str(path),fps=10)
-            self.assertFalse(r['all_samples_each_cycle']);self.assertTrue(r['cycles'][0]['missing_indices'])

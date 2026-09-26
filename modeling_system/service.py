@@ -21,11 +21,8 @@ class UnconfiguredNative:
         raise ValueError('Native adapter is unconfigured for this character/workspace. Bind and verify the native owner before native operations; recorded analysis remains available.')
 
 READ_OPERATIONS={'capabilities','runtime_status','inspect_situation','inspect_workflow','read_record',
-                 'read_component_catalog','locate_component','select_component',
-                 'retrieve_experience','decision_workspace','semantic_impact','inspect_operations','check_reuse',
-                 'package_readiness','evidence_manifest','operation_context','select_generation_route','inspect_recipe','recipe_template','inspect_native_transaction',
-                 'inspect_provider_workflow','preview_provider_cost',
-                 'operating_protocol','inspect_operating_session'}
+                 'retrieve_experience','decision_workspace','semantic_impact','inspect_operations','package_readiness',
+                 'evidence_manifest','operation_context','select_generation_route','operating_protocol','inspect_operating_session'}
 
 
 class ModelingService:
@@ -277,177 +274,20 @@ class ModelingService:
         from .learning import promote
         return promote(self,procedure_id,judgments,instruction,stages,conditions,limits,counterexamples or [],executable_paths or [],level)
 
-    def recipe_template(self, name: str = 'diagnostic-review') -> dict:
-        """Read a bundled generic offline recipe; returns its template and content identity without writing."""
-        from .recipes import bundled_template
-        return bundled_template(name)
-
-    def create_recipe(self, episode: str, template: dict, bindings: dict, idempotency_key: str) -> dict:
-        """Instantiate a bounded offline diagnostic recipe with typed pinned inputs in one episode; no analysis dispatch."""
-        from .recipes import create
-        return create(self, episode, template, bindings, idempotency_key)
-
-    def inspect_recipe(self, recipe: str) -> dict:
-        """Read exact ready/reusable/stale/blocked/review/uncertain recipe steps without executing or writing."""
-        from .recipes import inspect_recipe
-        return inspect_recipe(self, recipe)
-
-    def revise_recipe_inputs(self, recipe: str, expected_revision: str, bindings: dict) -> dict:
-        """Replace named recipe inputs with explicit new pinned evidence; retain earlier results and invalidate affected uses."""
-        from .recipes import revise_inputs
-        return revise_inputs(self, recipe, expected_revision, bindings)
-
-    def run_recipe_step(self, recipe: str, step: str, expected_revision: str) -> dict:
-        """Run one ready offline analysis through the existing episode journal, or reuse its exact result; never replay uncertain work."""
-        from .recipes import run_step
-        return run_step(self, recipe, step, expected_revision)
-
-    def review_recipe_step(self, recipe: str, step: str, expected_revision: str, decision: str, reason: str, evidence: list[dict]) -> dict:
-        """Retain an explicit accepted/rejected diagnostic review bound to current inputs/results; no native or appearance authorization."""
-        from .recipes import review_step
-        return review_step(self, recipe, step, expected_revision, decision, reason, evidence)
-
-    def recover_recipe_step(self, recipe: str, step: str, expected_revision: str) -> dict:
-        """Recover an interrupted recipe's known durable operation result without rerunning the analysis; uncertainty stays blocked."""
-        from .recipes import recover_step
-        return recover_step(self, recipe, step, expected_revision)
-
     def inspect_control_coverage(self, case_path: str, expected_state: dict) -> dict:
         """Retain offline reverse target ancestry, omitted controls and explicit restrictions; no native effects or controllability claim."""
         from .control_coverage import inspect
         return inspect(self, case_path, expected_state)
-
-    def inspect_target_domain(self, case_path: str, expected_state: dict) -> dict:
-        """Retain offline geometric-candidate, authored-mask, unknown-semantic and named transition-check coverage; no target admission or native effects."""
-        from .target_domain import inspect
-        return inspect(self, case_path, expected_state)
-
-    def inspect_surface_correspondence(self, case_path: str, expected_state: dict) -> dict:
-        """Retain ordered surface alternatives, source-edge gaps and exact selected-section relations; no anatomical admission or native effects."""
-        from .surface_correspondence import inspect
-        return inspect(self, case_path, expected_state)
-
-    def record_topology_lineage(self, case_path: str) -> dict:
-        """Retain exact operation-produced topology relations bound to an original receipt; never infer proximity or write native geometry."""
-        from .topology_lineage import record
-        return record(self, case_path)
-
-    def prepare_mesh_batch(self, case_path: str) -> dict:
-        """Retain a fully preflighted typed raw-mesh sequence; preparation does not contact Blender or establish native readiness."""
-        from .native_plans import mesh
-        return mesh(self, case_path)
-
-    def prepare_library_import(self, manifest_path: str, existing: list[list[str]], namespace: str, limits: dict | None = None) -> dict:
-        """Retain an explicit library closure/namespace/budget plan; actual native source and destination verification remain owner-controlled."""
-        from .native_plans import library
-        return library(self, manifest_path, existing, namespace, limits)
-
-    def inspect_native_transaction(self, receipt_path: str, expected_sha256: str) -> dict:
-        """Read exact transaction stages and verify saved artifact bytes without native calls, replay, rollback or journal writes."""
-        from .native_plans import inspect_transaction
-        return inspect_transaction(receipt_path, expected_sha256)
-
-    def create_provider_workflow(self, episode: str, graph: dict, idempotency_key: str) -> dict:
-        """Compose a bounded graph of existing jobs, reviews and diagnostic results in one episode; never dispatch or fetch a price."""
-        from .provider_workflow import create
-        return create(self, episode, graph, idempotency_key)
-
-    def bind_provider_nodes(self, workflow: str, expected_revision: str, bindings: dict, reason: str = '') -> dict:
-        """Atomically bind exact existing jobs/reviews/recipe results with retained replacement history and dependency invalidation."""
-        from .provider_workflow import bind
-        return bind(self, workflow, expected_revision, bindings, reason)
-
-    def inspect_provider_workflow(self, workflow: str) -> dict:
-        """Read current job/review/dependency states and next actions without altering jobs or contacting providers."""
-        from .provider_workflow import inspect
-        return inspect(self, workflow)
-
-    def preview_provider_cost(self, workflow: str) -> dict:
-        """Read remaining known quoted subtotals by denomination; unknown/stale future prices stay explicit and no spend is authorized."""
-        from .provider_workflow import preview
-        return preview(self, workflow)
-
-    def quote_provider_node(self, workflow: str, expected_revision: str, node: str, amount: str | int | float, unit: str, observed_at: str, expires_at: str, source: str, evidence: list[dict]) -> dict:
-        """Retain observed quote evidence pinned to current job/source/dependency basis; no price lookup, reservation or dispatch."""
-        from .provider_workflow import quote
-        return quote(self, workflow, expected_revision, node, amount, unit, observed_at, expires_at, source, evidence)
 
     def inspect_execution_receipt(self, case_path: str) -> dict:
         """Inspect pinned operation or worker evidence without replaying any effect."""
         from .execution_receipts import inspect
         return inspect(self, case_path)
 
-    def build_component_catalog(self, state: str, object_name: str, connectivity: str = 'shared_edge', max_triangles: int | None = None) -> dict:
-        """Retain a compact exact-revision catalog of disconnected recorded triangles with lazy members and explicit edge/vertex connectivity."""
-        from .component_catalog import build
-        return build(self, state, object_name, connectivity, max_triangles)
-
-    def read_component_catalog(self, catalog: str, offset: int = 0, limit: int = 20, max_chars: int = 8000, order: str = 'largest') -> dict:
-        """Read bounded component metrics without materializing all component members or contacting native geometry."""
-        from .component_catalog import read
-        return read(self, catalog, offset, limit, max_chars, order)
-
-    def locate_component(self, catalog: str, triangle: int) -> dict:
-        """Locate one exact recorded triangle in its immutable catalog; no anatomy or proximity mapping."""
-        from .component_catalog import locate
-        return locate(self, catalog, triangle)
-
-    def select_component(self, catalog: str, component: str, expected_state: str, expected_geometry_hash: str | None = None, members: str = 'triangles', offset: int = 0, limit: int = 256, max_chars: int = 8000) -> dict:
-        """Read one component's exact members after verifying source revision and geometry; this does not select or modify Blender objects."""
-        from .component_catalog import select
-        return select(self, catalog, component, expected_state, expected_geometry_hash, members, offset, limit, max_chars)
-
-    def inspect_graph_path(self, case_path: str, expected_state: dict, max_nodes: int = 100000, max_edges: int = 500000) -> dict:
-        """Retain bounded shortest-path evidence in an exact selected graph; exhaustion stays incomplete and no result establishes global or anatomical reachability."""
-        from .graph_paths import inspect
-        return inspect(self, case_path, expected_state, max_nodes, max_edges)
-
-    def compose_topology_lineage(self, lineages: list[str]) -> dict:
-        """Compose matching topology revisions while preserving introduced ancestry and original operation records."""
-        from .topology_lineage import compose
-        return compose(self, lineages)
-
-    def remap_topology_selection(self, lineage: str, selection: list[str], expected_source: str, direction: str = 'forward', policy: str = 'strict') -> dict:
-        """Retain exact selection remapping; strict mode exposes partial-ancestry ambiguity without emitting a selector."""
-        from .topology_lineage import remap
-        return remap(self, lineage, selection, expected_source, direction, policy)
-
     def analyze_repair(self, case_path: str, proposed_delta: list[float] | None = None, max_seconds: float = 20) -> dict:
         """Retain bounded offline coupled XYZ fit/preservation diagnostics and evidence-acquisition nominations; never apply or dispatch."""
         from .repair_analysis import analyze
         return analyze(self, case_path, proposed_delta, max_seconds)
-
-    def register_response(self, dependencies: str, semantic_validation: str, spec: dict, arrays_path: str, evidence: list[dict]) -> dict:
-        """Validate a sparse exact/piecewise/derivative/approximate response against bound dependencies, semantics, native baseline and influence scope."""
-        from .responses import register
-        return register(self,dependencies,semantic_validation,spec,arrays_path,evidence)
-
-    def predict_response(self, response: str, dependencies: str, control_delta: dict, evidence: list[dict]) -> dict:
-        """Compute a scoped counterfactual with actual guide/depth constraints; stale dependencies and out-of-range changes are refused."""
-        from .responses import predict
-        return predict(self,response,dependencies,control_delta,evidence)
-
-    def compare_prediction(self, prediction: str, native_state: str, object_name: str, axis: int,
-                           tolerance: float, inspection: dict) -> dict:
-        """Compare predicted/native owned coordinates and worst outliers; retain whole/close/depth/motion/appearance judgments independently."""
-        from .responses import compare_native
-        return compare_native(self,prediction,native_state,object_name,axis,tolerance,inspection)
-
-    def check_reuse(self, record: str, before: str, after: str, domains: list[str]) -> dict:
-        """Read whether specified recorded dependency domains still match; view, geometry and semantic claims remain distinct."""
-        from .responses import reuse
-        return reuse(self,record,before,after,domains)
-
-    def adapt_ancestry_response(self, npz_path: str, schema_path: str, verification_path: str) -> dict:
-        """Reuse the retained scoped subdivision/ocular export through an explicit adapter, measuring historical reconstruction and declaring current/influence gaps."""
-        from .ancestry_adapter import adapt
-        return adapt(self,npz_path,schema_path,verification_path)
-
-    def schedule_ordered_motion(self, plan_path: str, fps: int = 60, normal_cycles: int = 3, slow_cycles: int = 1,
-                                slow_speed: float = .25, lead: float = .25, rest: float = .6) -> dict:
-        """Schedule exact recorded source identities independently per cycle, preserving closing/reopening and reporting actual omitted samples."""
-        from .ordered_motion import plan
-        return plan(self,plan_path,fps,normal_cycles,slow_cycles,slow_speed,lead,rest)
 
     def evidence_manifest(self, episode: str | None = None) -> dict:
         """Declare complete reachable episode evidence and external private file locators/hashes/access/coverage without embedding native assets."""

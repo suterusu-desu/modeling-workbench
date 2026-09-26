@@ -160,15 +160,9 @@ def summarize_workflow(service,handle):
         if review:
             result['source_review']=service.store.get(review,'reference_review')
     elif item['kind']=='diagnostic_recipe':
-        try:
-            recipe=service.inspect_recipe(handle)
-            result.update(purpose='Reusable offline diagnostic recipe',
-                steps=[{k:v for k,v in step.items() if k in ('id','kind','status','blocked_by')} for step in recipe['steps']],
-                next_read=dict(operation='inspect_recipe',arguments=dict(recipe=handle)))
-            if any(s['status'] in ('running','needs_recovery') for s in recipe['steps']):
-                result.update(status='needs_reconciliation',recovery='Inspect the recipe and recover the reserved original operation; do not replay.')
-        except (ValueError,KeyError,RuntimeError,OSError) as error:
-            result.update(status='needs_reconciliation',reason=str(error))
+        result.update(purpose='Offline diagnostic recipe (engine archived)',
+            next_read=dict(operation='read_record',arguments=dict(record=handle)),
+            limits='The recipe engine left the package; its record stays readable, its steps cannot run here.')
     elif item['kind']=='experiment':
         result['constraint_status']=data.get('constraint_status','evaluated displacement support not established')
         result['intervention']=data.get('intervention')

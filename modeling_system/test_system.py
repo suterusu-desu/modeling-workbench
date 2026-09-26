@@ -7,7 +7,6 @@ import numpy as np
 from .store import canonical,digest
 from .workbench import Workbench
 from . import geometry
-from .blender_capture import context_framing
 
 
 class GeometryTests(unittest.TestCase):
@@ -45,18 +44,6 @@ class GeometryTests(unittest.TestCase):
     def test_same_counts_do_not_establish_topology_correspondence(self):
         after=dict(self.a,tri=np.array([[0,2,1]],dtype=np.int32))
         with self.assertRaises(ValueError):geometry.compare(self.a,after)
-
-    def test_context_framing_contains_face_bounds_at_rotated_views(self):
-        import itertools,math
-        bounds=[[-.475,-.35,0],[.475,.35,.972]]
-        for yaw in (0,35,90,-35):
-            center,scale=context_framing(bounds,yaw)
-            angle=math.radians(yaw)
-            for point in itertools.product(*zip(*bounds)):
-                relative=np.asarray(point)-center
-                x=relative[0]*math.cos(angle)+relative[1]*math.sin(angle)
-                self.assertLess(abs(x),scale/2)
-                self.assertLess(abs(relative[2]),scale/2/1.2)
 
     def test_diagonal_changes_require_explicit_matching_polygon_correspondence(self):
         before={'co':np.array([[0.,0,0],[1,0,0],[1,1,0],[0,1,0]]),

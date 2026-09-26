@@ -29,20 +29,12 @@ read credential files. Configured native dependencies are not live verification.
 
 ## Operate
 
-Use [direct sessions](operating-session.md), `ModelingService`, or the installed
-CLI/MCP service. `direct_session.create_session` requires preservation policies
+Change native files with [trial, reopen and retain](trial-reopen-retain.md). Use
+[direct sessions](operating-session.md), `ModelingService`, or the installed CLI/MCP
+service for the rest. `direct_session.create_session` requires preservation policies
 for affected appearance edits and retention; the owner supplies explicit qualified
 operations and choices. No provider ledger or public prompt projection is needed.
 Session creation does not start a goal or automation.
-
-For composed saved-array work, run
-`python -m modeling_system.cooperative_scopes MANIFEST`. The manifest binds exact
-runtime and scope hashes, workspace, directory, owner, episode, objective and a
-finite `max_steps`. Add `task_order` when independent choices need ordering.
-Workspace is relative to the manifest; data paths are relative to the workspace.
-`authority_file` and `state_file` default to `AGENTS.md` and `PROJECT.md`.
-Completed tasks remain frozen; changed inputs block stale work. This runner has
-no native handlers.
 
 ## Native and optional integrations
 

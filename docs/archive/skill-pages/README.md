@@ -2,9 +2,8 @@
 
 These pages left the operator skill when it became a short router around the construction-first verbs. Their modules
 were never or rarely used in real modeling, belonged to an orchestration layer built for an inference service that has
-since been removed, or recorded development history rather than operation. The pages are kept here for anyone who still uses the
-modules; the modules themselves remain in the package until they are archived on a tagged
-commit.
+since been removed, or recorded development history rather than operation. The pages are kept here for reference. Most of their modules left the package in 0.2.68; the tag
+`archive/0.2.67` keeps the last version that contains them, with their tests.
 
 | Page | Why it left the skill |
 |---|---|

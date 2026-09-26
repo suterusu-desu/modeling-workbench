@@ -179,7 +179,7 @@ class NativeBridge:
                 ' sys.modules[_n]=_package\n'
                 'if list(sys.modules[_n].__path__)!=[_p]: raise RuntimeError("Native package namespace collision")\n'
                 'importlib.invalidate_caches()\n'
-                'for _dependency in (_n+".native_bridge",_n+".geometry",_n+".blender_capture"):\n'
+                'for _dependency in (_n+".native_bridge",_n+".geometry"):\n'
                 ' if _dependency in sys.modules: importlib.reload(sys.modules[_dependency])\n'
                 '_m=importlib.import_module(_n+".blender_operations")\n'
                 '_m=importlib.reload(_m)\n'

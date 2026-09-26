@@ -45,8 +45,8 @@ corresponding anatomical region and landmarks before transporting coordinates.
 Shared components and triangle ancestry cannot distinguish exterior, return and
 neighboring detail. Retain rejected branch alternatives and their reasons;
 nearest points, curve extrema and equal arclength fractions cannot supply missing
-correspondence. A failed trace does not reject the guide. `inspect_surface_correspondence`
-retains the existing records, crop/endpoint limits and supported plane contract. Smooth sections and
+correspondence. A failed trace does not reject the guide. Keep crop and endpoint limits with any
+traced correspondence. Smooth sections and
 held boundary points do not by themselves qualify inter-section correspondence
 or displacement continuity across the connected patch.
 
