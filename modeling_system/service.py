@@ -764,6 +764,21 @@ class ModelingService:
         from .review_sheets import aligned_overlay
         return aligned_overlay(render,drawing,render_points,drawing_points,output,crop=crop,lines=lines or (),alpha=alpha)
 
+    def bake_poses(self, poses: str, objects: list[str], tolerance: float, output: str, blender: str | None = None,
+                   fps: int = 60, timing: dict | None = None) -> dict:
+        """Bake saved poses (a trial's evaluated.npz) to the fewest blend shapes that carry every object's motion within the tolerance (the end pose plus correctives driven by bumps of the same weight), write the bake file and the blink clip, and with a Blender executable export an FBX and verify its round trip."""
+        from .bake import bake_poses, clip_curve, export_fbx
+        target=Path(output)
+        if target.exists(): raise FileExistsError('Refusing to overwrite an existing bake: '+str(target))
+        target.parent.mkdir(parents=True,exist_ok=True)
+        report=bake_poses(poses,objects,tolerance=tolerance,output=target)
+        clip=clip_curve(report['drivers'],timing=timing,fps=fps)
+        clip_path=target.with_suffix('.clip.json'); clip_path.write_text(json.dumps(clip,indent=1),encoding='utf-8')
+        report['clip_file']=str(clip_path.resolve())
+        if blender:
+            report['fbx']=export_fbx(target,clip,blender=blender,output_root=target.parent/(target.stem+'-fbx'))
+        return report
+
     def review_sheet(self, rows: list[dict], columns: list[str], output: str, title: str | None = None) -> dict:
         """Compose a matched review sheet: one labeled row per entry ({label, images: [path or null, ...]}), one headed column per state or view, every source pinned by hash, unmatched sizes reported."""
         from .review_sheets import compose_review_sheet

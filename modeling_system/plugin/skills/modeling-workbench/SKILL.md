@@ -44,7 +44,8 @@ overlays on drawings ([guides and display](references/guide-and-show.md)) and ma
 a candidate; approval comes from looking at the whole motion.
 
 **construct** - build the mechanism: hinged lid landing on the opposing lid (still or lifted in the middle), one-pace
-roll, clearance, attached parts carried on the edge ([motion paths](references/motion-paths.md)). Deformers and guide
+roll, clearance, attached parts carried on the edge ([motion paths](references/motion-paths.md)); bake it to the fewest
+blend shapes plus a clip curve and round-trip the FBX ([bake](references/bake.md)). Deformers and guide
 volume fits are bounded clean-up of a surface, not the way to create motion ([metric fitting](references/metric-fitting.md)).
 
 **check** - measure every candidate the same way from one declaration: rest identity, motion outside the region,

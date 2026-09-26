@@ -50,6 +50,16 @@ class ServiceVerbTests(unittest.TestCase):
                                                      'output': str(self.root / 'x.npz')})
         self.assertEqual(refused['status'], 'failed')
 
+    def test_bake_saved_poses(self):
+        np.savez(self.root / 'evaluated.npz', **eye.states(eye.hinged()))
+        report = self.run_op('bake_poses', {'poses': str(self.root / 'evaluated.npz'), 'objects': ['Skin'],
+                                            'tolerance': .05, 'output': str(self.root / 'bake' / 'blink.npz')})
+        self.assertEqual(report['drivers'], {'blink': 'main', 'blink_mid': 'mid'})
+        clip = json.loads(Path(report['clip_file']).read_text())
+        self.assertEqual(set(clip['frames'][0]['weights']), {'blink', 'blink_mid'})
+        with np.load(report['bake_file']) as bake:
+            self.assertEqual(sorted(bake.files), ['Skin::faces', 'Skin::rest', 'Skin::shape::blink', 'Skin::shape::blink_mid'])
+
     def test_register_a_guide(self):
         case = heads.RegistrationTests(); case.setUp()
         np.savez(self.root / 'generated.npz', co=case.generated); np.savez(self.root / 'neutral.npz', co=case.reference)

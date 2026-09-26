@@ -144,7 +144,8 @@ If the result ships as blend shapes, check how many shapes carry the motion. One
 round eye at mid-blink. In real use one mid-blink corrective driven at 4s(1-s) by the same control reproduced the built
 roll within a few thousandths of the eye's width and kept clearance, for the skin and the carried lash. The avatars ship
 one shape per channel, since their eyes are flat and recessed, and shape the timing with the animation curve. Timing is
-a curve over a few shapes, not a per-point path.
+a curve over a few shapes, not a per-point path. [Bake to blend shapes](bake.md) finds the fewest shapes, writes the clip
+and round-trips an FBX.
 
 ## Notes from reference avatars
 
