@@ -117,6 +117,8 @@ Found in real use:
 ## Checks that catch a wrong mechanism
 
 Numbers can reject a candidate; they cannot approve one. Run these on the avatars first to see passing values.
+[Standard construction checks](construction-checks.md) run all of them from one declaration and guard native trials
+with them.
 
 - **One closing rate.** `closing_edges` gives each margin point's closed share of its gap to the opposing rest line and
   its turn share, per pose and per stretch of the margin. A spread of more than about a tenth at mid-motion is a zipper.

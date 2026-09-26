@@ -32,6 +32,8 @@ Preserve the [retained modeling method](references/method.md). Use registered
 guides, depth and corresponding sections when fitting static shape; motion follows
 the mechanism-first order above. Protect achieved
 evaluated shapes through motion using [consumed preservation constraints](references/preservation-and-lessons.md).
+Declare what a moving feature may do once and let [standard construction checks](references/construction-checks.md)
+measure every candidate and guard its trial and retention, instead of writing a per-trial adapter.
 When local repair conflicts with preserved outcomes, solve connected controls
 within qualified guide tolerances and restore the affected outcomes before retention.
 
