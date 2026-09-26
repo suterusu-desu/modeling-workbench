@@ -20,9 +20,14 @@ shape key that moves anything as a world-space delta, key metadata and drivers, 
 ## Find the parts
 
 Pick the lid margin's vertices once (for example the loop where the outer skin turns into the socket) and order them
-with `order_loop(vertices, edges)`. `rings(rest, edges, margin)` numbers the loops outward over the outer face (+1,
-+2, ...) and inward over the lid's inner surface and the socket pocket (-1, -2, ...) in the front view. The corners are
-the margin vertices where the blink's vertical motion changes sign.
+with `order_loop(vertices, edges)`. `rings(rest, edges, margin, polygons=avatar['polygons'])` numbers the loops outward
+over the outer face (+1, +2, ...) and inward over the lid's inner surface and the socket pocket (-1, -2, ...), the two
+sides told apart by the faces on either side of the margin (without polygons, by the front view, which misreads the
+avatars' pockets: they reach wider than the opening). The corners are
+the margin vertices where the blink's vertical motion changes sign. `loop_topology(rest, polygons, margin,
+travel=...)` reports whether the margin and the next loops are closed quad loops of one count, their poles, the inner
+rings and how many vertices move (by more than a millionth of the largest travel) (the service's `study_blink` adds it with `margin_loop`): a report to compare with
+the avatars, not a gate.
 
 ## Measure the construction
 
@@ -58,6 +63,8 @@ Measured on three commercial anime avatars (eye width w = the distance between t
 | Lower-lid rise at the centre | 7-30 % of the opening, middle only, same timing as the upper lid |
 | Corner travel | .02-.10 w |
 | Moving vertices per eye | about 170-190 (base mesh) |
+| Loops round the opening | margin and the next three closed, one count each (28-37), quads; poles from ring 3 out |
+| Lash strips | separate, 90-104 % of the margin travel under them, 16-33° turn, 0.86-1.23x length |
 | Shapes per channel | one; timing from the animation curve |
 
 Their eyes are flat and recessed, so a straight slide clears them. A round eye close behind the lid needs the turn

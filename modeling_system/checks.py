@@ -34,6 +34,15 @@ LIMITS = {
     'seam_share': .05,              # closed edge's median distance from the opposing edge, share of the opening
     'roll_deviation_share': .1,     # distance from one roll about the hinge, share of the opening
     'closed_depth_error': .02,      # closed line's depth below the corner line minus the declared target, share of width
+    'corner_travel_share': .1,      # largest travel of a closing corner, share of the corner distance
+    'corner_ramp': 0.,              # how far the margin's travel reaches 90 % of its most sooner than `min_ramp` of its
+                                    # length from either end (a pinched corner)
+    'band_reach': .55,              # height above the margin (share of the width) where the band's travel falls below a tenth
+    'lash_travel': 0.,              # how far a lash root's travel leaves .9-1.05 of the travel of the margin under it
+    'lash_turn': 35.,               # largest turn of a lash about its root relative to the lid it rides (degrees)
+    'lash_length': .25,             # largest change of a lash's root-to-tip length, share of its rest length
+    'lash_timing': .1,              # largest difference between a lash root's and its host's share of travel at a phase
+    'combination_seam': .05,        # largest |median signed seam gap| of a declared combination, share of the opening
     'carrier_shapes': 2.,           # blend shapes needed to carry the motion within the declared tolerance
 }
 # Defects a baseline may already have: with a baseline the limit is an allowance over the baseline's value, so a candidate
@@ -99,7 +108,7 @@ def validate_declaration(declaration):
     if not isinstance(d, dict) or not isinstance(d.get('object'), str) or not d['object'] or 'region' not in d:
         raise ValueError('A declaration needs the moving object and the region allowed to move')
     unknown = set(d) - {'object', 'region', 'region_label', 'rest', 'protected', 'clearance', 'symmetry', 'closing',
-                        'carrier', 'limits', 'arrays', 'description'}
+                        'carrier', 'limits', 'arrays', 'description', 'band', 'lash', 'combinations'}
     if unknown:
         raise ValueError(f'Unknown declaration fields: {sorted(unknown)}')
     if not all(isinstance(p, str) and p for p in d.get('protected', [])):
@@ -108,6 +117,10 @@ def validate_declaration(declaration):
         if (not isinstance(entry, dict) or not isinstance(entry.get('obstacle'), str)
                 or not _nonnegative(entry.get('minimum', 0.))):
             raise ValueError('Each clearance entry needs an obstacle object and a nonnegative minimum')
+        gaze = entry.get('gaze')
+        if gaze is not None and (not isinstance(gaze, dict) or len(gaze.get('pivot', [])) != 3 or not all(
+                len(r) == 2 and len(r[0]) == 3 and _nonnegative(abs(r[1])) for r in gaze.get('rotations', []))):
+            raise ValueError('Gaze needs a pivot and rotations as [[axis x, y, z], degrees] pairs')
     symmetry = d.get('symmetry')
     if symmetry is not None and (not isinstance(symmetry, dict) or symmetry.get('axis') not in (0, 1, 2)):
         raise ValueError('Symmetry needs the mirror axis 0, 1 or 2')
@@ -115,10 +128,22 @@ def validate_declaration(declaration):
     if closing is not None and (not isinstance(closing, dict) or 'moving' not in closing or 'facing' not in closing
                                 or ('pivot' in closing) != ('axis' in closing)):
         raise ValueError('Closing needs the moving and facing edges, and both a pivot and an axis or neither')
+    if closing is not None and 'corners' in closing and len(closing['corners']) != 2:
+        raise ValueError('Closing corners are the two vertices where the edges meet')
     depth = (closing or {}).get('closed_depth')
     if depth is not None and (not isinstance(depth, dict) or not _nonnegative(depth.get('target'))
-                              or len(depth.get('corners', [])) != 2):
+                              or len(depth.get('corners', (closing or {}).get('corners', []))) != 2):
         raise ValueError('closed_depth needs a nonnegative target share and the two corner vertices')
+    for key in ('band', 'lash', 'combinations'):
+        if key in d and not closing:
+            raise ValueError(f'{key} checks need the closing edges')
+    lash = d.get('lash')
+    if lash is not None and (not isinstance(lash, dict) or not isinstance(lash.get('object'), str)
+                             or len(lash.get('roots', [])) == 0 or len(lash.get('roots', [])) != len(lash.get('tips', []))):
+        raise ValueError('The lash check needs the lash object and matching root and tip vertices')
+    for combo in d.get('combinations', []):
+        if not isinstance(combo, dict) or not combo.get('name') or not combo.get('poses'):
+            raise ValueError('Each combination needs a name and a poses file whose last phase is the combined closed pose')
     carrier = d.get('carrier')
     if carrier is not None and (not isinstance(carrier, dict) or not _positive(carrier.get('tolerance'))):
         raise ValueError('The carrier check needs a positive tolerance')
@@ -151,6 +176,10 @@ def applicable_checks(declaration):
         ids += ['facing_travel_share', 'closing_spread', 'seam_share']
         ids += ['roll_deviation_share'] if 'pivot' in d['closing'] else []
         ids += ['closed_depth_error'] if d['closing'].get('closed_depth') else []
+        ids += ['corner_travel_share', 'corner_ramp'] if d['closing'].get('corners') else []
+        ids += ['band_reach'] if d.get('band') is not None else []
+        ids += ['lash_travel', 'lash_turn', 'lash_length', 'lash_timing'] if d.get('lash') else []
+        ids += ['combination_seam'] if d.get('combinations') else []
     ids += ['carrier_shapes'] if d.get('carrier') else []
     return ids
 
@@ -163,6 +192,35 @@ def _stack(states, name):
     if P.ndim != 3 or P.shape[2] != 3 or not np.isfinite(P).all():
         raise ValueError(f'Object {name!r} needs finite XYZ positions with the same vertex count at every phase')
     return P
+
+
+def _rotation(axis, degrees):
+    k = np.asarray(axis, float); k = k / np.linalg.norm(k); a = np.radians(float(degrees))
+    K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
+    return np.eye(3) + np.sin(a) * K + (1 - np.cos(a)) * K @ K
+
+
+def _clearance_row(P, points, O, entry, minimum, phases):
+    """Shortfall of the points that start outside the obstacle, each keeping the smaller of the minimum and its own rest
+    clearance; points inside the envelope at rest (a socket beside or behind the obstacle) are not followed."""
+    gaps = []
+    for g in range(len(phases)):
+        centre = (np.asarray(entry['centre'], float) if entry.get('centre') is not None else O[g].mean(axis=0))
+        pts = P[g][points]
+        env = keep_clearance(pts, O[g], centre, -1., angular_radius_degrees=entry.get('angular_radius_degrees', 2.))['envelope']
+        gaps.append(np.linalg.norm(pts - centre, axis=1) - env)
+    gaps = np.array(gaps)                                  # (phases, points); NaN where the obstacle is not behind
+    followed = np.isfinite(gaps[0]) & (gaps[0] >= 0)
+    need = np.minimum(minimum, gaps[0])
+    miss = np.where(followed[None] & np.isfinite(gaps), need[None] - gaps, -np.inf)
+    worst = np.unravel_index(np.argmax(miss), miss.shape) if followed.any() else None
+    value = max(0., float(miss[worst])) if worst is not None and np.isfinite(miss[worst]) else 0.
+    return {'minimum': minimum, 'shortfall': value,
+            'at': {'phase': phases[worst[0]], 'vertex': int(points[worst[1]])} if value > 0 else None,
+            'closest_followed': float(np.nanmin(np.where(followed[None], gaps, np.nan))) if followed.any() else None,
+            'followed_points': int(followed.sum()),
+            'inside_at_rest': int(np.count_nonzero(np.isfinite(gaps[0]) & (gaps[0] < 0))),
+            'not_in_front_of_obstacle': int(np.count_nonzero(~np.isfinite(gaps[0])))}
 
 
 def _measure(d, states, base, baseline=None):
@@ -207,29 +265,21 @@ def _measure(d, states, base, baseline=None):
             points = region if entry.get('points', 'region') == 'region' else _indices(
                 entry['points'], base, 'points', n, 'clearance points')
             O = _stack(states, entry['obstacle']); minimum = float(entry.get('minimum', 0.))
-            gaps = []
-            for g in range(len(phases)):
-                centre = (np.asarray(entry['centre'], float) if entry.get('centre') is not None else O[g].mean(axis=0))
-                pts = P[g][points]
-                env = keep_clearance(pts, O[g], centre, -1.,
-                                     angular_radius_degrees=entry.get('angular_radius_degrees', 2.))['envelope']
-                gaps.append(np.linalg.norm(pts - centre, axis=1) - env)
-            gaps = np.array(gaps)                              # (phases, points); NaN where the obstacle is not behind
-            # Follow the points that start outside the obstacle; each keeps the smaller of the minimum and its own rest
-            # clearance. Points inside the envelope at rest (a socket beside or behind the obstacle) are not followed.
-            followed = np.isfinite(gaps[0]) & (gaps[0] >= 0)
-            need = np.minimum(minimum, gaps[0])
-            miss = np.where(followed[None] & np.isfinite(gaps), need[None] - gaps, -np.inf)
-            worst = np.unravel_index(np.argmax(miss), miss.shape) if followed.any() else None
-            value = max(0., float(miss[worst])) if worst is not None and np.isfinite(miss[worst]) else 0.
-            rows.append({'obstacle': entry['obstacle'], 'minimum': minimum, 'shortfall': value,
-                         'at': {'phase': phases[worst[0]], 'vertex': int(points[worst[1]])} if value > 0 else None,
-                         'closest_followed': float(np.nanmin(np.where(followed[None], gaps, np.nan)))
-                         if followed.any() else None,
-                         'followed_points': int(followed.sum()),
-                         'inside_at_rest': int(np.count_nonzero(np.isfinite(gaps[0]) & (gaps[0] < 0))),
-                         'not_in_front_of_obstacle': int(np.count_nonzero(~np.isfinite(gaps[0])))})
-            shortfall = max(shortfall, value)
+            variants = [('rest gaze', O)]
+            gaze = entry.get('gaze')
+            for axis_vector, degrees in (gaze or {}).get('rotations', []):
+                R = _rotation(axis_vector, degrees); pivot = np.asarray(gaze['pivot'], float)
+                variants.append((f'{degrees:+g} deg about {list(axis_vector)}', (O - pivot) @ R.T + pivot))
+            worst_row = None
+            for label, obstacle in variants:
+                row = _clearance_row(P, points, obstacle, entry, minimum, phases)
+                row.update(obstacle=entry['obstacle'], gaze=label)
+                if worst_row is None or row['shortfall'] > worst_row['shortfall']:
+                    worst_row = row
+            if len(variants) > 1:
+                worst_row['gazes_measured'] = [label for label, _ in variants]
+            rows.append(worst_row)
+            shortfall = max(shortfall, worst_row['shortfall'])
         out['clearance_shortfall'] = (shortfall, {'obstacles': rows})
 
     tri = states[phases[0]][d['object']].get('tri')
@@ -281,7 +331,7 @@ def _measure(d, states, base, baseline=None):
         out['seam_share'] = (seam['median'] / s['rest_opening_median'], {
             'rest_opening': s['rest_opening_median'], 'largest_share': seam['share_of_opening_max']})
         if c.get('closed_depth'):
-            spec = c['closed_depth']; a, b = (int(v) for v in spec['corners'])
+            spec = c['closed_depth']; a, b = (int(v) for v in spec.get('corners', c.get('corners')))
             view = {k: spec[k] for k in ('up', 'across') if k in spec}
             closed = line_depth(P[-1][moving_edge], P[-1][a], P[-1][b], **view)
             rest = line_depth(P[0][facing_edge], P[0][a], P[0][b], **view)
@@ -292,6 +342,14 @@ def _measure(d, states, base, baseline=None):
             out['roll_deviation_share'] = (s['roll_deviation_share_max'], {
                 'turn_share_parts_median_per_pose': {phases[r['pose'] + 1]: r['turn_share']['parts_median']
                                                      if r['turn_share'] else None for r in report['poses']}})
+        if c.get('corners'):
+            out.update(_corners(P, moving_edge, [int(v) for v in c['corners']], float(c.get('min_ramp', .2))))
+        if d.get('band') is not None:
+            out['band_reach'] = _band(P, d['band'], c, moving_edge, base, n)
+        if d.get('lash'):
+            out.update(_lash(states, P, d['lash'], c, moving_edge, base))
+        if d.get('combinations'):
+            out['combination_seam'] = _combinations(d, P, moving_edge, facing_edge, s['rest_opening_median'], base)
 
     if d.get('carrier'):
         weights = d['carrier'].get('weights') or {}
@@ -310,6 +368,114 @@ def _measure(d, states, base, baseline=None):
             'vertices_over_tolerance_with_two_shapes': int(np.count_nonzero(r2 > tolerance)),
             'mid_shape': 'driven at 4s(1-s) by the same control', 'three_means': 'more than two'})
     return out
+
+
+def _corners(P, margin, corners, min_ramp):
+    """Corner travel (share of the corner distance) and how gradually the margin's travel rises from each end."""
+    a, b = corners; width = float(np.linalg.norm(P[0][b] - P[0][a]))
+    travel = np.linalg.norm(P - P[0], axis=2)
+    corner = float(max(travel[:, a].max(), travel[:, b].max()) / width)
+    t = travel[-1][margin]; step = np.linalg.norm(np.diff(P[0][margin], axis=0), axis=1)
+    arc = np.r_[0., np.cumsum(step)] / max(step.sum(), 1e-300)
+    high = np.flatnonzero(t >= .9 * t.max()) if t.max() > 0 else np.array([], int)
+    ramps = (float(arc[high[0]]), float(1 - arc[high[-1]])) if len(high) else (1., 1.)
+    return {'corner_travel_share': (corner, {'width': width, 'corners': corners}),
+            'corner_ramp': (max(0., min_ramp - min(ramps)), {'ramp_from_start': ramps[0], 'ramp_from_end': ramps[1],
+                                                             'min_ramp': min_ramp})}
+
+
+def _band(P, band, c, margin, base, n):
+    """Where the band above the margin stops moving, as a share of the width (study.band_profile at the last pose)."""
+    from .study import band_profile
+    edge = _indices(band['margin'], base, 'margin', n, 'band margin') if 'margin' in band else margin
+    pool = (np.arange(n) if band.get('candidates') is None
+            else _indices(band['candidates'], base, 'candidates', n, 'band candidates'))
+    width = band.get('width') or (float(np.linalg.norm(P[0][c['corners'][1]] - P[0][c['corners'][0]]))
+                                  if c.get('corners') else None)
+    view = {k: band[k] for k in ('up', 'across') if k in band}
+    profile = band_profile(P[0], P[-1], edge, pool, width=width, **view)
+    detail = {'rows': profile['rows'], 'width': profile['width'], 'column': profile['column']}
+    if profile['reach_share'] is not None:
+        return float(profile['reach_share']), detail
+    top = max((r['height_share'] for r in profile['rows']), default=None)
+    detail['note'] = ('still moving at the top of the measured points: the band reaches at least there; declare '
+                      'candidates reaching higher if that is below the limit')
+    return top, dict(detail, at_least=True)
+
+
+def _lash(states, P, lash, c, margin, base):
+    """Lash carriage: root travel against the margin under it, the lash's own turn, length, timing."""
+    from scipy.spatial import cKDTree
+    L = _stack(states, lash['object'])
+    pairs = {}
+    for key, count in (('roots', L.shape[1]), ('tips', L.shape[1]), ('host', P.shape[1])):
+        if lash.get(key) is not None:                      # pairs, so a root (or host) may serve several lash points
+            ids = _load(lash[key], base, key)
+            if ids.ndim != 1 or ids.dtype.kind not in 'iu' or not len(ids) or ids.min() < 0 or ids.max() >= count:
+                raise ValueError(f'Lash {key} are vertex indices of their object')
+            pairs[key] = ids.astype(np.int64)
+    roots, tips = pairs['roots'], pairs['tips']
+    if len(tips) != len(roots) or len(pairs.get('host', roots)) != len(roots):
+        raise ValueError('Lash roots, tips and hosts pair up one to one')
+    if 'host' in pairs:
+        host = pairs['host']
+    else:
+        host = margin[cKDTree(P[0][margin]).query(L[0][roots])[1]]
+    rt = np.linalg.norm(L[:, roots] - L[0, roots], axis=2); ht = np.linalg.norm(P[:, host] - P[0, host], axis=2)
+    carried = ht[-1] > .1 * max(float(ht[-1].max()), 1e-300)          # roots whose host moves by the end
+    if not carried.any():
+        none = (None, {'reason': 'the margin under the lash does not move'})
+        return dict.fromkeys(('lash_travel', 'lash_turn', 'lash_length', 'lash_timing'), none)
+    ratio = rt[-1][carried] / ht[-1][carried]
+    travel = max(0., .9 - float(ratio.min()), float(ratio.max()) - 1.05)
+    v = L[:, tips] - L[:, roots]; length = np.linalg.norm(v, axis=2)
+    stretch = np.abs(length / np.maximum(length[0], 1e-300) - 1)
+    angle = lambda a, b: np.degrees(np.arccos(np.clip(np.einsum('...k,...k', a, b) / np.maximum(
+        np.linalg.norm(a, axis=-1) * np.linalg.norm(b, axis=-1), 1e-300), -1, 1)))
+    absolute = angle(v, v[0][None])
+    pivot, axis = lash.get('pivot', c.get('pivot')), lash.get('axis', c.get('axis'))
+    if pivot is not None:                 # the lid's own roll at the host taken out: what the lash turns on the lid
+        from .motion_paths import hinge_change
+        own = [np.zeros(len(roots))]
+        for g in range(1, len(P)):
+            lid = hinge_change(P[0][host], P[g][host], pivot, axis)['turn']
+            own.append(angle(np.stack([_rotation(axis, -np.degrees(t)) @ w for t, w in zip(lid, v[g])]), v[0]))
+        own = np.stack(own)
+    else:
+        own = absolute
+    share = lambda x: x[:, carried] / x[-1][carried]
+    timing = np.abs(share(rt) - share(ht)).max(axis=1)
+    phases = list(states)
+    return {'lash_travel': (travel, {'ratio_min': float(ratio.min()), 'ratio_median': float(np.median(ratio)),
+                                     'ratio_max': float(ratio.max()), 'allowed': [.9, 1.05],
+                                     'carried_roots': int(carried.sum())}),
+            'lash_turn': (float(own.max()), {'relative_to': 'the lid under the root' if pivot is not None else 'rest',
+                                             'median_at_end': float(np.median(own[-1])),
+                                             'absolute_max': float(absolute.max())}),
+            'lash_length': (float(stretch.max()), {'median_at_end': float(np.median(stretch[-1]))}),
+            'lash_timing': (float(timing.max()), {'per_phase': dict(zip(phases, map(float, timing)))})}
+
+
+def _polyline_nearest(points, line):
+    a, b = line[:-1], line[1:]; ab = b - a; length2 = np.maximum((ab * ab).sum(1), 1e-300)
+    t = np.clip(np.einsum('msk,sk->ms', points[:, None, :] - a[None], ab) / length2[None], 0, 1)
+    near = a[None] + t[..., None] * ab[None]; dist = np.linalg.norm(points[:, None, :] - near, axis=-1)
+    return near[np.arange(len(points)), dist.argmin(axis=1)]
+
+
+def _combinations(d, P, moving, facing, opening, base):
+    """Signed seam gap (positive still open, negative crossed) of each combined closed pose, share of the opening."""
+    up = np.asarray(d['closing'].get('up', (0., 0., 1.)), float); up = up / np.linalg.norm(up)
+    rows, worst = [], 0.
+    for combo in d['combinations']:
+        path = Path(combo['poses']); path = path if path.is_absolute() else Path(base or '.') / path
+        Q = _stack(load_states(path), d['object'])[-1]
+        gap = Q[moving] - _polyline_nearest(Q[moving], Q[facing])
+        signed = np.linalg.norm(gap, axis=1) * np.sign(gap @ up) / opening
+        rows.append({'name': combo['name'], 'median_share': float(np.median(signed)), 'min_share': float(signed.min()),
+                     'max_share': float(signed.max())})
+        worst = max(worst, abs(float(np.median(signed))))
+    return worst, {'combinations': rows}
 
 
 def run_checks(declaration, candidate, baseline=None, *, base=None):
@@ -336,6 +502,8 @@ def run_checks(declaration, candidate, baseline=None, *, base=None):
             status = 'unknown'
         else:
             status = 'pass' if observed - (prior if relative else 0.) <= limits[key] else 'fail'
+            if status == 'pass' and detail.get('at_least'):                   # a lower bound within the limit proves nothing
+                status = 'unknown'
         row = {'id': key, 'observed': observed, 'limit': limits[key],
                'rule': 'increase over the baseline' if relative else 'maximum', 'status': status, 'detail': detail}
         if key in before and key != 'protected_unchanged':

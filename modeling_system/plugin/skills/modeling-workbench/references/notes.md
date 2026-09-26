@@ -9,11 +9,14 @@ what gets built; keep scoped evidence in the workspace's own records.
 **The part morphs between keys ("putty").** Cause: motion made of per-point paths or keys fitted to pose guides one
 phase at a time, often written after subdivision. Each point keeps its own path and timing. Remedy: build the mechanism
 the reference avatars use (a band turning or sliding as one piece, one timing) and derive the end pose from it.
-[Build the mechanism first](build-the-mechanism-first.md).
+[Build the mechanism first](build-the-mechanism-first.md). A soft falloff that spreads the motion into the brow is the
+same failure seen from above: the avatars' bands stop by about half the eye's width (`band_reach`).
 
 **The edge closes from one corner first ("zipper").** Cause: separate paces for parts of one edge: pace floors, shared
 schedules on a corner, an inner end kept late. Remedy: one pace for the whole margin; the `closing_spread` check fails a
-spread of more than a tenth between the edge's thirds. [Construction checks](construction-checks.md).
+spread of more than a tenth between the edge's thirds. [Construction checks](construction-checks.md). The corners
+themselves move little (the avatars' .02-.10 of the eye's width) and the margin's travel rises smoothly from each: the
+`corner_ramp` check fails a margin at full travel within a fifth of its length from a corner.
 
 **The opposing lid rises, evenly and early.** Cause: a stored closed pose whose seam sits above the opposing lid's rest
 line, so the other rim is pulled up to meet it. Remedy: land the moving edge on the opposing rest line (`hinge_landing`);
@@ -28,7 +31,13 @@ closed passes inside it. Remedy: roll about the eye's centre; as blend shapes, o
 4s(1-s) usually carries the roll (`carrier_shapes` check).
 
 **Lashes lift off or collapse during the blink.** Cause: attached parts following their own stored shapes. Remedy:
-carry them on the moving edge with the host's turn (`hinge_carry`), in the offline build and in the rig.
+carry them on the moving edge with the host's turn (`hinge_carry`), in the offline build and in the rig. The `lash_*`
+checks fail a lash left behind, lagging, flipping on the lid (more than 35°) or stretching.
+
+**Blink plus an expression crosses or stays open.** Cause: blend shapes add; a lower-lid-raising expression plus the
+blink puts the upper edge past the lower (the avatars: 3-15 % of the opening), a surprised lid does not close. Remedy:
+dedicated closed variants of the strong expressions and the blink switched off while they play, as the avatars ship
+them; declare the combinations so `combination_seam` measures each.
 
 ## Guides and fitting
 
@@ -69,6 +78,10 @@ to the visible feature so `still_outside` catches it, and make hidden material s
 **Clearance reports a penetration that is not there.** Cause: an obstacle measured from a point that is not its centre
 (a point on the hinge axis is not the eyeball's centre), so the obstacle is not star-shaped from it. Remedy: measure
 from the obstacle's own centroid (the check's default) and confirm any penetration against the surface.
+
+**The lid clears the eye looking ahead and cuts it looking down.** Cause: clearance checked at one gaze; the eye
+turns the cornea or iris bulge into the closing lid's path. Remedy: declare the gaze limits in the clearance entry
+(`gaze`), so the check is repeated with the eye turned.
 
 **An overlap render shows the guide as a solid.** Cause: a wire display type renders solid. Remedy: a Wireframe
 modifier on the guide copy (`overlap_views.py`).

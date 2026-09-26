@@ -2,7 +2,7 @@
 
 Extract the avatar's shapes with the `study_extract.py` NativeJob worker (rest positions, every shape key as a world
 delta, topology, vertex groups and bones), load them with `load_shapes`, and measure the feature's construction:
-which loop is the margin (`order_loop`, `rings`), which simple motion explains it (`motion_models`: one slide, a turn
+which loop is the margin (`order_loop`, `rings`), whether the loops around it are closed quad loops (`loop_topology`), which simple motion explains it (`motion_models`: one slide, a turn
 about a named axis, the best free axis), how far the moving band reaches (`band_profile`) and, for a blink, the numbers
 the construction checks use (`blink_report`: moving vertices, opposing-lid travel, corner travel, closed-line depth).
 The avatars are the passing examples: run the same checks on them and on the character. Measurements, not targets:
@@ -67,12 +67,48 @@ def _inside(points, polygon):
     return hit
 
 
-def rings(positions, edges, margin, *, up=(0., 0., 1.), across=(1., 0., 0.), outward=12, inward=8):
-    """Ring number of every vertex reached from the margin loop: 0 on it, +k steps outward over the outer face (outside
-    the margin's outline in the view plane), -k steps inward (the lid's inner surface and the socket pocket)."""
+def _pocket_side(polygons, margin, count):
+    """Vertices on the smaller side of the margin loop (the lid's inner surface and the pocket), found by flooding the
+    faces without crossing the margin's edges; None when the margin does not split the faces into two sides."""
+    M = [int(v) for v in margin]; cut = {frozenset(e) for e in zip(M, M[1:] + M[:1])}
+    faces = [[int(v) for v in f] for f in polygons]; by_edge = {}
+    for i, f in enumerate(faces):
+        for e in zip(f, f[1:] + f[:1]):
+            by_edge.setdefault(frozenset(e), []).append(i)
+    sides = []
+    for e in cut:
+        for start in by_edge.get(e, []):
+            if any(start in side for side in sides):
+                continue
+            side, stack = {start}, [start]
+            while stack:
+                f = faces[stack.pop()]
+                for e2 in zip(f, f[1:] + f[:1]):
+                    if frozenset(e2) in cut:
+                        continue
+                    for g in by_edge[frozenset(e2)]:
+                        if g not in side:
+                            side.add(g); stack.append(g)
+            sides.append(side)
+    if len(sides) != 2:
+        return None
+    small = min(sides, key=len); edge_ids = set(M)
+    pocket = np.zeros(count, bool)
+    pocket[[v for i in small for v in faces[i] if v not in edge_ids]] = True
+    return pocket
+
+
+def rings(positions, edges, margin, *, up=(0., 0., 1.), across=(1., 0., 0.), outward=12, inward=8, polygons=None):
+    """Ring number of every vertex reached from the margin loop: 0 on it, +k steps outward over the outer face, -k steps
+    inward (the lid's inner surface and the socket pocket). With `polygons` the two sides are the faces on either side
+    of the margin (the smaller one inward); without, the inward side is inside the margin's outline in the view plane,
+    which misreads a pocket reaching wider than the opening."""
     P = np.asarray(positions, float); M = np.asarray(margin, int)
-    view = np.c_[P @ np.asarray(across, float), P @ np.asarray(up, float)]
-    inside = _inside(view, view[M]); nb = _neighbours(edges, len(P))
+    inside = _pocket_side(polygons, M, len(P)) if polygons is not None else None
+    if inside is None:
+        view = np.c_[P @ np.asarray(across, float), P @ np.asarray(up, float)]
+        inside = _inside(view, view[M])
+    nb = _neighbours(edges, len(P))
     ring = {int(v): 0 for v in M}; queue = deque(int(v) for v in M)
     while queue:
         v = queue.popleft(); k = ring[v]
@@ -86,6 +122,56 @@ def rings(positions, edges, margin, *, up=(0., 0., 1.), across=(1., 0., 0.), out
     out = np.full(len(P), np.nan)
     out[list(ring)] = list(ring.values())
     return out
+
+
+def loop_topology(positions, polygons, margin, *, up=(0., 0., 1.), across=(1., 0., 0.), loops=4, inward=8,
+                  travel=None):
+    """Whether the margin and the next loops outward are closed quad loops of one count, with no poles among them.
+
+    `polygons` are vertex-id lists (as `load_shapes` returns), `margin` the ordered margin loop. For each ring from the
+    margin out to `loops - 1`: its vertex count, whether it is one closed loop along the edges, the quad share of the
+    faces between it and the next ring and its poles (vertices off the mesh boundary with other than four edges). Also
+    the rings found inward (the lid's inner surface and the socket pocket) and, with `travel` per vertex, how many
+    vertices move. The avatars studied: margin and the next three loops closed with one count each (28-37), all quads,
+    poles only where loops merge into brow, cheek or nose (ring 3 and beyond), 170-190 moving skin vertices per eye.
+    A report, not a gate.
+    """
+    P = np.asarray(positions, float); faces = [[int(v) for v in f] for f in polygons]
+    uses = {}
+    for f in faces:
+        for a, b in zip(f, f[1:] + f[:1]):
+            uses[(min(a, b), max(a, b))] = uses.get((min(a, b), max(a, b)), 0) + 1
+    edges = np.array(sorted(uses), int).reshape(-1, 2); nb = _neighbours(edges, len(P))
+    boundary = {v for e, count in uses.items() if count == 1 for v in e}
+    ring = rings(P, edges, margin, up=up, across=across, outward=loops, inward=inward, polygons=faces)
+    rows = []
+    for k in range(loops):
+        members = [int(v) for v in np.flatnonzero(ring == k)]; inside = set(members)
+        closed = len(members) >= 3 and all(len(nb[v] & inside) == 2 for v in members)
+        if closed:                                           # one loop, not several
+            seen, stack = {members[0]}, [members[0]]
+            while stack:
+                for u in nb[stack.pop()] & inside - seen:
+                    seen.add(u); stack.append(u)
+            closed = len(seen) == len(members)
+        between = [f for f in faces if {ring[v] for v in f} == {k, k + 1}]
+        rows.append({'ring': k, 'vertices': len(members), 'closed_loop': bool(closed),
+                     'quad_share_to_next': float(np.mean([len(f) == 4 for f in between])) if between else None,
+                     'poles': [v for v in members if v not in boundary and len(nb[v]) != 4]})
+    inner = []
+    for k in range(1, inward + 1):
+        count = int(np.count_nonzero(ring == -k))
+        if not count:
+            break
+        inner.append({'ring': -k, 'vertices': count})
+    counts = [r['vertices'] for r in rows]
+    report = {'loops': rows, 'closed_loops_of_one_count': all(r['closed_loop'] for r in rows) and len(set(counts)) == 1,
+              'poles_in_loops': sum(len(r['poles']) for r in rows), 'inner_rings': inner,
+              'limits': 'Topology of the rings around the margin; a report to compare with the avatars, not a gate.'}
+    if travel is not None:
+        t = np.asarray(travel, float)
+        report['moved_vertices'] = int(np.count_nonzero(t > 1e-6 * max(float(t.max()), 1e-300)))
+    return report
 
 
 def _turn_residual(X, Y, point, direction):

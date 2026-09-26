@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 from .checks import LIMITS, applicable_checks, load_states, run_checks, standard_cells, standard_policy
-from .motion_paths import hinge_landing, path_positions
+from .motion_paths import hinge_carry, hinge_landing, path_positions
 from .preservation import file_ref
 
 X = np.linspace(-.6, .6, 13)
@@ -204,6 +204,152 @@ class StandardCheckTests(unittest.TestCase):
         self.assertEqual(list(loaded), ['0.0', '0.25', '0.5', '0.75', '1.0'])
         self.assertEqual(set(loaded['0.0']), {'Skin', 'Eye', 'Body'})
 
+
+def tapered(profile):
+    """The hinged lid with each point's closure scaled by a profile of its position across (1 in the middle)."""
+    f = profile(REST[:, 0] / .6)
+    return hinged(lambda g: g * f)
+
+
+def turned(points, degrees):
+    """Points turned about the x axis through the eye's centre (positive toward the chin for this eye)."""
+    a = np.radians(degrees); R = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
+    return points @ R.T
+
+
+class EyeCheckTests(unittest.TestCase):
+    """Corners, moving band, gaze clearance, lash carriage and combined closed poses (eye study checks 4-9)."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp()); self.addCleanup(__import__('shutil').rmtree, self.root, True)
+        self.corners = [int(row(UPPER)[0]), int(row(UPPER)[-1])]
+        self.closing = {'moving': row(UPPER).tolist(), 'facing': row(LOWER).tolist(), 'pivot': CENTRE, 'axis': AXIS}
+
+    def status(self, report, *keys):
+        found = {c['id']: c for c in report['checks']}
+        return [found[k]['status'] for k in keys]
+
+    def check(self, report, key):
+        return next(c for c in report['checks'] if c['id'] == key)
+
+    def declare(self, **extra):
+        return {'object': 'Skin', 'region': REGION.tolist(), **extra}
+
+    def test_corners_that_stay_and_a_margin_rising_smoothly_pass(self):
+        declaration = self.declare(closing=dict(self.closing, corners=self.corners))
+        smooth = run_checks(declaration, states(tapered(lambda u: np.cos(np.pi / 2 * u))))
+        self.assertEqual(self.status(smooth, 'corner_travel_share', 'corner_ramp'), ['pass', 'pass'])
+        self.assertGreater(self.check(smooth, 'corner_ramp')['detail']['ramp_from_start'], .3)
+        pinched = run_checks(declaration, states(tapered(lambda u: np.where(np.abs(u) > .99, 0., 1.))))
+        self.assertEqual(self.status(pinched, 'corner_travel_share', 'corner_ramp'), ['pass', 'fail'])   # full travel one step in
+        sliding = run_checks(declaration, states(hinged()))                          # the corners close with the lid
+        self.assertEqual(self.status(sliding, 'corner_travel_share')[0], 'fail')
+        self.assertGreater(self.check(sliding, 'corner_travel_share')['observed'], 1.)
+
+    def test_the_closed_line_depth_can_use_the_closing_corners(self):
+        closing = dict(self.closing, corners=[int(row(LOWER)[0]), int(row(LOWER)[-1])], closed_depth={'target': 0.})
+        report = run_checks(self.declare(closing=closing), states(hinged()))
+        self.assertEqual(self.status(report, 'closed_depth_error'), ['pass'])
+
+    def test_a_band_that_stops_passes_and_one_leaking_into_the_brow_does_not(self):
+        declaration = self.declare(closing=self.closing, band={}, limits={'band_reach': .4})
+        stopping = hinged().copy(); stopping[:, row(1)] = REST[row(1)]               # row two above the margin stays
+        report = run_checks(declaration, states(stopping))
+        self.assertEqual(self.status(report, 'band_reach'), ['pass'])
+        self.assertAlmostEqual(self.check(report, 'band_reach')['observed'], (1.2 * np.sin(np.radians(70)) -
+                                                                              1.1 * np.sin(np.radians(40))) / 1.2, places=6)
+        leaking = hinged().copy()
+        for k, g in enumerate(PHASES):
+            leaking[k][row(BROW)] = turned(REST[row(BROW)], 35. * g)                   # the brow moves with the lid
+        report = run_checks(declaration, states(leaking))
+        self.assertEqual(self.status(report, 'band_reach'), ['fail'])
+        self.assertTrue(self.check(report, 'band_reach')['detail']['at_least'])
+        within = run_checks(dict(declaration, limits={}), states(leaking))              # .45 w, but still moving there
+        self.assertEqual(self.status(within, 'band_reach'), ['unknown'])
+
+    def test_clearance_is_repeated_with_the_eye_turned_to_its_gaze_limits(self):
+        bulge = ring(0., 1.12, np.linspace(-.3, .3, 13))
+        bulge = np.concatenate([turned(bulge, a) for a in np.arange(40., 50.5, 1.)])      # sampled finer than 2 degrees
+        cornea = np.concatenate([EYE, bulge])                        # a bulge under the still lower lid at rest gaze
+        entry = {'obstacle': 'Cornea', 'centre': CENTRE, 'minimum': .01}
+        ahead = run_checks(self.declare(clearance=[entry]), states(hinged(), extra={'Cornea': cornea}))
+        self.assertEqual(self.status(ahead, 'clearance_shortfall'), ['pass'])
+        gaze = dict(entry, gaze={'pivot': CENTRE, 'rotations': [[[1., 0., 0.], 30.], [[1., 0., 0.], -30.]]})
+        limits = run_checks(self.declare(clearance=[gaze]), states(hinged(), extra={'Cornea': cornea}))
+        clearance = self.check(limits, 'clearance_shortfall')
+        self.assertEqual(clearance['status'], 'fail')                 # looking down turns the bulge into the lid's path
+        self.assertEqual(clearance['detail']['obstacles'][0]['gaze'], '-30 deg about [1.0, 0.0, 0.0]')
+        self.assertGreater(clearance['observed'], .02)                 # the margin passes .02 inside the bulge
+        self.assertEqual(len(clearance['detail']['obstacles'][0]['gazes_measured']), 3)
+
+    def lashes(self, fraction=None, turn=0., stretch=1.):
+        margin = row(UPPER); roots = REST[margin] * 1.01; tips = roots + [0., -.3, .1]
+        lash = np.concatenate([roots, tips])
+        carried = hinge_carry(lash, REST[margin], CLOSED[margin], CENTRE, AXIS,
+                              fraction=PHASES if fraction is None else fraction)['positions']
+        n = len(margin); out = {}
+        for k, g in enumerate(PHASES):
+            r, t = carried[k][:n], carried[k][n:]
+            v = turned(t - r, -turn * g) * (1 + (stretch - 1) * g)              # the lash's own turn and stretch
+            out[g] = np.concatenate([r, r + v])
+        declaration = self.declare(closing=self.closing, lash={'object': 'Lash', 'roots': list(range(n)),
+                                                               'tips': list(range(n, 2 * n))})
+        return declaration, {f'{g}::Lash::co': P for g, P in out.items()}
+
+    def lash_report(self, **kw):
+        declaration, arrays = self.lashes(**kw)
+        return run_checks(declaration, {**states(hinged()), **arrays})
+
+    def test_a_lash_carried_with_the_lid_passes(self):
+        report = self.lash_report()
+        self.assertEqual(self.status(report, 'lash_travel', 'lash_turn', 'lash_length', 'lash_timing'), ['pass'] * 4)
+        turn = self.check(report, 'lash_turn')
+        self.assertLess(turn['observed'], .1)                         # no turn of its own on the lid
+        self.assertGreater(turn['detail']['absolute_max'], 60.)        # while the lid rolls it through the blink
+        self.assertAlmostEqual(self.check(report, 'lash_travel')['detail']['ratio_median'], 1.01, places=4)
+
+    def test_a_lash_left_behind_lagging_flipping_or_stretching_fails(self):
+        behind = self.lash_report(fraction=.7 * np.asarray(PHASES))
+        self.assertEqual(self.status(behind, 'lash_travel'), ['fail'])
+        lagging = self.lash_report(fraction=np.asarray(PHASES) ** 2)
+        self.assertEqual(self.status(lagging, 'lash_travel', 'lash_timing'), ['pass', 'fail'])
+        flipping = self.lash_report(turn=50.)
+        self.assertEqual(self.status(flipping, 'lash_turn', 'lash_travel'), ['fail', 'pass'])
+        self.assertAlmostEqual(self.check(flipping, 'lash_turn')['observed'], 50., delta=.1)
+        stretching = self.lash_report(stretch=1.4)
+        self.assertEqual(self.status(stretching, 'lash_length', 'lash_turn'), ['fail', 'pass'])
+
+    def test_combined_closed_poses_must_meet_at_the_seam(self):
+        def combination(name, closed):
+            skin = hinged().copy(); skin[-1] = closed
+            np.savez(self.root / f'{name}.npz', **states(skin))
+            return {'name': name, 'poses': f'{name}.npz'}
+        meets = combination('closed smile', CLOSED)
+        raised = CLOSED.copy()
+        for r in (LOWER, LOWER + 1):
+            a, radius = ROWS[r]; raised[row(r)] = ring(a - 10., radius)             # a lower-lid raise added to the blink
+        crosses = combination('blink plus raise', raised)
+        short = combination('blink plus surprise', hinged(lambda g: np.full(len(REST), .7 * g))[-1])
+        good = run_checks(self.declare(closing=self.closing, combinations=[meets]), states(hinged()), base=self.root)
+        self.assertEqual(self.status(good, 'combination_seam'), ['pass'])
+        bad = run_checks(self.declare(closing=self.closing, combinations=[meets, crosses, short]), states(hinged()),
+                         base=self.root)
+        seam = self.check(bad, 'combination_seam')
+        self.assertEqual(seam['status'], 'fail')
+        shares = {entry['name']: entry['median_share'] for entry in seam['detail']['combinations']}
+        self.assertLess(shares['blink plus raise'], -.1)             # past the lower lid
+        self.assertGreater(shares['blink plus surprise'], .1)        # stops short of closing
+        self.assertLess(abs(shares['closed smile']), .01)
+
+    def test_declaration_refusals(self):
+        with self.assertRaisesRegex(ValueError, 'need the closing edges'):
+            applicable_checks(self.declare(band={}))
+        with self.assertRaisesRegex(ValueError, 'matching root and tip'):
+            applicable_checks(self.declare(closing=self.closing, lash={'object': 'Lash', 'roots': [0, 1], 'tips': [2]}))
+        with self.assertRaisesRegex(ValueError, 'Gaze needs'):
+            applicable_checks(self.declare(clearance=[{'obstacle': 'Eye', 'gaze': {'pivot': [0, 0]}}]))
+        with self.assertRaisesRegex(ValueError, 'two vertices'):
+            applicable_checks(self.declare(closing=dict(self.closing, corners=[1])))
 
 class StandardPolicyTests(unittest.TestCase):
     """The declaration becomes a PreservationPolicy that measures a native trial's saved poses."""

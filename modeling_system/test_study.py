@@ -10,7 +10,7 @@ import unittest
 
 import numpy as np
 
-from .study import band_profile, blink_report, load_shapes, motion_models, order_loop, rings
+from .study import band_profile, blink_report, load_shapes, loop_topology, motion_models, order_loop, rings
 
 BLENDER = os.environ.get('MODELING_BLENDER')
 
@@ -21,6 +21,19 @@ def grid(nx, nz, width=1., height=1.):
     idx = np.arange(nx * nz).reshape(nz, nx)
     edges = np.r_[np.c_[idx[:, :-1].ravel(), idx[:, 1:].ravel()], np.c_[idx[:-1].ravel(), idx[1:].ravel()]]
     return P, idx, edges
+
+
+def annulus(count=12, radii=(.6, .8, 1., 1.2, 1.4, 1.6, 1.8), margin_ring=2, depth=None):
+    """Concentric quad loops round an opening in the view plane (x across, z up); rings inside the margin go back
+    (`depth` per ring, default 1 - radius for the rings inside)."""
+    angle = 2 * np.pi * np.arange(count) / count; P, ids = [], []
+    for k, r in enumerate(radii):
+        ids.append(np.arange(len(P), len(P) + count))
+        y = depth[k] if depth is not None else max(0., 1. - r)
+        P += list(np.c_[r * np.cos(angle), np.full(count, y), r * np.sin(angle)])
+    faces = [[int(ids[k][j]), int(ids[k][(j + 1) % count]), int(ids[k + 1][(j + 1) % count]), int(ids[k + 1][j])]
+             for k in range(len(radii) - 1) for j in range(count)]
+    return np.array(P), faces, ids[margin_ring], ids
 
 
 class StudyTests(unittest.TestCase):
@@ -53,6 +66,35 @@ class StudyTests(unittest.TestCase):
         profile = band_profile(P, end, margin, idx[2:].ravel(), width=1.)
         self.assertAlmostEqual(profile['rows'][0]['travel_share'], 1.)
         self.assertAlmostEqual(profile['reach_share'], .5, places=6)
+
+    def test_loop_topology_reports_closed_loops_of_one_count_and_poles(self):
+        P, faces, margin, ids = annulus()
+        travel = np.zeros(len(P)); travel[ids[2]] = 1.; travel[ids[3]] = .5
+        good = loop_topology(P, faces, margin, travel=travel)
+        self.assertEqual([r['vertices'] for r in good['loops']], [12, 12, 12, 12])
+        self.assertTrue(good['closed_loops_of_one_count'])
+        self.assertEqual((good['poles_in_loops'], good['moved_vertices']), (0, 24))
+        self.assertTrue(all(r['quad_share_to_next'] == 1. for r in good['loops']))
+        self.assertEqual(good['inner_rings'], [{'ring': -1, 'vertices': 12}, {'ring': -2, 'vertices': 12}])
+        a, b = int(ids[5][0]), int(ids[5][1])                         # two vertices of the fourth loop merged
+        merged = []
+        for f in faces:
+            f = [a if v == b else v for v in f]
+            merged.append([v for i, v in enumerate(f) if v != f[i - 1]])
+        bad = loop_topology(P, merged, margin)
+        self.assertEqual([r['vertices'] for r in bad['loops']], [12, 12, 12, 11])
+        self.assertFalse(bad['closed_loops_of_one_count'])
+        self.assertEqual(bad['loops'][3]['poles'], [a])
+        self.assertLess(bad['loops'][2]['quad_share_to_next'], 1.)
+
+    def test_a_pocket_wider_than_the_opening_is_still_the_inner_side(self):
+        P, faces, margin, ids = annulus(radii=(1.3, 1.15, 1., 1.2, 1.4, 1.6, 1.8), depth=(.5, .25, 0, 0, 0, 0, 0))
+        view_only = rings(P, np.array([[f[0], f[1]] for f in faces] + [[f[1], f[2]] for f in faces]), margin, outward=2)
+        self.assertEqual(view_only[ids[1][0]], 1.)                        # read from the front, the pocket looks outward
+        report = loop_topology(P, faces, margin)
+        self.assertEqual([r['vertices'] for r in report['loops']], [12, 12, 12, 12])
+        self.assertEqual(report['inner_rings'], [{'ring': -1, 'vertices': 12}, {'ring': -2, 'vertices': 12}])
+        self.assertTrue(report['closed_loops_of_one_count'])
 
     def test_blink_report_in_the_eyes_own_width(self):
         P, idx, _ = grid(9, 5, width=2.)

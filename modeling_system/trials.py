@@ -3,9 +3,9 @@
     lane = Trials(service, owner, 'runtime/trials', blender=BLENDER, reference=reference, objects=['Face'],
                   poses={'0.0': {'blink': 0.}, '0.5': {'blink': .5}, '1.0': {'blink': 1.}},
                   declaration='eye-declaration.json')
-    lane.trial('lift03', source='checkpoints/C19.blend', construction='build_lift.py')
+    lane.trial('lift03', source='checkpoints/working.blend', construction='build_lift.py')
     lane.reopen('lift03')
-    lane.retain('lift03', target='checkpoints/C20.blend', label='C20 lifted lower lid',
+    lane.retain('lift03', target='checkpoints/lifted-lower-lid.blend', label='lifted lower lid',
                 review={'by': 'owner', 'judgment': 'reads as one lid', 'watched': ['videos/lift03.mp4']})
 
 `trial` runs an isolated copy of the live source (it must be open and clean under the owner): the construction script

@@ -750,13 +750,19 @@ class ModelingService:
                 **plain({k:v for k,v in result.items() if k not in arrays})}
 
     def study_blink(self, shapes: str, key: str, upper_margin: list[int], lower_margin: list[int], corners: list[int],
-                    pivot: list[float] | None = None, axis: list[float] | None = None, band: list[int] | None = None) -> dict:
-        """Measure how a reference avatar builds its blink, from a study_extract.py extraction (.npz): moving vertices, the lower lid's travel as a share of the upper's, corner travel, the closed line's depth and the lower lid's rest depth in the eye's own width, the upper margin's slide and hinge residuals and, with band candidates, how far the moving band reaches."""
-        from .study import blink_report, load_shapes
+                    pivot: list[float] | None = None, axis: list[float] | None = None, band: list[int] | None = None,
+                    margin_loop: list[int] | None = None) -> dict:
+        """Measure how a reference avatar (or the character) builds its blink, from a study_extract.py extraction (.npz): moving vertices, the lower lid's travel as a share of the upper's, corner travel, the closed line's depth and the lower lid's rest depth in the eye's own width, the upper margin's slide and hinge residuals, with band candidates how far the moving band reaches and, with the whole margin loop, whether the loops around it are closed quad loops of one count without poles."""
+        import numpy as np
+        from .study import blink_report, load_shapes, loop_topology, order_loop
         avatar=load_shapes(shapes)
         if key not in avatar['keys']: raise ValueError('Shape key not in the extraction: '+key)
         rest=avatar['rest']
-        return blink_report(rest,rest+avatar['keys'][key],upper_margin,lower_margin,corners,pivot=pivot,axis=axis,band=band)
+        report=blink_report(rest,rest+avatar['keys'][key],upper_margin,lower_margin,corners,pivot=pivot,axis=axis,band=band)
+        if margin_loop:
+            report['topology']=loop_topology(rest,avatar['polygons'],order_loop(margin_loop,avatar['edges']),
+                                             travel=np.linalg.norm(avatar['keys'][key],axis=1))
+        return report
 
     def overlay_on_drawing(self, render: str, drawing: str, render_points: list[list[float]], drawing_points: list[list[float]],
                            output: str, crop: list[int] | None = None, lines: list[dict] | None = None, alpha: float = .25) -> dict:
