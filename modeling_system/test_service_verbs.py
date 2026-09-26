@@ -95,6 +95,28 @@ class ServiceVerbTests(unittest.TestCase):
                                              'corners': [int(idx[2, 0]), int(idx[2, -1])]})
         self.assertAlmostEqual(report['closed_depth_share'], .05, places=6)
 
+    def test_built_options_shown_together_in_one_call(self):
+        variants = {}
+        for n, name in enumerate(('A', 'B', 'C')):
+            variants[name] = {}
+            for control in (0., .5, 1.):
+                variants[name][str(control)] = {}
+                for view in ('front', 'side'):
+                    path = self.root / f'{name}-{control}-{view}.png'
+                    Image.new('RGB', (64, 48), (80 * n, int(200 * control), 90 if view == 'front' else 180)).save(path)
+                    variants[name][str(control)][view] = str(path)
+        report = self.run_op('review_variants', {'variants': variants, 'output_dir': str(self.root / 'options'),
+                                                 'labels': {'A': 'lower lid still', 'B': 'middle rise', 'C': 'avatar-like'},
+                                                 'stills': [0., 1.]})
+        self.assertEqual((report['variants'], report['views'], report['controls']), (['A', 'B', 'C'], ['front', 'side'], [0., .5, 1.]))
+        self.assertEqual(len(report['videos']), 2)
+        self.assertTrue(all(Path(p).is_file() for p in report['videos'] + report['stills']))
+        with Image.open(report['stills'][0]) as sheet:
+            self.assertGreater(sheet.size[0], sheet.size[1])                 # three option columns, two rows
+        del variants['B']['0.5']
+        refused = self.service.execute('review_variants', {'variants': variants, 'output_dir': str(self.root / 'bad')})
+        self.assertEqual(refused['status'], 'failed')
+
     def test_show_on_a_drawing_and_in_a_sheet(self):
         Image.new('RGB', (100, 100), (255, 140, 40)).save(self.root / 'render.png')
         Image.new('RGB', (200, 150), (255, 255, 255)).save(self.root / 'drawing.png')

@@ -108,6 +108,25 @@ around a target: one image per step and view, plus `overlaps.json`.
 A guide is a name from `reference.guides` or a registered `.npz` (`co`, `tri`). The cage is a Wireframe modifier
 about 1.5 pixels thick unless `wire` is given; a wire display type would render solid.
 
+## Offer choices as built options
+
+The owner's rule: when a path is uncertain and a modeling decision is theirs, model every option ahead of time and show
+what each looks like, so the choice is between looks, not descriptions. Build each option as a what-if (a trial or a
+read-only native what-if of the same source, never retained). Render every option at the same cameras and control
+values. Show each overlapped on the guide or the drawing (`overlap_views.py`, `aligned_overlay`), and all of them in one
+motion video with a column per option. Then ask one question whose answers are the built variants, recommendation first.
+
+`review_variants` (a service operation) composes the options in one call: `variants` maps each option to its captured
+frames, `{control value: {view: image path}}`, identical control values and views for every option (it refuses
+otherwise). It writes one video per view (normal speed, then slowed), and with `stills` a sheet per view with a row per
+control value and a column per option.
+
+```python
+service.execute('review_variants', {'variants': {'A': a_frames, 'B': b_frames, 'C': c_frames}, 'output_dir': 'review/closed-line',
+                                    'labels': {'A': 'lower lid still', 'B': 'middle rise', 'C': 'avatar-like'},
+                                    'stills': [0.5, 0.85, 1.0]})
+```
+
 ## Motion videos with several columns
 
 `import_motion` takes a manifest whose frames hold, per column, one captured image per view; `export_replay` encodes

@@ -28,7 +28,7 @@ below for the task at hand, not the whole skill. [Portable setup](references/por
 workspace; [getting started](references/getting-started.md) walks a first session. The verbs are Python calls and
 also service operations on the CLI (`python -m modeling_system <operation> --input args.json`) and MCP:
 `check_candidate`, `register_guide`, `construct`, `study_blink`, `bake_poses`, `audit_face`, `overlay_on_drawing`,
-`review_sheet`, the generation
+`review_sheet`, `review_variants`, the generation
 ledger and the `native_*` operations.
 
 ## The verbs
@@ -84,6 +84,9 @@ The workspace store keeps scoped reviews and lessons as an optional log ([retain
 - The accepted neutral is the likeness authority. A generated guide supports a pose or a detail; it does not redefine
   the character. A user rejection stands over any earlier review.
 - Compare by overlap in the same coordinates, at matched views and poses, against the guide and the last approved state.
+- Offer choices as built options: when a modeling decision is uncertain, build each option as a what-if, show them
+  together (each overlapped on the guide or drawing, plus one motion video with a column per option: `review_variants`)
+  and ask one question whose answers are the built variants ([guides and display](references/guide-and-show.md#offer-choices-as-built-options)).
 - A new capability that the next edit needs belongs in the workbench, with tests, not in a private script.
 - Credentials, character material and native bindings stay in the private workspace.
 

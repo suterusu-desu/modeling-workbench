@@ -685,6 +685,33 @@ class ModelingService:
         """Encode normal/slow comparisons (one column per manifest column, before/after by default) from pinned source frames, with decode verification and frame mapping."""
         return self.motion.encode(motion,output_dir,fps,normal_cycles,slow_cycles,slow_speed,panel_size)
 
+    def review_variants(self, variants: dict, output_dir: str, labels: dict | None = None, stills: list[float] | None = None,
+                        timing: dict | None = None, cycle_s: float = .9, fps: int = 60, slow_speed: float = .15) -> dict:
+        """Show the built options of one decision together: `variants` maps each option (up to six) to its captured frames, {control value: {view: image path}}, with the same control values and views for every option (renders of what-if states at matched cameras). Writes one motion video per view with a column per option (normal speed, then slow) and, with `stills` (control values), one sheet per view with a row per value and a column per option."""
+        from .review_sheets import compose_review_sheet
+        if not isinstance(variants,dict) or not 1<=len(variants)<=6: raise ValueError('One to six variants are required')
+        names=list(variants); frames={n:{float(c):views for c,views in variants[n].items()} for n in names}
+        controls=sorted(frames[names[0]]); views=sorted(frames[names[0]][controls[0]]) if controls else []
+        if len(controls)<2 or any(sorted(frames[n])!=controls or any(sorted(frames[n][c])!=views for c in controls) for n in names):
+            raise ValueError('Every variant needs the same control values (at least two) and the same views at each')
+        out=Path(output_dir); out.mkdir(parents=True,exist_ok=True)
+        rows=[{'blink':c,**{n:{v:{'path':str(Path(frames[n][c][v]).resolve()),'sha256':digest(Path(frames[n][c][v]).read_bytes())}
+                                for v in views} for n in names}} for c in controls]
+        manifest={'columns':names,'labels':{n:(labels or {}).get(n,n) for n in names},'frames':rows,
+                  'timing':timing or {'close':.15,'hold':.06,'reopen':.24},'cycle_s':cycle_s,
+                  'source_limits':'Built options of one decision at matched cameras; each video frame shows the nearest '
+                                  'captured control value. Choices for the owner, not acceptance.'}
+        path=out/'variants-manifest.json'; path.write_text(json.dumps(manifest,indent=1),encoding='utf-8')
+        motion=self.motion.import_player(path)
+        encoded=self.motion.encode(motion['motion'],str(out/'replay'),fps,2,1,slow_speed,None)
+        sheets=[]
+        for view in views if stills else []:
+            picks=[min(controls,key=lambda c:abs(c-float(s))) for s in stills]
+            sheets.append(compose_review_sheet([{'label':f'{c:g}','images':[frames[n][c][view] for n in names]} for c in picks],
+                                               [manifest['labels'][n] for n in names],out/f'stills-{view}.png',title=view)['path'])
+        return {'manifest':str(path.resolve()),'motion':motion['motion'],'videos':[o['path'] for o in encoded['outputs']],
+                'stills':sheets,'variants':names,'controls':controls,'views':views}
+
     def record_outcome(self, question: str, character: dict, method: dict, evidence: list[str], applicability: str) -> dict:
         """Retain separate character and method dispositions with evidence and applicability; preserve earlier records."""
         return self.wb.record_outcome(question,character,method,evidence,applicability)
