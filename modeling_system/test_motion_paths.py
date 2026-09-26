@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
-                           shared_schedule, smooth_step, travel_weight)
+                           shared_schedule, smooth_step, travel_weight, hinge_change, hinge_landing, hinge_carry)
 from .preparation import ARRAY_OPERATIONS
 
 
@@ -310,6 +310,111 @@ class TravelWeightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'one travel value'): travel_weight(points, np.zeros(4), low=0., high=1.)
         with self.assertRaisesRegex(ValueError, 'low < high'): travel_weight(points, np.zeros(9), low=1., high=1.)
         with self.assertRaisesRegex(ValueError, 'cutoff'): travel_weight(points, np.zeros(9), low=0., high=1., sigma=.1, cutoff=-1.)
+
+
+def cylinder_points(x, radius, angle_degrees):
+    """Points at axial positions x, distance `radius` from the x axis, at an angle about +x measured right-handed from -y
+    (the front): 0 is in front, positive angles turn the front point downward (toward -z)."""
+    a = np.radians(np.broadcast_to(angle_degrees, np.shape(x))); r = np.broadcast_to(radius, np.shape(x))
+    return np.c_[x, -r * np.cos(a), -r * np.sin(a)]
+
+
+def rodrigues(v, k, angle):
+    c, s = np.cos(angle)[:, None], np.sin(angle)[:, None]
+    return v * c + np.cross(k, v) * s + k * (v @ k)[:, None] * (1 - c)
+
+
+class HingeConstructionTests(unittest.TestCase):
+    def test_hinge_change_recovers_a_right_handed_turn_radial_and_axial_change(self):
+        rest = cylinder_points(np.linspace(-.5, .5, 11), 1.1, np.linspace(-50, -20, 11))
+        end = rotate_x(rest, np.radians(30))                                  # right-handed about +x
+        end = end + np.c_[np.full(11, .02), np.zeros((11, 2))]                 # slide along the axis
+        grow = end.copy(); grow[:, 1:] *= 1.05                                  # and move out from it
+        result = hinge_change(rest, grow, [0., 0., 0.], [2., 0., 0.])
+        np.testing.assert_allclose(result['turn'], np.radians(30), atol=1e-12)
+        np.testing.assert_allclose(result['axial'], .02, atol=1e-12)
+        np.testing.assert_allclose(result['radial'], 1.1 * .05, atol=1e-12)
+        self.assertAlmostEqual(result['public_metrics']['turn_degrees_max'], 30., places=9)
+
+    def test_hinge_change_refusals(self):
+        rest = cylinder_points(np.linspace(-.5, .5, 5), 1., 0.)
+        with self.assertRaisesRegex(ValueError, 'on the hinge axis'):
+            hinge_change(np.r_[rest, [[.2, 0., 0.]]], np.r_[rest, [[.3, 0., 0.]]], [0, 0, 0], [1, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'half turn'):
+            hinge_change(rest, rotate_x(rest, np.pi), [0, 0, 0], [1, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'nonzero hinge axis'):
+            hinge_change(rest, rest, [0, 0, 0], [0, 0, 0])
+
+    def test_edge_lands_on_the_landing_line_and_the_band_follows_by_its_weight(self):
+        x = np.linspace(-.6, .6, 13)
+        edge = cylinder_points(x, 1.1, -40.)                                    # upper margin, above the front
+        band = cylinder_points(x, 1.15, -55.)                                   # skin above it
+        still = cylinder_points(x, 1.2, 60.)                                    # below the landing line: stays
+        positions = np.r_[edge, band, still]; n = len(x)
+        landing = cylinder_points(np.linspace(-.7, .7, 29), 1.1, 35.)           # lower margin at rest
+        weights = np.r_[np.ones(n), np.full(n, .5), np.zeros(n)]
+        result = hinge_landing(positions, np.arange(n), landing, [0., 0., 0.], [1., 0., 0.], weights=weights, outside=.001)
+        out = result['positions']
+        np.testing.assert_allclose(out[:n], cylinder_points(x, 1.101, 35.), atol=1e-12)
+        np.testing.assert_allclose(result['edge_turn'], np.radians(75.), atol=1e-12)
+        np.testing.assert_allclose(result['turn'][n:2 * n], np.radians(37.5), atol=1e-12)
+        np.testing.assert_allclose(out[n:2 * n], cylinder_points(x, 1.15 + .0005, -55. + 37.5), atol=1e-12)
+        self.assertTrue(np.array_equal(out[2 * n:], positions[2 * n:]))         # weight 0 keeps its exact bytes
+        np.testing.assert_allclose(out[:, 0], positions[:, 0], atol=1e-12)     # nothing slides along the axis
+        m = result['public_metrics']
+        self.assertAlmostEqual(m['landed_gap_to_landing_line_max'], .001, places=9)
+        self.assertEqual(m['edge_points_beyond_landing_range'], 0)
+
+    def test_edge_beyond_the_landing_range_takes_its_end_values_and_is_counted(self):
+        x = np.linspace(-1., 1., 11)
+        landing = cylinder_points(np.linspace(-.5, .5, 11), 1., np.linspace(20., 40., 11))
+        result = hinge_landing(cylinder_points(x, 1., -30.), np.arange(11), landing, [0, 0, 0], [1, 0, 0])
+        self.assertEqual(result['public_metrics']['edge_points_beyond_landing_range'], 6)
+        np.testing.assert_allclose(np.degrees(result['edge_turn'][[0, -1]]), [50., 70.], atol=1e-9)
+
+    def test_landing_refusals(self):
+        edge = cylinder_points(np.linspace(-.5, .5, 5), 1., -30.); landing = cylinder_points(np.linspace(-.5, .5, 5), 1., 30.)
+        with self.assertRaisesRegex(ValueError, 'two distinct edge'):
+            hinge_landing(edge, np.array([1, 1]), landing, [0, 0, 0], [1, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'two finite landing'):
+            hinge_landing(edge, np.arange(5), landing[:1], [0, 0, 0], [1, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'Weights must'):
+            hinge_landing(edge, np.arange(5), landing, [0, 0, 0], [1, 0, 0], weights=np.full(5, 1.5))
+        with self.assertRaisesRegex(ValueError, 'on the hinge axis'):
+            hinge_landing(edge, np.arange(5), np.r_[landing, [[0., 0., 0.]]], [0, 0, 0], [1, 0, 0])
+
+    def test_attachments_ride_their_host_and_the_native_formula_matches(self):
+        x = np.linspace(-.6, .6, 13)
+        host = cylinder_points(x, 1.1, -40.); host_end = rotate_x(host, np.radians(70.)) * [1., 1.02, 1.02]
+        fins = host + np.c_[np.zeros(13), -.03 * np.ones(13), -.02 * np.ones(13)]   # lash fins in front of and above it
+        result = hinge_carry(fins, host, host_end, [0., 0., 0.], [1., 0., 0.], fraction=[0., .5, 1.])
+        pos = result['positions']
+        self.assertEqual(pos.shape, (3, 13, 3))
+        np.testing.assert_allclose(pos[0], fins, atol=1e-12)
+        np.testing.assert_array_equal(result['host_index'], np.arange(13))
+        np.testing.assert_allclose(result['turn'], np.radians(70.), atol=1e-12)
+        k = np.array([1., 0., 0.])
+        for row, f in zip(pos, (0., .5, 1.)):                                    # what a node group computes per point
+            s = fins @ k; r = fins - s[:, None] * k; length = np.linalg.norm(r, axis=1)
+            native = ((s + f * result['axial'])[:, None] * k
+                      + rodrigues(r, k, f * result['turn']) * ((length + f * result['radial']) / length)[:, None])
+            np.testing.assert_allclose(row, native, atol=1e-12)
+        self.assertLess(result['public_metrics']['seat_distance_change_max'], .002)
+        single = hinge_carry(fins, host, host_end, [0, 0, 0], [1, 0, 0], fraction=.25, host_index=np.arange(13))
+        self.assertEqual(single['positions'].shape, (13, 3))
+
+    def test_carry_refusals(self):
+        host = cylinder_points(np.linspace(-.5, .5, 5), 1., -30.)
+        with self.assertRaisesRegex(ValueError, 'One host index'):
+            hinge_carry(host, host, host, [0, 0, 0], [1, 0, 0], host_index=np.arange(4))
+        with self.assertRaisesRegex(ValueError, 'fraction'):
+            hinge_carry(host, host, host, [0, 0, 0], [1, 0, 0], fraction=[[0., 1.]])
+        with self.assertRaisesRegex(ValueError, 'attached point on the hinge axis'):
+            hinge_carry(np.array([[.1, 0., 0.]]), host, host, [0, 0, 0], [1, 0, 0])
+
+    def test_registered_as_array_preparation_operations(self):
+        for name in ('hinge_change', 'hinge_landing', 'hinge_carry'):
+            self.assertIn(name, ARRAY_OPERATIONS)
 
 
 if __name__ == '__main__':

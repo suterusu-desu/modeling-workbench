@@ -475,3 +475,194 @@ def schedule_pace(pace, schedule, weights, *, mode='blend'):
                       'material spacing acts as a hard edge; where two regions meet, share or fade the schedule across the '
                       'junction. Attachments that follow the host stay in sync only if they move with it. No guide or '
                       'appearance qualification.'}
+
+
+def _wrap(angle):
+    return (np.asarray(angle, float) + np.pi) % (2 * np.pi) - np.pi
+
+
+def _hinge_frame(pivot, axis, toward):
+    """Hinge line through `pivot` along unit `axis`, with a reference direction perpendicular to it pointing toward the
+    given material (so the angle's branch cut lies behind the hinge, away from the moving material)."""
+    centre, k = np.asarray(pivot, float), np.asarray(axis, float)
+    if centre.shape != (3,) or not np.isfinite(centre).all():
+        raise ValueError('A finite 3D pivot is required')
+    if k.shape != (3,) or not np.isfinite(k).all() or np.linalg.norm(k) < 1e-12:
+        raise ValueError('A finite nonzero hinge axis is required')
+    k = k / np.linalg.norm(k)
+    d = np.asarray(toward, float).reshape(-1, 3).mean(axis=0) - centre
+    d = d - (d @ k) * k
+    if np.linalg.norm(d) < 1e-12:
+        d = np.cross(k, [1., 0., 0.] if abs(k[0]) < .9 else [0., 1., 0.])
+    e1 = d / np.linalg.norm(d)
+    return centre, k, e1, np.cross(k, e1)
+
+
+def _hinge_coordinates(points, frame):
+    centre, k, e1, e2 = frame
+    v = np.asarray(points, float) - centre; s = v @ k; rad = v - s[..., None] * k
+    return s, np.linalg.norm(rad, axis=-1), np.arctan2(rad @ e2, rad @ e1)
+
+
+def _hinge_place(s, radius, angle, frame):
+    centre, k, e1, e2 = frame
+    return (centre + np.asarray(s)[..., None] * k + (radius * np.cos(angle))[..., None] * e1
+            + (radius * np.sin(angle))[..., None] * e2)
+
+
+def _off_axis(radius, what):
+    if np.any(np.asarray(radius) < 1e-12):
+        raise ValueError(f'{what} on the hinge axis has no turn; move the pivot or leave the point out')
+
+
+def hinge_change(reference, end, pivot, axis):
+    """Each point's change between two poses in hinge coordinates about the line through `pivot` along `axis`.
+
+    `turn` is the angle about the axis (radians, right-handed about `axis`, the shorter way round), `radial` the change
+    of the point's distance from the axis and `axial` its slide along it. Moving a point by a fraction f of all three is
+    a roll about the hinge (as `path_positions` with a pivot and axis) and reproduces both poses at f = 0 and 1. These
+    per-point values are what a native rig needs to carry the same motion (`hinge_carry`).
+    """
+    rest, final = _pair(reference, end)
+    frame = _hinge_frame(pivot, axis, rest)
+    s0, r0, t0 = _hinge_coordinates(rest, frame); s1, r1, t1 = _hinge_coordinates(final, frame)
+    _off_axis(np.minimum(r0, r1), 'A point')
+    turn = _wrap(t1 - t0)
+    if np.any(np.abs(turn) > np.pi - 1e-6):
+        raise ValueError('A half turn about the axis has no unique direction; move the pivot')
+    metrics = {'points': int(len(rest)), 'turn_degrees_min': float(np.degrees(turn.min())),
+               'turn_degrees_max': float(np.degrees(turn.max())), 'radial_min': float((r1 - r0).min()),
+               'radial_max': float((r1 - r0).max()), 'axial_abs_max': float(np.abs(s1 - s0).max())}
+    return {'turn': turn, 'radial': r1 - r0, 'axial': s1 - s0, 'public_metrics': metrics,
+            'objective': 'Hinge coordinates (axial position, distance from the axis, right-handed angle about it) of both '
+                         'poses and their differences',
+            'limits': 'Describes the change about the chosen hinge; material that does not turn about it has large '
+                      'radial or axial parts. No guide, contact or appearance qualification.'}
+
+
+def _polyline_distance(points, line):
+    """Distance from each point to a polyline through `line` in its given order."""
+    a, b = line[:-1], line[1:]; ab = b - a; length2 = np.maximum((ab * ab).sum(1), 1e-300)
+    t = np.clip(np.einsum('msk,sk->ms', points[:, None, :] - a[None], ab) / length2[None], 0, 1)
+    closest = a[None] + t[..., None] * ab[None]
+    return np.linalg.norm(points[:, None, :] - closest, axis=-1).min(axis=1)
+
+
+def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outside=0.):
+    """Close an edge onto a landing curve by turning it about a hinge, carrying a band of material with it.
+
+    `edge` indexes the points of `positions` that must land (a lid's margin); `landing` holds points of the curve they
+    close onto (the facing margin where it rests), densely enough to interpolate along the axis. An edge point at axial
+    position s turns about the hinge line to the landing curve's angle at the same s and moves to the landing curve's
+    distance from the axis there plus `outside`, so it lies just outside the landing curve instead of cutting behind it
+    or standing off it. Edge points beyond the landing curve's axial range take its end values (counted in the metrics).
+    Every point then turns by its weight times the edge's turn at its own axial position and moves out by its weight
+    times the edge's radial change there. `weights` (one per point in [0, 1]; default 1 on the edge, 0 elsewhere) are
+    the band that closes with the edge: 1 on the edge and the material behind it (a lid's inner surface), falling off
+    with distance from the edge, 0 on what stays (the facing side, the corners). Points keep their axial positions, so
+    nothing slides sideways.
+
+    Returns the closed `positions`, each point's full `turn` (radians, right-handed about the axis) and `radial` change,
+    and the edge's own values: build the in-betweens as one roll to this pose (`path_positions` with the same pivot and
+    axis and one pace for every point) and carry attachments with `hinge_carry`.
+    """
+    P = np.asarray(positions, float)
+    if P.ndim != 2 or P.shape[1:] != (3,) or not len(P) or not np.isfinite(P).all():
+        raise ValueError('Finite positions are required')
+    idx = np.asarray(edge)
+    if (idx.ndim != 1 or idx.dtype.kind not in 'iu' or len(idx) < 2 or len(np.unique(idx)) != len(idx)
+            or idx.min() < 0 or idx.max() >= len(P)):
+        raise ValueError('At least two distinct edge indices of the supplied points are required')
+    L = np.asarray(landing, float)
+    if L.ndim != 2 or L.shape[1:] != (3,) or len(L) < 2 or not np.isfinite(L).all():
+        raise ValueError('At least two finite landing points are required')
+    if not np.isfinite(outside):
+        raise ValueError('The outside margin must be finite')
+    w = np.zeros(len(P)) if weights is None else np.asarray(weights, float)
+    if weights is None:
+        w[idx] = 1.
+    if w.shape != (len(P),) or not np.isfinite(w).all() or (w < 0).any() or (w > 1).any():
+        raise ValueError('Weights must be one value in [0, 1] per point')
+    frame = _hinge_frame(pivot, axis, np.r_[P[idx], L])
+    s, rho, th = _hinge_coordinates(P, frame); sl, rl, tl = _hinge_coordinates(L, frame)
+    _off_axis(rl, 'A landing point'); _off_axis(rho[idx], 'An edge point')
+    o = np.argsort(sl, kind='stable'); sl, rl, tl = sl[o], rl[o], np.unwrap(tl[o])
+    se, re, te = s[idx], rho[idx], th[idx]
+    edge_turn = _wrap(np.interp(se, sl, tl) - te)
+    edge_radial = np.interp(se, sl, rl) + float(outside) - re
+    if np.any(np.abs(edge_turn) > np.pi - 1e-6):
+        raise ValueError('An edge point would turn half way round; move the pivot')
+    beyond = int(np.count_nonzero((se < sl[0] - 1e-12) | (se > sl[-1] + 1e-12)))
+    oe = np.argsort(se, kind='stable')
+    turn = w * np.interp(s, se[oe], edge_turn[oe]); radial = w * np.interp(s, se[oe], edge_radial[oe])
+    turn[idx] = w[idx] * edge_turn; radial[idx] = w[idx] * edge_radial
+    moved = w > 0
+    out = P.copy()
+    out[moved] = _hinge_place(s[moved], rho[moved] + radial[moved], th[moved] + turn[moved], frame)
+    landed = idx[w[idx] >= 1]
+    gap = _polyline_distance(out[landed], L[o]) if len(landed) else np.zeros(0)
+    metrics = {'points': int(len(P)), 'edge_points': int(len(idx)), 'moved_points': int(moved.sum()),
+               'edge_points_beyond_landing_range': beyond,
+               'edge_turn_degrees_min': float(np.degrees(edge_turn.min())),
+               'edge_turn_degrees_max': float(np.degrees(edge_turn.max())),
+               'edge_radial_min': float(edge_radial.min()), 'edge_radial_max': float(edge_radial.max()),
+               'landed_gap_to_landing_line_max': float(gap.max()) if len(gap) else None,
+               'landed_gap_to_landing_line_median': float(np.median(gap)) if len(gap) else None}
+    return {'positions': out, 'turn': turn, 'radial': radial, 'edge_turn': edge_turn, 'edge_radial': edge_radial,
+            'public_metrics': metrics,
+            'objective': "Each edge point turned about the hinge onto the landing curve's angle and distance (plus the "
+                         'outside margin) at its own axial position; every point takes its weight times the edge values '
+                         'at its axial position',
+            'limits': 'The landing curve, hinge, outside margin and band weights are construction choices; the landed '
+                      'gap is measured to the landing polyline, not against a surface. Build the in-betweens as one roll '
+                      'and check clearance against the real obstacle. No guide or appearance qualification.'}
+
+
+def hinge_carry(attached, host_reference, host_end, pivot, axis, *, fraction=1., host_index=None):
+    """Carry attached material rigidly with the hinge motion of the host points it sits on.
+
+    Lashes on a lid margin, a marking or a seam on a moving part: each attached point takes the turn, radial and axial
+    change (`hinge_change`) of its host point (`host_index`, default its nearest host point in the reference pose) and
+    applies them to its own hinge coordinates. At fraction f it turns by f times the turn about the axis, moves out by f
+    times the radial change and along the axis by f times the axial change, so it keeps its seat on the host through the
+    motion instead of following separately stored shapes. `fraction` is one number or one value per phase: the same
+    fraction the host's in-betweens use (for a one-rate hinge, the geometric phase).
+
+    The per-point `turn`, `radial` and `axial` are what a native rig needs: with s and r the point's axial and radial
+    parts about the axis, P(f) = pivot + (s + f axial) axis + R(axis, f turn) r (|r| + f radial) / |r|, R a right-handed
+    rotation (Blender's Vector Rotate node, axis-angle type, turns right-handed).
+    """
+    A = np.asarray(attached, float)
+    if A.ndim != 2 or A.shape[1:] != (3,) or not len(A) or not np.isfinite(A).all():
+        raise ValueError('Finite attached positions are required')
+    host_rest, host_final = _pair(host_reference, host_end)
+    if host_index is None:
+        from scipy.spatial import cKDTree
+        _, j = cKDTree(host_rest).query(A)
+    else:
+        j = np.asarray(host_index)
+        if j.shape != (len(A),) or j.dtype.kind not in 'iu' or j.min() < 0 or j.max() >= len(host_rest):
+            raise ValueError('One host index per attached point is required')
+    f = np.asarray(fraction, float); single = f.ndim == 0; f = np.atleast_1d(f)
+    if f.ndim != 1 or not np.isfinite(f).all():
+        raise ValueError('The fraction must be one finite number or one per phase')
+    change = hinge_change(host_rest, host_final, pivot, axis)
+    frame = _hinge_frame(pivot, axis, host_rest)
+    turn, radial, axial = change['turn'][j], change['radial'][j], change['axial'][j]
+    s, rho, th = _hinge_coordinates(A, frame)
+    _off_axis(rho, 'An attached point')
+    out = _hinge_place(s[None] + f[:, None] * axial[None], rho[None] + f[:, None] * radial[None],
+                       th[None] + f[:, None] * turn[None], frame)
+    seat0 = np.linalg.norm(A - host_rest[j], axis=1)
+    carried = _hinge_place(s + axial, rho + radial, th + turn, frame)
+    seat1 = np.linalg.norm(carried - host_final[j], axis=1)
+    metrics = {'attached_points': int(len(A)), 'host_points_used': int(len(np.unique(j))),
+               'seat_distance_max': float(seat0.max()), 'seat_distance_change_max': float(np.abs(seat1 - seat0).max()),
+               'turn_degrees_min': float(np.degrees(turn.min())), 'turn_degrees_max': float(np.degrees(turn.max()))}
+    return {'positions': out[0] if single else out, 'turn': turn, 'radial': radial, 'axial': axial, 'host_index': j,
+            'public_metrics': metrics,
+            'objective': "Each attached point moved by the fraction of its host point's turn about the hinge, change of "
+                         'distance from it and slide along it',
+            'limits': 'Rigid only as far as neighbouring host points turn alike; the seat change measures how far an '
+                      'attached point leaves its host by the end pose. The host motion must itself be a roll about the '
+                      'same hinge at the same fraction. No contact or appearance qualification.'}

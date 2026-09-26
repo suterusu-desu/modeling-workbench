@@ -11,8 +11,8 @@ from .triangle_contact import projected_triangle_contact
 from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout
 from .correction_scope import correction_scope
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
-                           shared_schedule, travel_weight)
-from .construction_diagnostics import section_turns
+                           shared_schedule, travel_weight, hinge_change, hinge_landing, hinge_carry)
+from .construction_diagnostics import section_turns, closing_edges
 from .guide_synthesis import (front_depth, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
                               evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
                               front_retreat, fit_band_field)
@@ -106,7 +106,9 @@ ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric'
     'projected_triangle_contact': projected_triangle_contact,
     'motion_pace': motion_pace, 'path_positions': path_positions, 'hinge_motion': hinge_motion, 'keep_clearance': keep_clearance,
     'end_clearance': end_clearance, 'section_turns': section_turns, 'schedule_pace': schedule_pace,
-    'shared_schedule': shared_schedule, 'travel_weight': travel_weight, 'front_depth': front_depth, 'remove_thin_relief': remove_thin_relief,
+    'shared_schedule': shared_schedule, 'travel_weight': travel_weight, 'hinge_change': hinge_change,
+    'hinge_landing': hinge_landing, 'hinge_carry': hinge_carry, 'closing_edges': closing_edges,
+    'front_depth': front_depth, 'remove_thin_relief': remove_thin_relief,
     'stationary_offset': stationary_offset, 'pose_change': pose_change, 'fit_depth_field': fit_depth_field,
     'evaluate_depth_field': evaluate_depth_field, 'change_band': change_band, 'band_excess': band_excess,
     'height_field_mesh': height_field_mesh, 'keep_in_front': keep_in_front, 'front_retreat': front_retreat,

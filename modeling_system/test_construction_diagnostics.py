@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
-from .construction_diagnostics import (compare_bends, compare_stretch, edge_values_at_vertices, local_reversals,
-                                       sample_residuals, section_turns)
+from .construction_diagnostics import (closing_edges, compare_bends, compare_stretch, edge_values_at_vertices,
+                                       local_reversals, sample_residuals, section_turns)
 from .geometry import plane_sections, compare
 
 
@@ -222,6 +222,71 @@ class MaterialStretchTests(unittest.TestCase):
             with self.assertRaises(ValueError): compare_stretch(co, co, tri, **kwargs)
         collapsed = co.copy(); collapsed[:, 0] = 0
         self.assertEqual(compare_stretch(co, collapsed, tri)['all']['smallest_stretch_minimum'], 0.)
+
+
+def lid_edges(x, radius, angle_degrees):
+    """Points at axial positions x about the x axis, angle right-handed from -y (0 in front, positive downward)."""
+    a = np.radians(np.broadcast_to(angle_degrees, np.shape(x))); r = np.broadcast_to(radius, np.shape(x))
+    return np.c_[x, -r * np.cos(a), -r * np.sin(a)]
+
+
+class ClosingEdgeTests(unittest.TestCase):
+    """A synthetic eye: an upper margin above the front of a round eye (hinge along x through its centre), a lower
+    margin below it; the questions are the ones a viewer asks of a blink."""
+
+    def setUp(self):
+        self.x = np.linspace(-.6, .6, 13); n = len(self.x)
+        self.upper = lid_edges(self.x, 1.1, -40.); self.lower = lid_edges(self.x, 1.1, 30.)
+        self.rest = np.r_[self.upper, self.lower]; self.moving = np.arange(n); self.facing = np.arange(n, 2 * n)
+        self.phases = np.linspace(.1, 1., 10)
+
+    def poses(self, fraction_of, lower_rise=0.):
+        out = []
+        for g in self.phases:
+            f = np.clip(fraction_of(g), 0, 1)
+            up = lid_edges(self.x, 1.1, -40. + 70. * f)                          # a turn about the hinge onto the lower line
+            lo = lid_edges(self.x, 1.1, 30. - lower_rise * g)
+            out.append(np.r_[up, lo])
+        return np.stack(out)
+
+    def test_one_rate_hinge_with_a_still_facing_edge(self):
+        result = closing_edges(self.rest, self.poses(lambda g: np.full(13, g)), self.moving, self.facing,
+                               pivot=[0., 0., 0.], axis=[1., 0., 0.])
+        s = result['summary']
+        self.assertEqual(s['facing_travel_share_max'], 0.)
+        self.assertLess(s['closure_spread_max'], 1e-9)
+        self.assertLess(s['roll_deviation_share_max'], 1e-9)
+        self.assertLess(s['seam_to_facing_rest_share_max'], 1e-9)
+        mid = result['poses'][4]
+        np.testing.assert_allclose(mid['turn_share']['parts_median'], [.5, .5, .5], atol=1e-9)
+
+    def test_a_corner_that_closes_first_shows_as_a_spread_along_the_edge(self):
+        early = lambda g: g * (1 + (self.x - self.x.min()) / np.ptp(self.x))   # the far end ahead of the near end
+        result = closing_edges(self.rest, self.poses(early), self.moving, self.facing, pivot=[0, 0, 0], axis=[1, 0, 0])
+        row = result['poses'][4]
+        near, middle, far = row['turn_share']['parts_median']
+        self.assertGreater(far - near, .3)
+        self.assertGreater(result['summary']['closure_spread_max'], .2)
+
+    def test_a_rising_facing_edge_and_a_chord_path_are_reported(self):
+        rising = closing_edges(self.rest, self.poses(lambda g: np.full(13, g), lower_rise=10.), self.moving, self.facing)
+        self.assertGreater(rising['summary']['facing_travel_share_max'], .1)
+        self.assertNotIn('roll_deviation_share_max', rising['summary'])
+        closed = lid_edges(self.x, 1.1, 30.)
+        chords = np.stack([np.r_[(1 - g) * self.upper + g * closed, self.lower] for g in self.phases])
+        result = closing_edges(self.rest, chords, self.moving, self.facing, pivot=[0, 0, 0], axis=[1, 0, 0])
+        self.assertGreater(result['summary']['roll_deviation_share_max'], .1)  # the chord cuts inside the roll
+
+    def test_refusals(self):
+        poses = self.rest[None]
+        with self.assertRaisesRegex(ValueError, 'both a pivot and an axis'):
+            closing_edges(self.rest, poses, self.moving, self.facing, pivot=[0, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'moving edge needs'):
+            closing_edges(self.rest, poses, np.array([0]), self.facing)
+        with self.assertRaisesRegex(ValueError, 'Parts must'):
+            closing_edges(self.rest, poses, self.moving, self.facing, parts=0)
+        with self.assertRaisesRegex(ValueError, 'no opening'):
+            closing_edges(self.rest, poses, self.facing[:5], self.facing)
 
 
 if __name__ == '__main__': unittest.main()
