@@ -381,7 +381,7 @@ def _polyline_gap(points, line):
     return np.linalg.norm(points[:, None, :] - (a[None] + t[..., None] * ab[None]), axis=-1).min(axis=1)
 
 
-def closing_edges(reference, poses, moving, facing, *, pivot=None, axis=None, parts=3):
+def closing_edges(reference, poses, moving, facing, *, pivot=None, axis=None, parts=3, against='rest'):
     """How an edge closes onto a facing edge through a motion, before judging its shading.
 
     `reference` is the open pose (N, 3); `poses` the motion at increasing phases (P, N, 3), the last one closed;
@@ -389,19 +389,24 @@ def closing_edges(reference, poses, moving, facing, *, pivot=None, axis=None, pa
     edge. The questions are the ones a viewer asks of a blink: does the facing side stay where it rests, does the whole
     edge close at one rate, and does it turn like a lid or morph between keys?
 
+    `against` picks the line the moving edge closes onto: 'rest', the facing edge where it rests, or 'pose', the facing
+    edge where it is at the same pose. They agree while the facing edge stays still. Use 'pose' when the design moves the
+    facing edge (a lower lid whose middle rises to meet the upper): measured against the rest line, a lid closing at one
+    rate onto a risen edge reads as a spread. The facing edge's own travel is reported either way.
+
     Per pose:
     - `facing_travel_max` and `facing_travel_share`: the largest displacement of a facing-edge point from the reference,
       absolute and as a share of the rest opening (median gap from the moving edge to the facing edge at rest).
-    - `closure`: each moving-edge point's closed share of its gap to the facing edge's REST line, 1 - gap / rest gap,
-      as min / median / max, the spread between its 10th and 90th percentiles, and the median of each of `parts`
-      stretches along the edge. One rate gives equal shares; a corner that closes first (a zipper) shows a high share at
-      one end and a wide spread.
+    - `closure`: each moving-edge point's closed share of its gap to the facing line, 1 - gap / rest gap, as min /
+      median / max, the spread between its 10th and 90th percentiles, and the median of each of `parts` stretches along
+      the edge. One rate gives equal shares; a corner that closes first (a zipper) shows a high share at one end and a
+      wide spread.
     - With `pivot` and `axis` (the hinge the lid should turn on): `turn_share`, each moving point's turn about the axis
       as a share of its turn at the last pose, and `roll_deviation`, how far the moving edge lies from where one roll
       at the median share would put it (`motion_paths.path_positions`). Material that moves on separate paths and
       timings, or is pushed by stacked corrections, deviates; a lid that turns as one piece does not.
-    At the last pose `seam_to_facing_rest` gives the moving edge's distance to the facing edge's rest line (0 where the
-    closed seam lies on it).
+    At the last pose `seam_to_facing` gives the moving edge's distance to the facing line (0 where the closed seam lies
+    on it); with `against='rest'` it is also reported under its earlier name, `seam_to_facing_rest`.
     """
     rest = _points(reference)
     seq = np.asarray(poses, dtype=np.float64)
@@ -416,6 +421,8 @@ def closing_edges(reference, poses, moving, facing, *, pivot=None, axis=None, pa
         raise ValueError('Parts must be an integer from 1 to the number of moving-edge points')
     if (pivot is None) != (axis is None):
         raise ValueError('Give both a pivot and an axis, or neither')
+    if against not in ('rest', 'pose'):
+        raise ValueError("against must be 'rest' or 'pose'")
     line = rest[fc]
     gap0 = _polyline_gap(rest[mv], line)
     opening = float(np.median(gap0))
@@ -441,7 +448,7 @@ def closing_edges(reference, poses, moving, facing, *, pivot=None, axis=None, pa
     rows = []
     for g, pose in enumerate(seq):
         travel = np.linalg.norm(pose[fc] - rest[fc], axis=1)
-        gap = _polyline_gap(pose[mv], line)
+        gap = _polyline_gap(pose[mv], line if against == 'rest' else pose[fc])
         closure = np.where(open_ok, 1 - gap / np.where(open_ok, gap0, 1), np.nan)
         row = {'pose': g, 'facing_travel_max': float(travel.max()), 'facing_travel_share': float(travel.max() / opening),
                'closure': stats(closure)}
@@ -456,18 +463,21 @@ def closing_edges(reference, poses, moving, facing, *, pivot=None, axis=None, pa
             row['roll_deviation'] = {'median_share_used': m, 'max': float(dev.max()), 'median': float(np.median(dev)),
                                      'share_of_opening_max': float(dev.max() / opening)}
         rows.append(row)
-    rows[-1]['seam_to_facing_rest'] = {'max': float(gap.max()), 'median': float(np.median(gap)),
-                                       'share_of_opening_max': float(gap.max() / opening)}
+    seam = {'max': float(gap.max()), 'median': float(np.median(gap)), 'share_of_opening_max': float(gap.max() / opening)}
+    rows[-1]['seam_to_facing'] = seam
     inner = rows[:-1] if len(rows) > 1 else rows
-    summary = {'rest_opening_median': opening,
+    summary = {'rest_opening_median': opening, 'against': against,
                'facing_travel_share_max': max(r['facing_travel_share'] for r in rows),
                'closure_spread_max': max((r['closure']['spread_p10_p90'] for r in inner if r['closure']), default=None),
-               'seam_to_facing_rest_share_max': rows[-1]['seam_to_facing_rest']['share_of_opening_max']}
+               'seam_to_facing_share_max': seam['share_of_opening_max']}
+    if against == 'rest':
+        rows[-1]['seam_to_facing_rest'] = dict(seam)
+        summary['seam_to_facing_rest_share_max'] = seam['share_of_opening_max']
     if hinge is not None:
         summary['roll_deviation_share_max'] = max(r['roll_deviation']['share_of_opening_max'] for r in rows)
     return {'poses': rows, 'summary': summary, 'revision': _revision(rest, seq, mv, fc),
-            'objective': "Facing-edge travel, the moving edge's closed share of its gap to the facing rest line, and "
-                         'optionally its turn about a hinge and distance from one roll, per pose',
+            'objective': "Facing-edge travel, the moving edge's closed share of its gap to the facing line (rest or "
+                         'pose), and optionally its turn about a hinge and distance from one roll, per pose',
             'limits': 'Edge measures only: the lid body between the edges, its shading and the corners need section_turns, '
                       'compare_bends and matched renders. Gaps are to the polyline through the ordered facing points. A '
                       'deliberate difference in rate or a moving facing side is a design choice these numbers cannot '

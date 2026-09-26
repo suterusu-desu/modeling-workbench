@@ -57,8 +57,8 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 | `reversing_vertices` | movers whose progress along their own rest-to-end chord falls back by more than 2 % | 0 |
 | `symmetry` | largest distance between a vertex and its mirrored partner's mirror image | 1e-5 |
 | `facing_travel_share` | the facing edge's largest travel, share of the rest opening (`closing_edges`) | .05 |
-| `closing_spread` | largest difference in closed share between stretches of the edge, before closure | .1 |
-| `seam_share` | the closed edge's median distance from the facing rest line, share of the opening | .05 |
+| `closing_spread` | largest difference between stretches of the edge, before closure: in turn share about the hinge when one is declared, else in closed share | .1 |
+| `seam_share` | the closed edge's median distance from the facing edge, share of the opening | .05 |
 | `roll_deviation_share` | the moving edge's distance from one roll about the hinge, share of the opening | .1 |
 | `carrier_shapes` | blend shapes needed: one straight shape, or with a mid shape driven at 4s(1-s) | 2 |
 
@@ -66,19 +66,23 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 limit is an allowance over the baseline's value: a candidate is not failed for what it inherited, the report still shows
 the inherited value, and a rebuild is not held to its predecessor's geometry. The other checks describe the construction
 itself and stay absolute, so a rebuild of a failed mechanism has to pass them. A design that wants the lower lid to rise
-raises `facing_travel_share` in the declaration, where the choice is visible.
+raises `facing_travel_share` in the declaration, where the choice is visible. The seam and, without a hinge, the closed
+share are measured against the facing edge where it is at each phase (`closing_edges(..., against='pose')`); with a
+hinge the spread uses the margin's own turn share. Either way a lid that closes at one rate onto a rising lower lid reads
+as one rate, and a still lower lid gives the same numbers as its rest line.
 
 Each row reports `observed`, `limit`, `rule`, `status` (pass, fail or unknown), `detail` (where and when, per-stretch
 medians, carrier errors and worst vertices) and, with a baseline, `baseline_observed`. A check that cannot be measured
 (no triangles saved, a closing spread with one pose) is unknown, and unknown blocks retention.
 
 In real use, on one character's saved native arrays, a blink built as per-point paths with stacked corrections (rejected
-on sight) failed every closing check: facing travel .55 of the opening, spread between the lid's thirds .50, seam .47,
-roll deviation .27. Its hinged rebuild passed them: 0, .07, .01, .06. Against the rejected blink as baseline, the rebuild's
-folds (116 against 171), reversals (29 against 211) and one skin point about .003 inside the eye at closure were
-inherited and passed as such. The carrier check found about 2,400 vertices, all outside the hinged band and still on the
-old per-point motion, that two blend shapes could not carry within .0007. Both checks ran in about three seconds on a
-58,000-point skin.
+on sight) failed facing travel (.55 of the opening), the spread of turn share between the lid's thirds (.37) and roll
+deviation (.27); its seam lay on its raised lower lid (.0004), which is why the rise, not the seam, fails. Its hinged
+rebuild passed all four: 0, .004, .01, .06. Against the rejected blink as baseline, the rebuild's folds (116 against
+171) and reversals (29 against 211) were inherited and passed as such. The checks also found motion nobody saw: the hidden half of the source mesh, cut away by a mirror modifier and never displayed, still
+moved on the old per-point paths, one point ending inside the eye. With the region set to the visible eye area it fails
+`still_outside`, and it held nearly all the vertices that two blend shapes could not carry within .0007 (inside the
+hinged region, 6 vertices, at most .001). Both checks ran in about three seconds on a 58,000-point skin.
 
 ## Guards for native trials
 

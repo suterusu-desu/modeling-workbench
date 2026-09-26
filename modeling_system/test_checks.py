@@ -109,6 +109,17 @@ class StandardCheckTests(unittest.TestCase):
                 a, radius = ROWS[r]; skin[k][row(r)] = ring(a - 12. * g, radius)
         self.assertIn('facing_travel_share', self.failing(self.run_on(skin)))
 
+    def test_a_designed_lower_lid_rise_passes_the_closing_checks_once_its_travel_is_allowed(self):
+        lift = 20. * (1 - (X / .6) ** 2); skin = hinged().copy()
+        for k, g in enumerate(PHASES):
+            a = -40. + g * (70. - lift); skin[k][row(UPPER)] = np.c_[X, -1.1 * np.cos(np.radians(a)), -1.1 * np.sin(np.radians(a))]
+            b = 30. - g * lift; skin[k][row(LOWER)] = np.c_[X, -1.1 * np.cos(np.radians(b)), -1.1 * np.sin(np.radians(b))]
+        declaration = dict(self.declaration, limits={'facing_travel_share': .5}); del declaration['carrier']
+        status = self.status(run_checks(declaration, states(skin), base=self.root))
+        self.assertEqual([status[k] for k in ('facing_travel_share', 'closing_spread', 'seam_share',
+                                              'roll_deviation_share')], ['pass'] * 4)
+        self.assertIn('facing_travel_share', self.failing(run_checks(self.declaration, states(skin), base=self.root)))
+
     def test_straight_chords_cut_the_eye_and_leave_the_roll(self):
         failing = self.failing(self.run_on(hinged(chord=True)))
         self.assertIn('clearance_shortfall', failing)

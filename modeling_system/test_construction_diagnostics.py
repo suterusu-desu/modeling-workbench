@@ -277,6 +277,24 @@ class ClosingEdgeTests(unittest.TestCase):
         result = closing_edges(self.rest, chords, self.moving, self.facing, pivot=[0, 0, 0], axis=[1, 0, 0])
         self.assertGreater(result['summary']['roll_deviation_share_max'], .1)  # the chord cuts inside the roll
 
+    def test_a_rising_facing_edge_is_one_rate_against_its_own_pose(self):
+        """The lower margin's middle rises on the same timing and the upper margin lands on it."""
+        lift = 20. * (1 - (self.x / .6) ** 2)
+        poses = np.stack([np.r_[lid_edges(self.x, 1.1, -40. + g * (70. - lift)), lid_edges(self.x, 1.1, 30. - g * lift)]
+                          for g in self.phases])
+        report = closing_edges(self.rest, poses, self.moving, self.facing, against='pose', pivot=[0, 0, 0], axis=[1, 0, 0])
+        pose, rest = report['summary'], closing_edges(self.rest, poses, self.moving, self.facing)['summary']
+        self.assertLess(pose['seam_to_facing_share_max'], 1e-9)          # the seam lies on the risen facing edge
+        self.assertNotIn('seam_to_facing_rest_share_max', pose)
+        self.assertGreater(rest['seam_to_facing_rest_share_max'], .1)   # against the rest line it stands off
+        self.assertLess(pose['closure_spread_max'], rest['closure_spread_max'])
+        for row in report['poses']:                                      # the margin itself turns at one rate
+            parts = row['turn_share']['parts_median']; self.assertLess(max(parts) - min(parts), 1e-9)
+        self.assertEqual(pose['facing_travel_share_max'], rest['facing_travel_share_max'])
+        self.assertGreater(pose['facing_travel_share_max'], .1)          # the rise itself is still reported
+        with self.assertRaisesRegex(ValueError, "against must be"):
+            closing_edges(self.rest, poses, self.moving, self.facing, against='closed')
+
     def test_refusals(self):
         poses = self.rest[None]
         with self.assertRaisesRegex(ValueError, 'both a pivot and an axis'):

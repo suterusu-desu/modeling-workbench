@@ -160,19 +160,23 @@ path between the two poses rather than another fitted key; see [motion paths](mo
 ## How an edge closes
 
 Before judging a closing motion's shading, measure the mechanism. `closing_edges(reference, poses, moving, facing,
-pivot=None, axis=None, parts=3)` takes the open pose, the motion at increasing phases (the last one closed) and two
+pivot=None, axis=None, parts=3, against='rest')` takes the open pose, the motion at increasing phases (the last one closed) and two
 index arrays ordered along the moving edge and the edge it closes onto (for a blink the upper and lower lid margins).
 Per pose it reports:
 
 - `facing_travel_max` and `facing_travel_share`: the facing edge's largest travel from rest, absolute and as a share of
   the rest opening (the median gap between the edges at rest).
-- `closure`: each moving point's closed share of its gap to the facing edge's rest line, as min, median, max, the p10-p90
-  spread and the median of each of `parts` stretches along the edge. One rate gives equal shares; a corner that closes
+- `closure`: each moving point's closed share of its gap to the facing line, as min, median, max, the p10-p90 spread and
+  the median of each of `parts` stretches along the edge. The facing line is the facing edge at rest (`against='rest'`)
+  or where it is at that pose (`'pose'`); they agree while it stays still. When the design raises the facing edge (a
+  lower lid whose middle rises to meet the upper), use `'pose'`: against the rest line, a lid that closes at one rate
+  onto the risen edge reads as a spread, and the seam as standing off. One rate gives equal shares; a corner that closes
   first gives a high share at one end and a wide spread.
 - With `pivot` and `axis`: `turn_share`, each moving point's turn about the hinge as a share of its turn at the last
   pose, and `roll_deviation`, the moving edge's distance from one roll at the median share (`path_positions`). Material
   on separate paths and timings, or pushed by stacked corrections, deviates; a lid that turns as one piece does not.
-- At the last pose, `seam_to_facing_rest`: the closed edge's distance from the facing edge's rest line.
+- At the last pose, `seam_to_facing`: the closed edge's distance from the facing line (also `seam_to_facing_rest` when
+  measured against the rest line).
 
 The summary carries the largest facing-travel share, the largest closure spread before the last pose, the seam's share
 and, with a hinge, the largest roll deviation. In real use, on one character's saved native arrays, a blink built as

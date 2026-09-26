@@ -31,7 +31,7 @@ LIMITS = {
     'symmetry': 1e-5,               # largest distance between a vertex and its mirrored partner's mirror image
     'facing_travel_share': .05,     # opposing edge travel as a share of the rest opening
     'closing_spread': .1,           # largest difference in closed share between stretches of the edge before closure
-    'seam_share': .05,              # closed edge's median distance from the opposing rest line, share of the opening
+    'seam_share': .05,              # closed edge's median distance from the opposing edge, share of the opening
     'roll_deviation_share': .1,     # distance from one roll about the hinge, share of the opening
     'carrier_shapes': 2.,           # blend shapes needed to carry the motion within the declared tolerance
 }
@@ -261,14 +261,17 @@ def _measure(d, states, base, baseline=None):
         if len(P) < 2:
             raise ValueError('Closing checks need at least one pose after rest')
         report = closing_edges(P[0], P[1:], moving_edge, facing_edge, pivot=c.get('pivot'), axis=c.get('axis'),
-                               parts=int(c.get('parts', 3)))
+                               parts=int(c.get('parts', 3)), against='pose')
         s = report['summary']; rows = report['poses']
         out['facing_travel_share'] = (s['facing_travel_share_max'], {})
-        parts = {phases[r['pose'] + 1]: r['closure']['parts_median'] if r['closure'] else None for r in rows}
+        # One rate: with a hinge, the margin's own turn share per stretch (independent of how the facing edge moves);
+        # without one, its closed share of the gap to the facing edge where that edge is at each pose.
+        source = 'turn_share' if 'pivot' in c else 'closure'
+        parts = {phases[r['pose'] + 1]: r[source]['parts_median'] if r[source] else None for r in rows}
         spreads = [max(p) - min(p) for p in list(parts.values())[:-1] if p and None not in p]
         out['closing_spread'] = (float(max(spreads)) if spreads else None, {
-            'parts_median_per_pose': parts, 'pointwise_p10_p90_max': s['closure_spread_max']})
-        seam = rows[-1]['seam_to_facing_rest']
+            'measured_on': source, 'parts_median_per_pose': parts, 'pointwise_p10_p90_max': s['closure_spread_max']})
+        seam = rows[-1]['seam_to_facing']
         out['seam_share'] = (seam['median'] / s['rest_opening_median'], {
             'rest_opening': s['rest_opening_median'], 'largest_share': seam['share_of_opening_max']})
         if 'pivot' in c:
