@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .bake import BASES
 from .study import jaw_weights, load_shapes, rigid_motion, seam_rings, viseme_mix
 
 LIMITS = {
@@ -154,6 +155,10 @@ def validate_face_declaration(declaration):
         if len(s) < 3 or s[0] != 0 or np.any(np.diff(s) <= 0) or not all(
                 len(w) == len(s) for w in c.get('weights', {}).values()) or not c.get('weights'):
             raise ValueError(f'Control {name!r} needs rising samples from 0 and one weight per sample for each key')
+        for key, driver in c.get('correctives', {}).items():
+            if key not in c['weights'] or driver not in set(BASES) - {'main'}:
+                raise ValueError(f'Control {name!r}: a corrective is one of its keys with a bake driver '
+                                 f'({", ".join(sorted(set(BASES) - {"main"}))})')
     for pair in d.get('pairs', []):
         if pair.get('split') not in ('hard', 'feathered') or not all(pair.get(k) for k in ('both', 'left', 'right')):
             raise ValueError("Each left/right pair needs both, left, right and split 'hard' or 'feathered'")
@@ -213,28 +218,47 @@ def _controls(F, limits):
         s = np.asarray(c['samples'], float); weights = {k: np.asarray(w, float) for k, w in c['weights'].items()}
         for k in weights:
             F.need(k, f'control {name}')
+        declared = c.get('correctives', {})          # baked correctives: bumps of the main weight (bake.BASES)
         gated = {}
         for k, w in weights.items():
+            if k in declared:
+                expected = BASES[declared[k]](s); off = np.abs(w - expected).max()
+                if off > GATED * max(float(np.abs(expected).max()), 1e-300):
+                    gated[k] = {'declared_driver': declared[k], 'largest_off_driver': float(off)}
+                continue
             end = float(np.interp(1., s, w)) if s[-1] >= 1 else float(w[-1] / s[-1])
             off = np.abs(w - end * s).max()
             if off > GATED * max(abs(end), float(np.abs(w).max()), 1e-300):
                 gated[k] = {'weight_at_full': end, 'largest_off_proportion': float(off)}
-        X = np.stack([np.concatenate([F.pose(obj, {k: w[i] for k, w in weights.items()}) for obj in F.objects])
-                      for i in range(len(s))])
-        chord = X[-1] - X[0]; length = np.linalg.norm(chord, axis=1)
-        movers = length > .2 * max(float(length.max()), 1e-300)
-        off = X[:, movers] - X[0, movers]; c_ = chord[movers]; L = length[movers]
-        progress = np.einsum('gnk,nk->gn', off, c_) / L ** 2
-        perp = np.linalg.norm(off - progress[..., None] * c_[None], axis=2) / L
-        deviation = perp.max(axis=0) if movers.any() else np.zeros(0)
-        fall = (progress[:-1] - progress[1:]).max(axis=0) if movers.any() else np.zeros(0)
-        detail = {'moving_vertices': int(movers.sum()),
-                  'share_over_10_percent': float(np.mean(deviation > .1)) if len(deviation) else 0.,
-                  'overshoot': float(progress.max() - 1) if movers.any() else 0.}
-        rows.append(_row('path_deviation', name, float(deviation.max()) if len(deviation) else 0., detail, limits))
-        rows.append(_row('path_reversals', name, float(np.count_nonzero(fall > .02)), {}, limits))
+        pose = lambda chosen: np.stack([np.concatenate([F.pose(obj, {k: w[i] for k, w in chosen.items()})
+                                                        for obj in F.objects]) for i in range(len(s))])
+        full = _paths(pose(weights))
+        straight = _paths(pose({k: w for k, w in weights.items() if k not in declared})) if declared else full
+        detail = {'moving_vertices': straight['movers'], 'share_over_10_percent': straight['share_over_10_percent'],
+                  'overshoot': straight['overshoot']}
+        if declared:          # the arc a declared hinge corrective carries is the construction: reported, not gated
+            detail.update(measured_without=sorted(declared), arc_with_correctives=full['deviation'],
+                          arc_share_over_10_percent=full['share_over_10_percent'])
+        rows.append(_row('path_deviation', name, straight['deviation'], detail, limits))
+        rows.append(_row('path_reversals', name, full['reversals'], {}, limits))
         rows.append(_row('phase_gated_keys', name, float(len(gated)), {'keys': gated}, limits))
     return rows
+
+
+def _paths(X):
+    """Distance of each moving vertex's path (poses X: samples, vertices, 3) from its straight chord, share of its
+    travel, and vertices whose progress along the chord falls back by more than 2 %."""
+    chord = X[-1] - X[0]; length = np.linalg.norm(chord, axis=1)
+    movers = length > .2 * max(float(length.max()), 1e-300)
+    if not movers.any():
+        return {'deviation': 0., 'reversals': 0., 'movers': 0, 'share_over_10_percent': 0., 'overshoot': 0.}
+    off = X[:, movers] - X[0, movers]; c = chord[movers]; L = length[movers]
+    progress = np.einsum('gnk,nk->gn', off, c) / L ** 2
+    deviation = (np.linalg.norm(off - progress[..., None] * c[None], axis=2) / L).max(axis=0)
+    fall = (progress[:-1] - progress[1:]).max(axis=0)
+    return {'deviation': float(deviation.max()), 'reversals': float(np.count_nonzero(fall > .02)),
+            'movers': int(movers.sum()), 'share_over_10_percent': float(np.mean(deviation > .1)),
+            'overshoot': float(progress.max() - 1)}
 
 
 def _jaw(F, limits):

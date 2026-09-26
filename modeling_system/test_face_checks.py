@@ -210,6 +210,40 @@ class FaceAuditTests(unittest.TestCase):
         back = declaration(controls={'mouth_open': {'samples': s.tolist(), 'weights': {'A': np.minimum(s, 1.2 - s).tolist()}}})
         self.assertEqual(status(audit(back), 'path_reversals'), 'fail')
 
+    def test_C2_C10_a_baked_blink_with_its_declared_corrective_passes_and_undeclared_bumps_still_fail(self):
+        from .bake import BASES, bake_shapes
+        from . import test_checks as eye
+        s = np.array(eye.PHASES)
+        poses = eye.path_positions(eye.REST, eye.CLOSED, np.repeat(s[:, None], len(eye.REST), axis=1),
+                                   pivot=eye.CENTRE, axis=eye.AXIS)['positions']
+        bake = bake_shapes({'Skin': (eye.REST, poses)}, s, tolerance=.05, max_shapes=2)          # main + mid
+        self.assertEqual(bake['drivers'], {'blink': 'main', 'blink_mid': 'mid'})
+        guide = np.c_[np.zeros(len(eye.REST)), -.05 * np.ones(len(eye.REST)), np.zeros(len(eye.REST))]
+        skin = {'rest': eye.REST, 'keys': {**bake['shapes']['Skin'], 'guide_key_mid': guide}, 'edges': [], 'polygons': []}
+        t = np.linspace(0, 1, 21); bump = smooth(np.minimum(t / .33, (1 - t) / .67))
+
+        def run(weights, correctives=None):
+            control = {'samples': t.tolist(), 'weights': {k: v.tolist() for k, v in weights.items()}}
+            if correctives:
+                control['correctives'] = correctives
+            return run_face_audit({'skin': 'Skin', 'objects': {'Skin': {'path': 'unused'}}, 'controls': {'blink': control}},
+                                  objects={'Skin': skin})
+        blink = {'blink': t, 'blink_mid': BASES['mid'](t)}
+        baked = run(blink, {'blink_mid': 'mid'})
+        self.assertEqual([status(baked, k) for k in ('phase_gated_keys', 'path_deviation', 'path_reversals')], ['pass'] * 3)
+        deviation = row(baked, 'path_deviation')
+        self.assertLess(deviation['observed'], 1e-9)                              # the main shape alone is straight
+        self.assertGreater(deviation['detail']['arc_with_correctives'], .05)     # the hinge's arc, reported
+        undeclared = run(blink)                                                  # the same bump, not declared
+        self.assertEqual((status(undeclared, 'phase_gated_keys'), status(undeclared, 'path_deviation')), ('fail', 'fail'))
+        guided = run({**blink, 'guide_key_mid': bump}, {'blink_mid': 'mid'})    # a guide key gated to a phase
+        self.assertEqual(list(row(guided, 'phase_gated_keys')['detail']['keys']), ['guide_key_mid'])
+        self.assertEqual(status(guided, 'path_deviation'), 'fail')
+        disguised = run({**blink, 'guide_key_mid': bump}, {'blink_mid': 'mid', 'guide_key_mid': 'mid'})
+        self.assertEqual(list(row(disguised, 'phase_gated_keys')['detail']['keys']), ['guide_key_mid'])   # not 4s(1-s)
+        with self.assertRaisesRegex(ValueError, 'bake driver'):
+            run(blink, {'blink_mid': 'wobble'})
+
     def test_C3_morphing_teeth_or_a_hinge_in_front_of_the_lips_fails(self):
         morph = turn(LOWER_TEETH) * [1.08, 1., 1.] - LOWER_TEETH
         self.assertEqual(status(audit(lower={'A': morph}), 'jaw_rigid_residual', 'Lower teeth'), 'fail')

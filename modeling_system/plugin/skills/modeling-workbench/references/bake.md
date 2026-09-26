@@ -36,7 +36,8 @@ the baked motion between the sampled phases (a straight shape that cuts the eye 
 drivers)` gives the baked positions at any weight.
 
 **Clip.** `clip_curve` keys one eased blink (close, hold, open) at the given frame rate, each shape's weight following
-its driver of the main weight.
+its driver of the main weight. In a [face audit](face-checks.md) declaration, list the correctives under the control's
+`correctives` with their drivers, so their bumps are accepted as the bake's and not refused as phase-gated keys.
 
 **Unity clip.** Reference avatars do not blink through the avatar descriptor: they blink from an FX-layer clip on the
 shape weights. `write_unity_anim(path, clip, renderers)` writes the clip as a Unity .anim with one `blendShape.<shape>`

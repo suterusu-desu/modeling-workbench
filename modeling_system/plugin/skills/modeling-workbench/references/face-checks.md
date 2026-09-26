@@ -40,6 +40,10 @@ shape on the skin and the teeth is one shape. Units are mouth widths (the lips' 
   facing each other at rest, paired within `pair_distance`, default .05). `up`, `forward` and `across` default to +z,
   -y and +x.
 - `controls`: a control's weight for each key it drives, sampled from 0 to 1 (read them off the rig's drivers).
+  `correctives` names the keys a bake drives by a bump of the main weight (`{"blink_mid": "mid"}`; `mid`, `early` or
+  `late`, as [bake](bake.md) writes them): such a key passes `phase_gated_keys` when its weights follow that bump, and
+  `path_deviation` is measured without it, the arc it carries (a hinge's roll) reported as `arc_with_correctives`.
+  Undeclared bumps and late ramps, or a declared key off its bump, still fail.
 - `jaw.surface`: the outer skin when the mouth bag or teeth share the skin mesh; `chin`, `min_behind` (default 1.5
   mouth widths) and `min_above` (0) are optional.
 - `visemes.slots`: the descriptor's list in VRChat's order, or a mapping from slot to key.
