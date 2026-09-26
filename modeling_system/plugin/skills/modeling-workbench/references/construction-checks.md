@@ -40,7 +40,10 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 
 - `region`: vertex indices (or a boolean mask) of the object allowed to move. Everything else must stay at rest.
 - `rest`: the accepted neutral positions of the whole object.
-- `protected`: objects the candidate must not change (compared with the baseline, or with their own rest).
+- `protected`: objects the candidate must not change, compared with the baseline (or, without one, with their own
+  rest). `{"object": "Lower lash", "against": "rest"}` requires the object to stay still at every phase whatever the
+  baseline did: use it when the design deliberately changes that object's motion (a still lower lid replacing a rising
+  one moved its lash .013 against the old baseline).
 - `clearance`: obstacles the region must stay outside. `centre` defaults to the obstacle's centroid at each phase,
   which suits an eyeball; the obstacle must be star-shaped from it. `gaze` repeats the check with the obstacle turned
   about `pivot` by each of `rotations` ([axis, degrees]; the eye's look limits), keeping the worst: a cornea or iris

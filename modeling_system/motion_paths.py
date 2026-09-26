@@ -565,7 +565,7 @@ def _polyline_distance(points, line):
     return np.linalg.norm(points[:, None, :] - closest, axis=-1).min(axis=1)
 
 
-def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outside=0.):
+def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outside=0., rest=None, corner_blend=0.):
     """Close an edge onto a landing curve by turning it about a hinge, carrying a band of material with it.
 
     `edge` indexes the points of `positions` that must land (a lid's margin); `landing` holds points of the curve they
@@ -577,7 +577,14 @@ def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outsid
     times the edge's radial change there. `weights` (one per point in [0, 1]; default 1 on the edge, 0 elsewhere) are
     the band that closes with the edge: 1 on the edge and the material behind it (a lid's inner surface), falling off
     with distance from the edge, 0 on what stays (the facing side, the corners). Points keep their axial positions, so
-    nothing slides sideways.
+    nothing slides sideways. Points past the edge's axial ends take the end point's turn; to bring the turn down to 0 at a
+    pinned corner, include the corner in `edge` with weight 0.
+
+    `rest` with `corner_blend`: when `positions` is a retained pose whose corners the landing cannot use (its rims apart
+    at the seam's end, so landing there needs a large extra turn beside a pinned corner), the moving points near each end
+    of the edge take the landing of `rest` instead, blended C1 into the landing of `positions` over `corner_blend` (an
+    axial distance, or one per end: lower axial end first; 0 keeps that end on `positions`). Past an end the result is the
+    landing of `rest`. Found in real use: a C1 fade of the turn toward the corner instead opened a gap at the seam's end.
 
     Returns the closed `positions`, each point's full `turn` (radians, right-handed about the axis) and `radial` change,
     and the edge's own values: build the in-betweens as one roll to this pose (`path_positions` with the same pivot and
@@ -616,6 +623,27 @@ def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outsid
     moved = w > 0
     out = P.copy()
     out[moved] = _hinge_place(s[moved], rho[moved] + radial[moved], th[moved] + turn[moved], frame)
+    widths = np.broadcast_to(np.asarray(corner_blend, float), (2,)).copy()
+    if not np.isfinite(widths).all() or (widths < 0).any():
+        raise ValueError('Corner blend widths must be finite and nonnegative')
+    blended = None
+    if rest is not None and widths.any():
+        R = np.asarray(rest, float)
+        if R.shape != P.shape or not np.isfinite(R).all():
+            raise ValueError('The rest needs one finite position per point')
+        from_rest = hinge_landing(R, idx, L, pivot, axis, weights=w, outside=outside)['positions']
+        ramp = lambda x: np.clip(x, 0, 1) ** 2 * (3 - 2 * np.clip(x, 0, 1))
+        low, high = float(se.min()), float(se.max())
+        keep = np.ones(len(P))
+        if widths[0]:
+            keep = keep * ramp((s - low) / widths[0])
+        if widths[1]:
+            keep = keep * ramp((high - s) / widths[1])
+        plain = out.copy()
+        out[moved] = from_rest[moved] + keep[moved, None] * (plain[moved] - from_rest[moved])
+        _, r1, t1 = _hinge_coordinates(out, frame)
+        turn, radial = np.where(moved, _wrap(t1 - th), 0.), np.where(moved, r1 - rho, 0.)
+        blended = {'widths': widths.tolist(), 'largest_change': float(np.linalg.norm(out - plain, axis=1).max())}
     landed = idx[w[idx] >= 1]
     gap = _polyline_distance(out[landed], L[o]) if len(landed) else np.zeros(0)
     metrics = {'points': int(len(P)), 'edge_points': int(len(idx)), 'moved_points': int(moved.sum()),
@@ -625,6 +653,8 @@ def hinge_landing(positions, edge, landing, pivot, axis, *, weights=None, outsid
                'edge_radial_min': float(edge_radial.min()), 'edge_radial_max': float(edge_radial.max()),
                'landed_gap_to_landing_line_max': float(gap.max()) if len(gap) else None,
                'landed_gap_to_landing_line_median': float(np.median(gap)) if len(gap) else None}
+    if blended:
+        metrics['corner_blend'] = blended
     return {'positions': out, 'turn': turn, 'radial': radial, 'edge_turn': edge_turn, 'edge_radial': edge_radial,
             'public_metrics': metrics,
             'objective': "Each edge point turned about the hinge onto the landing curve's angle and distance (plus the "

@@ -22,6 +22,12 @@ themselves move little (the avatars' .02-.10 of the eye's width) and the margin'
 line, so the other rim is pulled up to meet it. Remedy: land the moving edge on the opposing rest line (`hinge_landing`);
 if the design wants a rise, build it into the mechanism, middle only and on the same timing (`hinge_lift`).
 
+**A spike beside a pinned corner when landing a retained pose.** Cause: the retained closed pose leaves the rims apart
+at the seam's end, so landing needs a large extra turn right next to the corner (not the turn clamping past the edge's
+ends: adding the corners to the edge with weight 0 did not remove it). Remedy: take the corners' closed pose from the
+hinge applied to the rest, blended into the retained body (`hinge_landing(..., rest=..., corner_blend=...)`); a C1 fade
+of the turn opened a gap at the seam's end instead.
+
 **Skin sinks, lumps and creases move around between fixes.** Cause: correction fields and local re-lays stacked on an
 inherited motion, each fitted separately. Remedy: remove the layers and rebuild the motion from the mechanism; clean up
 once afterwards. A defect that returns after a patch belongs to the construction.

@@ -365,6 +365,35 @@ class HingeConstructionTests(unittest.TestCase):
         self.assertAlmostEqual(m['landed_gap_to_landing_line_max'], .001, places=9)
         self.assertEqual(m['edge_points_beyond_landing_range'], 0)
 
+    def test_corners_land_from_the_rest_blended_into_the_retained_pose(self):
+        x = np.linspace(-.6, .6, 25); n = len(x)
+        apart = 25. * np.clip((-.3 - x) / .3, 0, 1)             # the retained rims stand apart toward the low corner
+        rest = np.r_[cylinder_points(x, 1.1, -40.), cylinder_points(x, 1.15, -55.), cylinder_points(x, 1.2, 60.)]
+        kept = np.r_[cylinder_points(x, 1.1, -40. - apart), cylinder_points(x, 1.15, -55. - apart), rest[2 * n:]]
+        landing = cylinder_points(np.linspace(-.7, .7, 29), 1.1, 35.)
+        weights = np.r_[np.ones(n), np.full(n, .5), np.zeros(n)]
+        land = lambda P, **kw: hinge_landing(P, np.arange(n), landing, [0., 0., 0.], [1., 0., 0.], weights=weights, **kw)
+        plain, from_rest = land(kept)['positions'], land(rest)['positions']
+        result = land(kept, rest=rest, corner_blend=(.2, 0.)); out = result['positions']
+        band = slice(n, 2 * n)
+        np.testing.assert_allclose(out[:n], plain[:n], atol=1e-12)                 # the edge lands on the line either way
+        np.testing.assert_allclose(out[n], from_rest[n], atol=1e-12)               # at the corner: the rest's landing
+        far = n + np.flatnonzero(x >= -.4 + 1e-9)
+        np.testing.assert_allclose(out[far], plain[far], atol=1e-12)               # past the blend: the retained landing
+        between = n + np.flatnonzero((x > -.6) & (x < -.4))
+        lo, hi = np.minimum(plain[between], from_rest[between]), np.maximum(plain[between], from_rest[between])
+        self.assertTrue(np.all((out[between] >= lo - 1e-12) & (out[between] <= hi + 1e-12)))
+        self.assertGreater(np.linalg.norm(plain[n] - from_rest[n]), .1)            # the extra turn the blend removes
+        self.assertTrue(np.array_equal(out[2 * n:], kept[2 * n:]))                  # weight 0 stays
+        np.testing.assert_allclose(np.degrees(result['turn'][band][0]), (-55. + 37.5) - (-55. - 25.), atol=1e-9)
+        self.assertEqual(result['public_metrics']['corner_blend']['widths'], [.2, 0.])
+        np.testing.assert_allclose(land(kept, rest=rest, corner_blend=(0., .2))['positions'][band][:4], plain[band][:4],
+                                   atol=1e-12)                                     # only the named end blends
+        with self.assertRaisesRegex(ValueError, 'nonnegative'):
+            land(kept, rest=rest, corner_blend=-.1)
+        with self.assertRaisesRegex(ValueError, 'one finite position'):
+            land(kept, rest=rest[:-1], corner_blend=.2)
+
     def test_edge_beyond_the_landing_range_takes_its_end_values_and_is_counted(self):
         x = np.linspace(-1., 1., 11)
         landing = cylinder_points(np.linspace(-.5, .5, 11), 1., np.linspace(20., 40., 11))

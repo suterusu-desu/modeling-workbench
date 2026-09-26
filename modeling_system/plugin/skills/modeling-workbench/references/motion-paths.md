@@ -19,15 +19,24 @@ S), which shading shows as a crease or shelf even when every key is close to its
 
 ## Hinge: land a lid and carry what rides on it
 
-`hinge_landing(positions, edge, landing, pivot, axis, weights=None, outside=0.)` derives a closed pose from the rest
+`hinge_landing(positions, edge, landing, pivot, axis, weights=None, outside=0., rest=None, corner_blend=0.)` derives a
+closed pose from the rest
 pose. Each `edge` point (the lid margin, ordered or not) turns about the hinge line through `pivot` along `axis` to the
 `landing` curve's angle at the same axial position (the opposing margin at rest, sampled densely enough to interpolate
 along the axis) and moves to the landing curve's distance from the axis plus `outside`. Every other point turns and
 moves out by its weight times the edge's values at its own axial position: 1 on the margin and the lid's inner surface,
 falling off above the margin, 0 on what stays. Weight-0 points keep their exact bytes, and no point slides along the
 axis. `public_metrics` reports the edge's turn and radial range, the landed gap to the landing polyline and how many
-edge points lay beyond the landing curve's axial range (they take its end values). Build the in-betweens as one roll to
-this pose: `path_positions` with the same pivot and axis and one pace row per phase for every point.
+edge points lay beyond the landing curve's axial range (they take its end values). Points past the edge's own ends take
+its end point's turn: to bring the turn to 0 at a pinned corner, add the corner to `edge` with weight 0. Build the
+in-betweens as one roll to this pose: `path_positions` with the same pivot and axis and one pace row per phase for every
+point.
+
+When `positions` is a retained closed body rather than the rest, its corners may be unusable: rims left apart at the
+seam's end need a large extra turn right beside a pinned corner (a spike in real use). With `rest` and `corner_blend`
+(an axial distance, or one per end, lower axial end first) the moving points near each end take the landing of `rest`,
+blended C1 into the landing of `positions` over that distance; `public_metrics['corner_blend']` reports the widths and
+the largest change. A C1 fade of the turn toward the corner instead opened a gap at the seam's end.
 
 `hinge_carry(attached, host_reference, host_end, pivot, axis, fraction=1., host_index=None)` moves attached points (lashes,
 a seam, a marking) by the hinge change of their host point (the nearest host point at rest unless `host_index` is

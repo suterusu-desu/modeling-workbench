@@ -125,6 +125,20 @@ class StandardCheckTests(unittest.TestCase):
         self.assertIn('clearance_shortfall', failing)
         self.assertIn('roll_deviation_share', failing)
 
+    def test_an_object_protected_against_rest_must_stay_still_whatever_the_baseline_did(self):
+        rising = {g: BODY + [0., 0., .013 * g] for g in PHASES}           # the old design moved it
+        baseline = states(hinged(), body=rising); still = {g: BODY for g in PHASES}
+        against_baseline = self.run_on(hinged(), baseline=baseline, body=still)
+        self.assertIn('protected_unchanged', self.failing(against_baseline))  # keeping it still reads as a change
+        at_rest = dict(self.declaration, protected=[{'object': 'Body', 'against': 'rest'}])
+        report = self.run_on(hinged(), at_rest, baseline=baseline, body=still)
+        row_ = next(c for c in report['checks'] if c['id'] == 'protected_unchanged')
+        self.assertEqual((row_['status'], row_['detail']['against']), ('pass', {'Body': 'own rest'}))
+        self.assertEqual(self.status(self.run_on(hinged(), at_rest, baseline=states(hinged(), body=rising),
+                                                 body=rising))['protected_unchanged'], 'fail')   # it moves: fail
+        with self.assertRaisesRegex(ValueError, 'Protected objects'):
+            run_checks(dict(self.declaration, protected=[{'object': 'Body', 'against': 'sometimes'}]), states(hinged()))
+
     def test_motion_outside_the_region_a_changed_rest_and_a_moved_protected_object_fail(self):
         skin = hinged().copy(); skin[2][row(BROW)] += [0., 0., .01]
         self.assertEqual(self.failing(self.run_on(skin)), ['still_outside'])

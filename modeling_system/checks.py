@@ -111,8 +111,10 @@ def validate_declaration(declaration):
                         'carrier', 'limits', 'arrays', 'description', 'band', 'lash', 'combinations'}
     if unknown:
         raise ValueError(f'Unknown declaration fields: {sorted(unknown)}')
-    if not all(isinstance(p, str) and p for p in d.get('protected', [])):
-        raise ValueError('Protected objects are object names')
+    if not all((isinstance(p, str) and p) or (isinstance(p, dict) and isinstance(p.get('object'), str) and p['object']
+                                              and p.get('against', 'baseline') in ('baseline', 'rest'))
+               for p in d.get('protected', [])):
+        raise ValueError("Protected objects are object names, or {'object': name, 'against': 'rest' or 'baseline'}")
     for entry in d.get('clearance', []):
         if (not isinstance(entry, dict) or not isinstance(entry.get('obstacle'), str)
                 or not _nonnegative(entry.get('minimum', 0.))):
@@ -246,18 +248,19 @@ def _measure(d, states, base, baseline=None):
         'moved_outside': int(np.count_nonzero(outside.max(axis=0) > LIMITS['still_outside'])) if outside.size else 0})
 
     if d.get('protected'):
-        worst = {}
-        for name in d['protected']:
+        worst, against = {}, {}
+        for entry in d['protected']:
+            name = entry if isinstance(entry, str) else entry['object']
+            still = isinstance(entry, dict) and entry.get('against') == 'rest'   # must not move, whatever the baseline did
             Q = _stack(states, name)
-            if baseline is not None:
+            if baseline is not None and not still:
                 B = _stack(baseline, name)
                 if B.shape != Q.shape:
                     raise ValueError(f'Protected object {name!r} differs in shape from the baseline')
-                worst[name] = float(np.abs(Q - B).max())
+                worst[name], against[name] = float(np.abs(Q - B).max()), 'baseline'
             else:
-                worst[name] = float(np.abs(Q - Q[0]).max())
-        out['protected_unchanged'] = (max(worst.values()), {'objects': worst,
-                                                            'against': 'baseline' if baseline is not None else 'own rest'})
+                worst[name], against[name] = float(np.abs(Q - Q[0]).max()), 'own rest'
+        out['protected_unchanged'] = (max(worst.values()), {'objects': worst, 'against': against})
 
     if d.get('clearance'):
         rows, shortfall = [], 0.
