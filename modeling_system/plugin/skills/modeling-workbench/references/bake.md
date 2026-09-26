@@ -15,7 +15,8 @@ record = export_fbx('blink-bake.npz', clip, blender=BLENDER, output_root='runtim
 ```
 
 From a trial's saved poses in one call (also the service operation `bake_poses`, on the CLI and MCP): the phases and
-the rest triangles come from the file, and the bake file and clip are written beside the output.
+the rest triangles come from the file, and the bake file, the clip and (with `renderers`) the Unity .anim are
+written beside the output.
 
 ```python
 from modeling_system.bake import bake_poses
@@ -36,6 +37,15 @@ drivers)` gives the baked positions at any weight.
 
 **Clip.** `clip_curve` keys one eased blink (close, hold, open) at the given frame rate, each shape's weight following
 its driver of the main weight.
+
+**Unity clip.** Reference avatars do not blink through the avatar descriptor: they blink from an FX-layer clip on the
+shape weights. `write_unity_anim(path, clip, renderers)` writes the clip as a Unity .anim with one `blendShape.<shape>`
+curve (weights 0-100) for every shape on every renderer; `renderers` maps each baked object to its
+SkinnedMeshRenderer's path under the animated root (`{'Face': 'Body', 'Upper lash': 'Body/Lash'}`). `check_unity_anim`
+reads the file back and reports any renderer or shape missing and any key off the clip. `bake_poses` takes the same
+`renderers` and writes `<output>.anim` beside the clip, refusing a map that does not name exactly the baked objects.
+Checked in Unity 2022.3: the clip imported with its four bindings (two renderers, two shapes), and sampling it on
+generated renderers gave the clip's weights at every frame.
 
 **FBX.** `export_fbx` builds the meshes with their shape keys and the clip in a clean Blender, exports an FBX, imports it
 back and compares every shape key's positions and every weight curve (`roundtrip.json`). Found while building it:

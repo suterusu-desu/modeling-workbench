@@ -8,15 +8,18 @@ every weight stays within 0..1 (engines commonly clamp blend-shape weights). It 
 driven at 4s(1-s), then early and late correctives, and keeps the smallest set within the tolerance for every object,
 with the same drivers for all of them (skin and attached lashes play from one clip). It reports each phase's error and,
 with an obstacle, the clearance of the baked motion between the sampled phases. `clip_curve` gives the keyframes of an
-eased blink, and `export_fbx` writes and round-trips an FBX through Blender (`bake_export.py`).
+eased blink, `write_unity_anim` writes it as a Unity .anim for an FX-layer state (`check_unity_anim` reads it back),
+and `export_fbx` writes and round-trips an FBX through Blender (`bake_export.py`).
 
 Measured on a hinged blink over a round eye: one shape missed by several hundredths of the eye's width and cut into the
 eye at mid-blink; one mid corrective carried it within a few thousandths, lash included.
 """
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
+import zlib
 
 import numpy as np
 
@@ -144,6 +147,98 @@ def clip_curve(drivers, *, timing=None, fps=60):
         frames.append({'frame': k, 'time': time, 'weight': w,
                        'weights': {shape: float(BASES[d](w)) for shape, d in drivers.items()}})
     return {'fps': fps, 'timing': t, 'frames': frames}
+
+
+def _unity_float(v):
+    return format(float(v), '.9g')
+
+
+def _unity_curve(keys, indent):
+    """A Unity float curve (serializedVersion 2) with free tangents from finite differences, so Unity's Hermite
+    interpolation passes through every key with the curve's own slope."""
+    t = np.array([k[0] for k in keys]); v = np.array([k[1] for k in keys])
+    slope = np.gradient(v, t) if len(t) > 1 else np.zeros(1)
+    pad = ' ' * indent; lines = [f'{pad}serializedVersion: 2', f'{pad}m_Curve:']
+    for time, value, s in zip(t, v, slope):
+        lines += [f'{pad}- serializedVersion: 3', f'{pad}  time: {_unity_float(time)}', f'{pad}  value: {_unity_float(value)}',
+                  f'{pad}  inSlope: {_unity_float(s)}', f'{pad}  outSlope: {_unity_float(s)}', f'{pad}  tangentMode: 0',
+                  f'{pad}  weightedMode: 0', f'{pad}  inWeight: 0.33333334', f'{pad}  outWeight: 0.33333334']
+    return lines + [f'{pad}m_PreInfinity: 2', f'{pad}m_PostInfinity: 2', f'{pad}m_RotationOrder: 4']
+
+
+def write_unity_anim(path, clip, renderers, *, name=None, shapes=None):
+    """Write `clip_curve` output as a Unity AnimationClip (.anim, text): one `blendShape.<shape>` curve in weights
+    0-100 for every shape on every renderer, so an FX-layer state plays the blink on skin and lashes alike.
+
+    `renderers` maps each baked object to its SkinnedMeshRenderer's path under the animated root (for example
+    {'Face': 'Body', 'Upper lash': 'Body/Lash'}); `shapes` optionally lists each object's shapes (default: every shape
+    in the clip). Returns the curves written as [(renderer path, shape)]."""
+    if not renderers:
+        raise ValueError('At least one renderer path is required')
+    if len(set(renderers.values())) != len(renderers) or not all(isinstance(p, str) and p for p in renderers.values()):
+        raise ValueError('Each object needs its own renderer path')
+    frames = clip['frames']; available = set(frames[0]['weights'])
+    curves = []
+    for obj, renderer in renderers.items():
+        names = list((shapes or {}).get(obj, sorted(available)))
+        missing = [s for s in names if s not in available]
+        if missing:
+            raise ValueError(f'Shapes {missing} of {obj!r} are not in the clip')
+        curves += [(renderer, s, [(f['time'], 100. * f['weights'][s]) for f in frames]) for s in names]
+    stop = frames[-1]['time']; clip_name = name or Path(path).stem
+    float_curves = []
+    for renderer, shape, keys in curves:
+        float_curves += ['  - curve:'] + _unity_curve(keys, 6) + [
+            f'    attribute: blendShape.{shape}', f'    path: {renderer}', '    classID: 137', '    script: {fileID: 0}']
+    bindings = []
+    for renderer, shape, _ in curves:                     # derived data Unity rebuilds on import; written for players
+        bindings += ['    - serializedVersion: 2', f'      path: {zlib.crc32(renderer.encode())}',
+                     f"      attribute: {zlib.crc32(f'blendShape.{shape}'.encode())}", '      script: {fileID: 0}',
+                     '      typeID: 137', '      customType: 20', '      isPPtrCurve: 0']
+    text = ['%YAML 1.1', '%TAG !u! tag:unity3d.com,2011:', '--- !u!74 &7400000', 'AnimationClip:',
+            '  m_ObjectHideFlags: 0', '  m_CorrespondingSourceObject: {fileID: 0}', '  m_PrefabInstance: {fileID: 0}',
+            '  m_PrefabAsset: {fileID: 0}', f'  m_Name: {clip_name}', '  serializedVersion: 6', '  m_Legacy: 0',
+            '  m_Compressed: 0', '  m_UseHighQualityCurve: 1', '  m_RotationCurves: []',
+            '  m_CompressedRotationCurves: []', '  m_EulerCurves: []', '  m_PositionCurves: []', '  m_ScaleCurves: []',
+            '  m_FloatCurves:'] + float_curves + [
+            '  m_PPtrCurves: []', f"  m_SampleRate: {clip['fps']}", '  m_WrapMode: 0', '  m_Bounds:',
+            '    m_Center: {x: 0, y: 0, z: 0}', '    m_Extent: {x: 0, y: 0, z: 0}', '  m_ClipBindingConstant:',
+            '    genericBindings:'] + bindings + [
+            '    pptrCurveMapping: []', '  m_AnimationClipSettings:', '    serializedVersion: 2',
+            '    m_AdditiveReferencePoseClip: {fileID: 0}', '    m_AdditiveReferencePoseTime: 0', '    m_StartTime: 0',
+            f'    m_StopTime: {_unity_float(stop)}', '    m_OrientationOffsetY: 0', '    m_Level: 0',
+            '    m_CycleOffset: 0', '    m_HasAdditiveReferencePose: 0', '    m_LoopTime: 0', '    m_LoopBlend: 0',
+            '    m_LoopBlendOrientation: 0', '    m_LoopBlendPositionY: 0', '    m_LoopBlendPositionXZ: 0',
+            '    m_KeepOriginalOrientation: 0', '    m_KeepOriginalPositionY: 1', '    m_KeepOriginalPositionXZ: 0',
+            '    m_HeightFromFeet: 0', '    m_Mirror: 0', '  m_EditorCurves:'] + float_curves + [
+            '  m_EulerEditorCurves: []', '  m_HasGenericRootTransform: 0', '  m_HasMotionFloatCurves: 0',
+            '  m_Events: []']
+    Path(path).write_bytes(('\n'.join(text) + '\n').encode('utf-8'))
+    return [(renderer, shape) for renderer, shape, _ in curves]
+
+
+def check_unity_anim(path, clip, renderers, *, shapes=None):
+    """Read a written .anim's float curves back and compare them with the clip: every (renderer, shape) curve present,
+    every key at the clip's time and weight (0-100). Returns `missing`, `unexpected`, `largest_key_error` and `status`."""
+    text = Path(path).read_text(encoding='utf-8')
+    section = text.split('  m_FloatCurves:\n', 1)[1].split('\n  m_PPtrCurves:', 1)[0]
+    found = {}
+    for block in re.split(r'(?m)^  - curve:', section)[1:]:
+        times = [float(x) for x in re.findall(r'\n\s+time: (\S+)', block)]
+        values = [float(x) for x in re.findall(r'\n\s+value: (\S+)', block)]
+        attribute = re.search(r'\n    attribute: blendShape\.(.+)', block).group(1)
+        renderer = re.search(r'\n    path: (.+)', block).group(1)
+        found[(renderer, attribute)] = list(zip(times, values))
+    frames = clip['frames']; available = sorted(frames[0]['weights'])
+    expected = {(r, s): [(f['time'], 100. * f['weights'][s]) for f in frames]
+                for o, r in renderers.items() for s in (shapes or {}).get(o, available)}
+    missing = sorted(k for k in expected if k not in found); unexpected = sorted(k for k in found if k not in expected)
+    error = max((abs(a[0] - b[0]) + abs(a[1] - b[1]) for k in expected if k in found
+                 for a, b in zip(found[k], expected[k])), default=0.)
+    counts = [len(found[k]) != len(expected[k]) for k in expected if k in found]
+    ok = not missing and not unexpected and not any(counts) and error <= 1e-4
+    return {'status': 'passed' if ok else 'failed', 'missing': missing, 'unexpected': unexpected,
+            'key_count_mismatch': int(sum(counts)), 'largest_key_error': float(error), 'curves': len(found)}
 
 
 def write_bake(path, bake, faces, rest):

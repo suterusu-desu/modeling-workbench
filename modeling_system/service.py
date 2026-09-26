@@ -776,16 +776,21 @@ class ModelingService:
         return aligned_overlay(render,drawing,render_points,drawing_points,output,crop=crop,lines=lines or (),alpha=alpha)
 
     def bake_poses(self, poses: str, objects: list[str], tolerance: float, output: str, blender: str | None = None,
-                   fps: int = 60, timing: dict | None = None) -> dict:
-        """Bake saved poses (a trial's evaluated.npz) to the fewest blend shapes that carry every object's motion within the tolerance (the end pose plus correctives driven by bumps of the same weight), write the bake file and the blink clip, and with a Blender executable export an FBX and verify its round trip."""
-        from .bake import bake_poses, clip_curve, export_fbx
+                   fps: int = 60, timing: dict | None = None, renderers: dict | None = None) -> dict:
+        """Bake saved poses (a trial's evaluated.npz) to the fewest blend shapes that carry every object's motion within the tolerance (the end pose plus correctives driven by bumps of the same weight), write the bake file and the blink clip, with `renderers` (each baked object's SkinnedMeshRenderer path under the animated root) also the Unity .anim keying every shape on every renderer, and with a Blender executable export an FBX and verify its round trip."""
+        from .bake import bake_poses, check_unity_anim, clip_curve, export_fbx, write_unity_anim
         target=Path(output)
         if target.exists(): raise FileExistsError('Refusing to overwrite an existing bake: '+str(target))
+        if renderers is not None and set(renderers)!=set(objects):
+            raise ValueError('Renderer paths are needed for exactly the baked objects: '+', '.join(sorted(set(objects)^set(renderers))))
         target.parent.mkdir(parents=True,exist_ok=True)
         report=bake_poses(poses,objects,tolerance=tolerance,output=target)
         clip=clip_curve(report['drivers'],timing=timing,fps=fps)
         clip_path=target.with_suffix('.clip.json'); clip_path.write_text(json.dumps(clip,indent=1),encoding='utf-8')
         report['clip_file']=str(clip_path.resolve())
+        if renderers:
+            anim=target.with_suffix('.anim'); write_unity_anim(anim,clip,renderers)
+            report['anim_file']=str(anim.resolve()); report['anim_check']=check_unity_anim(anim,clip,renderers)
         if blender:
             report['fbx']=export_fbx(target,clip,blender=blender,output_root=target.parent/(target.stem+'-fbx'))
         return report

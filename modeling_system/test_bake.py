@@ -1,13 +1,14 @@
 """Baking a built motion to the fewest blend shapes; the FBX round trip runs when MODELING_BLENDER names a Blender."""
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import unittest
 
 import numpy as np
 
-from .bake import BASES, bake_shapes, clip_curve, evaluate, export_fbx, write_bake
+from .bake import BASES, bake_shapes, check_unity_anim, clip_curve, evaluate, export_fbx, write_bake, write_unity_anim
 from .motion_paths import hinge_carry, path_positions
 from . import test_checks as eye
 
@@ -65,6 +66,46 @@ class BakeTests(unittest.TestCase):
         self.assertTrue(hold and all(f['weights']['blink'] == 1. and f['weights']['blink_mid'] == 0. for f in hold))
         self.assertTrue(all(0. <= w <= 1. for f in frames for w in f['weights'].values()))
         self.assertAlmostEqual(BASES['mid'](.5), 1.)
+
+    def test_the_unity_clip_keys_every_shape_on_every_renderer(self):
+        root = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, root, True)
+        margin = eye.row(eye.UPPER); lashes = eye.REST[margin] + [0., -.03, -.02]
+        carried = hinge_carry(lashes, eye.REST[margin], eye.CLOSED[margin], eye.CENTRE, eye.AXIS, fraction=PHASES)['positions']
+        bake = bake_shapes({'Skin': (eye.REST, rolled()), 'Lash': (lashes, carried)}, PHASES, tolerance=.002)
+        clip = clip_curve(bake['drivers'], fps=60); renderers = {'Skin': 'Body', 'Lash': 'Body/Lash'}
+        written = write_unity_anim(root / 'blink.anim', clip, renderers)
+        names = sorted(bake['drivers'])                      # every shape the bake chose, on every renderer
+        self.assertEqual(sorted(written), [(r, s) for r in ('Body', 'Body/Lash') for s in names])
+        text = (root / 'blink.anim').read_text(encoding='utf-8')
+        self.assertTrue(text.startswith('%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!74 &7400000\nAnimationClip:'))
+        float_curves = text.split('  m_FloatCurves:\n')[1].split('\n  m_PPtrCurves:')[0]
+        editor_curves = text.split('  m_EditorCurves:\n')[1].split('\n  m_EulerEditorCurves:')[0]
+        self.assertEqual(float_curves, editor_curves)
+        parsed = {}                                          # parsed here, independently of check_unity_anim
+        blocks = ('\n' + float_curves).split('\n  - curve:')[1:]
+        for block in blocks:
+            key = (re.search(r'\n    path: (.+)', block).group(1), re.search(r'attribute: (.+)', block).group(1))
+            parsed[key] = [(float(t), float(v)) for t, v in re.findall(r'time: (\S+)\n\s+value: (\S+)', block)]
+        self.assertEqual(set(parsed), {(r, f'blendShape.{s}') for r in ('Body', 'Body/Lash') for s in names})
+        for (renderer, attribute), keys in parsed.items():
+            shape = attribute.split('.', 1)[1]
+            self.assertEqual(len(keys), len(clip['frames']))
+            for (t, v), frame in zip(keys, clip['frames']):
+                self.assertAlmostEqual(t, frame['time'], places=6)
+                self.assertAlmostEqual(v, 100. * frame['weights'][shape], places=4)          # weights 0-100
+        self.assertEqual(max(v for keys in parsed.values() for _, v in keys), 100.)
+        self.assertEqual(check_unity_anim(root / 'blink.anim', clip, renderers)['status'], 'passed')
+        # a missing object or shape fails the check
+        write_unity_anim(root / 'skin-only.anim', clip, {'Skin': 'Body'})
+        missing = check_unity_anim(root / 'skin-only.anim', clip, renderers)
+        self.assertEqual((missing['status'], missing['missing']), ('failed', [('Body/Lash', s) for s in names]))
+        one = next(b for b in blocks if f'blendShape.{names[-1]}\n' in b and 'path: Body\n' in b)
+        (root / 'cut.anim').write_text(text.replace('  - curve:' + one, '', 1), encoding='utf-8')
+        self.assertEqual(check_unity_anim(root / 'cut.anim', clip, renderers)['missing'], [('Body', names[-1])])
+        with self.assertRaisesRegex(ValueError, 'not in the clip'):
+            write_unity_anim(root / 'x.anim', clip, {'Skin': 'Body'}, shapes={'Skin': ['blink', 'not_baked']})
+        with self.assertRaisesRegex(ValueError, 'its own renderer path'):
+            write_unity_anim(root / 'x.anim', clip, {'Skin': 'Body', 'Lash': 'Body'})
 
     def test_refusals(self):
         with self.assertRaisesRegex(ValueError, 'Phases must rise'):

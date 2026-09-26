@@ -60,6 +60,14 @@ class ServiceVerbTests(unittest.TestCase):
         self.assertEqual(set(clip['frames'][0]['weights']), {'blink', 'blink_mid'})
         with np.load(report['bake_file']) as bake:
             self.assertEqual(sorted(bake.files), ['Skin::faces', 'Skin::rest', 'Skin::shape::blink', 'Skin::shape::blink_mid'])
+        unity = self.run_op('bake_poses', {'poses': str(self.root / 'evaluated.npz'), 'objects': ['Skin'], 'tolerance': .05,
+                                           'output': str(self.root / 'bake' / 'unity.npz'), 'renderers': {'Skin': 'Body'}})
+        self.assertEqual((unity['anim_check']['status'], unity['anim_check']['curves']), ('passed', 2))
+        self.assertTrue(Path(unity['anim_file']).is_file())
+        refused = self.service.execute('bake_poses', {'poses': str(self.root / 'evaluated.npz'), 'objects': ['Skin'],
+                                                      'tolerance': .05, 'output': str(self.root / 'bake' / 'x.npz'),
+                                                      'renderers': {'Lash': 'Body/Lash'}})
+        self.assertEqual(refused['status'], 'failed')
 
     def test_audit_a_face(self):
         report = self.run_op('audit_face', {'declaration': str(face.save_extractions(self.root))})
