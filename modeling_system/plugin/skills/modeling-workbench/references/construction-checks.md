@@ -160,7 +160,8 @@ lash's roots, do not trust the nearest object, and check every attached object (
 `corner_compression` on a real blunt corner: the lid whose band stepped beside the canthus squeezed 758 triangles over
 the in-between phases within .18 of the corner distance, the rebuild with `band_smooth` 694 (fewer at every phase, 33 to
 27 at the first, 131 to 117 at the fifth); the closed phase counted 145 and 148, which is why it is not gated. Against
-the rebuild as baseline the stepped lid fails and its 50 newly squeezed triangles are listed.
+the rebuild as baseline the stepped lid fails and its 50 newly squeezed triangles are listed. Later, an eye-area
+smoothing without a taper at the corners squeezed 11 more (787 against 776) and failed; with the taper, 748 passed.
 
 ## Guards for native trials
 

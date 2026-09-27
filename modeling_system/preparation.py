@@ -8,12 +8,13 @@ from . import material_operations
 from .preparation_contracts import PreparationOperation
 from .result_reporting import json_data, compact_summary
 from .triangle_contact import projected_triangle_contact
-from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout
+from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout,
+                             smooth_region)
 from .correction_scope import correction_scope
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
                            shared_schedule, travel_weight, hinge_change, hinge_landing, hinge_carry, hinge_lift)
 from .construction_diagnostics import section_turns, closing_edges, line_depth
-from .guide_synthesis import (front_depth, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
+from .guide_synthesis import (front_depth, behind_front, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
                               evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
                               front_retreat, fit_band_field)
 
@@ -109,7 +110,8 @@ ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric'
     'shared_schedule': shared_schedule, 'travel_weight': travel_weight, 'hinge_change': hinge_change,
     'hinge_landing': hinge_landing, 'hinge_carry': hinge_carry, 'hinge_lift': hinge_lift, 'closing_edges': closing_edges,
     'line_depth': line_depth,
-    'front_depth': front_depth, 'remove_thin_relief': remove_thin_relief,
+    'front_depth': front_depth, 'behind_front': behind_front, 'remove_thin_relief': remove_thin_relief,
+    'smooth_region': smooth_region,
     'stationary_offset': stationary_offset, 'pose_change': pose_change, 'fit_depth_field': fit_depth_field,
     'evaluate_depth_field': evaluate_depth_field, 'change_band': change_band, 'band_excess': band_excess,
     'height_field_mesh': height_field_mesh, 'keep_in_front': keep_in_front, 'front_retreat': front_retreat,

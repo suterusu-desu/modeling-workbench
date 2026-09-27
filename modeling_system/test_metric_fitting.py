@@ -6,7 +6,8 @@ import tempfile
 import unittest
 import numpy as np
 from scipy.sparse import coo_matrix, diags
-from .metric_fitting import planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout
+from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout,
+                             smooth_region)
 from .preparation import ArrayPreparation
 
 
@@ -532,3 +533,49 @@ class PlanarRelayoutTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class SmoothRegionTests(unittest.TestCase):
+    def grid(self, n=21):
+        x, z = np.meshgrid(np.linspace(-1, 1, n), np.linspace(-1, 1, n)); P = np.c_[x.ravel(), np.zeros(n * n), z.ravel()]
+        ids = np.arange(n * n).reshape(n, n)
+        T = np.array([t for r in range(n - 1) for c in range(n - 1) for t in
+                      ([ids[r, c], ids[r + 1, c], ids[r, c + 1]], [ids[r, c + 1], ids[r + 1, c], ids[r + 1, c + 1]])])
+        border = np.r_[ids[0], ids[-1], ids[:, 0], ids[:, -1]]
+        return P, T, ids, np.unique(border)
+
+    def test_lumps_go_the_broad_shape_stays_and_held_points_keep_their_bytes(self):
+        P, T, ids, border = self.grid()
+        rng = np.random.default_rng(3); broad = .2 * np.exp(-(P[:, 0] ** 2 + P[:, 2] ** 2) / .3)
+        lumpy = P.copy(); lumpy[:, 1] = broad + .01 * rng.standard_normal(len(P))
+        weights = np.ones(len(P)); weights[ids[:, 10:]] = 0.                      # the right half is not smoothed
+        out = smooth_region(lumpy, T, held=border, weights=weights, iterations=20)['positions']
+        self.assertTrue(np.array_equal(out[border], lumpy[border]))
+        self.assertTrue(np.array_equal(out[ids[:, 10:]], lumpy[ids[:, 10:]]))
+        inner = np.setdiff1d(ids[1:-1, 1:9].ravel(), border)
+        self.assertLess(np.std(out[inner, 1] - broad[inner]), np.std(lumpy[inner, 1] - broad[inner]) / 2)
+        centre = ids[10, 5]
+        self.assertGreater(out[centre, 1], .9 * broad[centre])                   # Taubin does not shrink the bump away
+
+    def test_the_rest_and_the_end_shape_are_smoothed_by_one_operator(self):
+        P, T, ids, border = self.grid()
+        rng = np.random.default_rng(5); rest = P.copy(); rest[:, 1] = .01 * rng.standard_normal(len(P))
+        change = np.c_[np.zeros(len(P)), .05 * (P[:, 2] > 0), np.zeros(len(P))]       # a crude closing change
+        stack = smooth_region(np.stack([rest, rest + change]), T, held=border, iterations=15)['positions']
+        alone = smooth_region(change, T, held=border, iterations=15)['positions']
+        np.testing.assert_allclose(stack[1] - stack[0], alone, atol=1e-12)         # the motion gets the same smoothing
+        only_rest = smooth_region(rest, T, held=border, iterations=15)['positions'] + change
+        self.assertGreater(np.abs(only_rest - stack[1]).max(), 1e-3)             # smoothing the rest alone does not
+
+    def test_refusals(self):
+        P, T, ids, border = self.grid(5)
+        with self.assertRaisesRegex(ValueError, 'mu < -lam'):
+            smooth_region(P, T, lam=.5, mu=-.4)
+        with self.assertRaisesRegex(ValueError, 'Weights'):
+            smooth_region(P, T, weights=np.full(len(P), 2.))
+        with self.assertRaisesRegex(ValueError, 'Triangles'):
+            smooth_region(P, T + 100)
+
+
+if __name__ == '__main__':
+    unittest.main()

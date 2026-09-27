@@ -44,6 +44,16 @@ Every guide carries a role in the workspace binding:
 
 The reference adapter reports the role of the guide on show, and the live header names it.
 
+A generated face does not constrain fine surface where it fuses features together: an accepted neutral had its eyeball,
+lash fins and lid folds fused into one surface around the eye (relief .0025 against the model's .00033), and even after
+`remove_thin_relief` and a depth-field fit it served only as a broad volume there, not as a smoothness target. Keep it as
+the volume constraint, smooth the fine surface on the mesh and judge it against the drawings
+([metric fitting](metric-fitting.md#smooth-a-region-on-the-mesh)).
+
+A selection made in a front chart (a radius in x-z) also takes whatever lies behind the surface there, such as the back of
+the head behind the eye, which no front render shows: `guide_synthesis.behind_front(positions, triangles, points,
+cell=..., tolerance=...)` lists the selected points lying behind the front surface along the view.
+
 ## Live: the reference adapter and the live bridge
 
 Any character workspace can drive a visible Blender without writing its own adapter. Describe the scene once:

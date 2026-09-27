@@ -570,3 +570,57 @@ def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis
             'limits': 'The plane must show the block unfolded and its held surroundings must be sound: a uniform layout '
                       'evens out spacing, it does not know anatomy. The free material loses its own relief: its depth is '
                       'that of the field. No guide is fitted unless the depth map is a guide.'}
+
+
+def smooth_region(positions, triangles, *, held=None, weights=None, iterations=10, lam=.5, mu=-.53):
+    """Taubin smoothing of a mesh region: each pass moves every point toward the mean of its edge neighbours by `lam`
+    times its weight, then back by `mu`, which smooths lumps without shrinking the surface.
+
+    `positions` is one shape (N, 3) or a stack (K, N, 3) smoothed by the same operator: give the rest and the
+    mechanism's end shape together. Smoothing only the rest leaves the end shape's change fitted to the old rest, and the
+    closing lid creases (found in real use). `held` points do not move (margins and the row beside them, a lid's inner
+    surface, a mirror-hidden half); `weights` (0..1 per point, default 1) ramp the smoothing out, for example over rows
+    from the margin, a radius fade and a taper at the corners. The operator is linear, so the stack's differences (the
+    motion) are smoothed exactly as the shapes are.
+    """
+    X = np.asarray(positions, float); single = X.ndim == 2
+    X = X[None] if single else X
+    T = np.asarray(triangles)
+    if X.ndim != 3 or X.shape[2] != 3 or not np.isfinite(X).all():
+        raise ValueError('Finite (N, 3) positions or a (K, N, 3) stack are required')
+    n = X.shape[1]
+    if T.ndim != 2 or T.shape[1] != 3 or T.dtype.kind not in 'iu' or not len(T) or T.min() < 0 or T.max() >= n:
+        raise ValueError('Triangles must index the supplied positions')
+    if not (int(iterations) >= 0 and np.isfinite(lam) and np.isfinite(mu) and lam > 0 > mu and -mu > lam):
+        raise ValueError('Taubin smoothing needs lam > 0, mu < -lam and a nonnegative number of iterations')
+    w = np.ones(n) if weights is None else np.asarray(weights, float)
+    if w.shape != (n,) or not np.isfinite(w).all() or (w < 0).any() or (w > 1).any():
+        raise ValueError('Weights must be one value in [0, 1] per point')
+    w = w.copy()
+    if held is not None:
+        w[np.asarray(held, np.int64)] = 0.
+    from scipy.sparse import coo_matrix, diags
+    edges = np.unique(np.sort(np.r_[T[:, [0, 1]], T[:, [1, 2]], T[:, [2, 0]]], axis=1), axis=0)
+    A = coo_matrix((np.ones(2 * len(edges)), (np.r_[edges[:, 0], edges[:, 1]], np.r_[edges[:, 1], edges[:, 0]])),
+                   shape=(n, n)).tocsr()
+    degree = np.asarray(A.sum(axis=1)).ravel()
+    mean = diags(1 / np.maximum(degree, 1)) @ A                       # mean of the edge neighbours
+    W = w * (degree > 0)
+    out = X.copy()
+    for k in range(len(out)):
+        Y = out[k]
+        for _ in range(int(iterations)):
+            Y = Y + (lam * W)[:, None] * (mean @ Y - Y)
+            Y = Y + (mu * W)[:, None] * (mean @ Y - Y)
+        out[k] = Y
+    moved = np.linalg.norm(out - X, axis=2)
+    result = out[0] if single else out
+    return {'positions': result,
+            'public_metrics': {'points': int(n), 'smoothed_points': int(np.count_nonzero(W > 0)),
+                               'held_points': int(np.count_nonzero(W == 0)), 'largest_move': float(moved.max()),
+                               'median_move_of_smoothed': float(np.median(moved[:, W > 0])) if (W > 0).any() else 0.},
+            'objective': 'Taubin smoothing (lam, mu) of the weighted points toward their edge neighbours, the same linear '
+                         'operator on every shape of the stack',
+            'limits': 'Smooths geometry, it does not know likeness: check it against the guide and the drawing, and smooth '
+                      'the construction\'s end shape with the same weights. Held and zero-weight points keep their exact '
+                      'positions.'}

@@ -89,6 +89,30 @@ def front_depth(positions, triangles, *, window, cell, depth_axis=1, chart_axes=
                       'is represented only where its front triangles cover cell centres.'}
 
 
+def behind_front(positions, triangles, points, *, cell, tolerance, depth_axis=1, chart_axes=(0, 2), front='min'):
+    """Which of `points` lie behind the front surface along the view: a selection made in a front chart (a radius in
+    x-z) also takes the back of the head behind the eye, which no front render shows (found in real use: moved by .0048
+    unseen). Compares each point's depth with the front depth (`front_depth`) at its chart position; points more than
+    `tolerance` behind are listed. Points where the chart has no surface are counted as unknown."""
+    P = np.asarray(positions, float); idx = np.asarray(points, np.int64)
+    a, b, d = int(chart_axes[0]), int(chart_axes[1]), int(depth_axis)
+    if not len(idx):
+        raise ValueError('At least one point is required')
+    lo, hi = P[idx][:, [a, b]].min(axis=0) - cell, P[idx][:, [a, b]].max(axis=0) + cell
+    window = (float(lo[0]), float(hi[0]), float(lo[1]), float(hi[1]))
+    fd = front_depth(P, triangles, window=window, cell=cell, depth_axis=d, chart_axes=(a, b), front=front)['depth']
+    i = np.clip(((P[idx, a] - window[0]) / cell).astype(int), 0, fd.shape[1] - 1)
+    j = np.clip(((P[idx, b] - window[2]) / cell).astype(int), 0, fd.shape[0] - 1)
+    surface = fd[j, i]; sign = 1. if _front(front) == 'min' else -1.
+    behind_by = sign * (P[idx, d] - surface)
+    known = np.isfinite(behind_by); behind = known & (behind_by > tolerance)
+    return {'behind': idx[behind].tolist(), 'behind_count': int(behind.sum()), 'unknown': int((~known).sum()),
+            'largest_depth_behind': float(np.nanmax(behind_by)) if known.any() else None,
+            'objective': 'Depth of each selected point behind the front-most surface at its chart position',
+            'limits': 'Sampled at cells of the given size: points within a cell of an edge seen from the front can be '
+                      'misread; a surface folded toward the viewer is its own front.'}
+
+
 def remove_thin_relief(depth, *, size, front='min'):
     """Remove thin parts that stand in front of the surface (lash fins, strands, fused strokes).
 

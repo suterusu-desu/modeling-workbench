@@ -34,6 +34,13 @@ axial distance, so the band's turn steps there. Measured on the margin the step 
 rows, or count squeezed triangles near the corner in the in-between phases (`corner_compression`). Remedy: smooth the
 band's axial turn profile near that end and keep the margin's landing exact (`hinge_landing(..., band_smooth=...)`).
 
+**Smoothing the rest creases the closing lid.** Cause: the construction's end shape was built on the old rest, so its
+change no longer fits the smoothed rest. Remedy: smooth the rest and the end shape with the same operator and weights
+(`smooth_region` on the stack).
+
+**A change nobody sees moves the back of the head.** Cause: a radius drawn in the front chart selects every layer behind
+the surface there. Remedy: check the selection with `behind_front`, or select by the front surface.
+
 **Skin sinks, lumps and creases move around between fixes.** Cause: correction fields and local re-lays stacked on an
 inherited motion, each fitted separately. Remedy: remove the layers and rebuild the motion from the mechanism; clean up
 once afterwards. A defect that returns after a patch belongs to the construction.

@@ -1,7 +1,7 @@
 """Pose guides from generated variants joined onto an accepted neutral (synthetic, no IO)."""
 import unittest
 import numpy as np
-from .guide_synthesis import (front_depth, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
+from .guide_synthesis import (front_depth, behind_front, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
                               evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
                               front_retreat, fit_band_field)
 from .preparation import ARRAY_OPERATIONS
@@ -51,6 +51,24 @@ class FrontDepthTests(unittest.TestCase):
             front_depth(positions, triangles + 4, window=WINDOW, cell=CELL)
         with self.assertRaisesRegex(ValueError, 'distinct axes'):
             front_depth(positions, triangles, window=WINDOW, cell=CELL, depth_axis=0)
+
+
+class BehindFrontTests(unittest.TestCase):
+    def test_a_front_chart_selection_that_reaches_the_back_of_the_head_is_reported(self):
+        n = 11; x, z = np.meshgrid(np.linspace(-1, 1, n), np.linspace(-1, 1, n))
+        sheet = lambda y: np.c_[x.ravel(), np.full(n * n, y), z.ravel()]
+        P = np.r_[sheet(0.), sheet(.5)]                                        # the face, and the back of the head
+        ids = np.arange(n * n).reshape(n, n)
+        tri = np.array([t for r in range(n - 1) for c in range(n - 1) for t in
+                        ([ids[r, c], ids[r + 1, c], ids[r, c + 1]], [ids[r, c + 1], ids[r + 1, c], ids[r + 1, c + 1]])])
+        T = np.r_[tri, tri + n * n]
+        picked = np.flatnonzero(np.hypot(P[:, 0], P[:, 2]) < .45)             # a radius in the front chart
+        report = behind_front(P, T, picked, cell=.05, tolerance=.01)
+        self.assertEqual(sorted(report['behind']), sorted(picked[picked >= n * n].tolist()))
+        self.assertAlmostEqual(report['largest_depth_behind'], .5, places=6)
+        front_only = behind_front(P, T, picked[picked < n * n], cell=.05, tolerance=.01)
+        self.assertEqual(front_only['behind_count'], 0)
+        self.assertIn('behind_front', ARRAY_OPERATIONS)
 
 
 class ThinReliefTests(unittest.TestCase):

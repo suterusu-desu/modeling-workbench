@@ -206,6 +206,22 @@ the finished shape at 0 on the fold's core and rising with distance from it. Thr
 When both end poses of a motion are established and only the in-between poses are wrong, build the in-betweens from
 the two poses with [motion paths](motion-paths.md) (pace, rolled or hinged paths) instead of fitting further keys.
 
+## Smooth a region on the mesh
+
+`metric_fitting.smooth_region(positions, triangles, held=..., weights=..., iterations=10, lam=.5, mu=-.53)` (also the
+`construct` operation `smooth_region`) is Taubin smoothing on the mesh: each pass moves the weighted points toward the
+mean of their edge neighbours and back, which removes lumps without shrinking the surface. `held` points keep their exact
+positions (the margins and the row beside them, a lid's inner surface, a mirror-hidden half); `weights` ramp it out
+(over rows from the margin, a radius fade, a taper at the corners). Give it the rest and the mechanism's end shape as one
+stack, `np.stack([rest, closed])`: the operator is linear, so the motion is smoothed exactly as the shapes are.
+
+In real use, lumps within a few millimetres of a lid margin were out of reach of the front height-field fits (a front
+height field must hold still there); smoothing on the mesh with a held set, a row ramp, a radius fade and a corner taper
+removed them and was accepted. Smoothing only the rest creased the closing lid, because the closed shape's change no
+longer fitted the smoothed rest; the same smoothing on the closed shape fixed it. Without the corner taper the smoothing
+squeezed 11 more triangles near the corners during the blink (`corner_compression` 787 against 776); with it, 748. Check
+the selection with `behind_front` first: a radius drawn in the front view also takes the back of the head.
+
 ## Re-lay collapsed material in a plane
 
 A pose can squeeze a block of material until its rows and columns run parallel (collapsed quads): shading shows a hard
