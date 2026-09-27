@@ -45,7 +45,12 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   baseline did: use it when the design deliberately changes that object's motion (a still lower lid replacing a rising
   one moved its lash .013 against the old baseline).
 - `clearance`: obstacles the region must stay outside. `centre` defaults to the obstacle's centroid at each phase,
-  which suits an eyeball; the obstacle must be star-shaped from it. `gaze` repeats the check with the obstacle turned
+  which suits an eyeball; the obstacle must be star-shaped from it. An object holding separate parts (both eyeballs,
+  one of them a live mirror) is split where its points are farther apart than `part_gap` (share of its extent, default
+  .05; touching parts such as an iris on its eyeball stay one), and each point is measured from its nearest part's
+  centroid (`centre: "nearest of 2 obstacle parts"`, with the parts in the detail). The whole object's mean would lie
+  between the eyes: on a real pair it read a false .003 for four checkpoints. `points` should be the visible outer skin:
+  leave out the lid's inner surface (it lies against the eye by construction) and a hidden half a mirror cuts away. `gaze` repeats the check with the obstacle turned
   about `pivot` by each of `rotations` ([axis, degrees]; the eye's look limits), keeping the worst: a cornea or iris
   bulge that the eye turns into the closing lid's path fails there and not at rest gaze.
 - `symmetry`: the mirror axis (0, 1 or 2) and `plane` (default 0), for an object that holds both sides.

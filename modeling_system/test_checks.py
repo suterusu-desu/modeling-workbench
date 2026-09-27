@@ -205,6 +205,39 @@ class StandardCheckTests(unittest.TestCase):
         self.assertGreater(row_['inside_at_rest'], 0)               # both margins sit inside the larger envelope
         self.assertGreater(row_['followed_points'], 0)
 
+    def test_an_obstacle_holding_both_eyes_is_measured_from_each_points_own_eye(self):
+        def sphere(centre, n=60):
+            u, v = np.meshgrid(np.linspace(0, np.pi, n), np.linspace(0, 2 * np.pi, 2 * n, endpoint=False))
+            return np.c_[np.sin(u).ravel() * np.cos(v).ravel(), np.sin(u).ravel() * np.sin(v).ravel(), np.cos(u).ravel()] + centre
+        gap = 2.4; eyes = np.concatenate([sphere([0., 0., 0.]), sphere([gap, 0., 0.])])     # one object, both eyeballs
+
+        def lids(column):                            # a mirrored pair; one margin vertex dips to .003 off its eye
+            left = hinged().copy(); v = row(UPPER)[column]
+            left[2][v] = left[2][v] / np.linalg.norm(left[2][v]) * 1.003
+            right = left.copy(); right[..., 0] = gap - left[..., 0]
+            skin = np.concatenate([left, right], axis=1)
+            arrays = {f'{g}::Skin::co': P for g, P in zip(PHASES, skin)}
+            arrays.update({f'{g}::Eyes::co': eyes for g in PHASES}); arrays['0.0::Skin::tri'] = np.r_[TRI, TRI + len(REST)]
+            return arrays
+        region = np.r_[REGION, REGION + len(REST)].tolist()
+        shortfall = lambda entry, arrays: next(c for c in run_checks({'object': 'Skin', 'region': region, 'clearance': [entry]},
+                                                                     arrays)['checks'] if c['id'] == 'clearance_shortfall')
+        between = {'obstacle': 'Eyes', 'centre': [gap / 2, 0., 0.], 'minimum': .01}     # the old default: the mean
+        for column in (12, 7):                                                             # missed, then overstated
+            arrays = lids(column)
+            self.assertNotAlmostEqual(shortfall(between, arrays)['observed'], .007, places=3)
+            row_ = shortfall({'obstacle': 'Eyes', 'minimum': .01}, arrays)
+            self.assertAlmostEqual(row_['observed'], .007, places=4)                      # the dip, from its own eye
+            detail = row_['detail']['obstacles'][0]
+            self.assertEqual(detail['centre'], 'nearest of 2 obstacle parts')
+            self.assertEqual([p['clearance_points'] for p in detail['parts']], [len(REGION)] * 2)
+        self.assertEqual(shortfall(between, lids(12))['observed'], 0.)                    # the old default saw nothing
+        iris = sphere([0., 0., 0.])[:, :] * [.3, .02, .3] + [0., -1.0, 0.]                 # an iris disc on the eyeball
+        one = next(c for c in run_checks(dict(self.declaration, clearance=[{'obstacle': 'Eye', 'minimum': .01}]),
+                                         states(hinged(), extra={'Eye': np.concatenate([sphere([0., 0., 0.]), iris])}),
+                                         base=self.root)['checks'] if c['id'] == 'clearance_shortfall')
+        self.assertEqual(one['detail']['obstacles'][0]['centre'], 'obstacle centroid')     # touching parts stay one
+
     def test_broken_symmetry_fails(self):
         skin = hinged().copy(); skin[2][row(2)[1]] += [0., .01, 0.]
         self.assertIn('symmetry', self.failing(self.run_on(skin)))

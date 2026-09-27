@@ -99,7 +99,8 @@ to the visible feature so `still_outside` catches it, and make hidden material s
 
 **Clearance reports a penetration that is not there.** Cause: an obstacle measured from a point that is not its centre
 (a point on the hinge axis is not the eyeball's centre), so the obstacle is not star-shaped from it. Remedy: measure
-from the obstacle's own centroid (the check's default) and confirm any penetration against the surface.
+from the obstacle's own centroid (the check's default) and confirm any penetration against the surface. An eye object
+that holds both eyeballs has its mean between them: the check now measures each point from its own eyeball's part.
 
 **The lid clears the eye looking ahead and cuts it looking down.** Cause: clearance checked at one gaze; the eye
 turns the cornea or iris bulge into the closing lid's path. Remedy: declare the gaze limits in the clearance entry

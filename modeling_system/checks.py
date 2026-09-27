@@ -209,15 +209,39 @@ def _rotation(axis, degrees):
     return np.eye(3) + np.sin(a) * K + (1 - np.cos(a)) * K @ K
 
 
-def _clearance_row(P, points, O, entry, minimum, phases):
+def _obstacle_parts(O0, gap_share):
+    """The obstacle's separate parts at rest: points closer than `gap_share` of its extent join, so an eyeball with its
+    iris and highlight stays one part and a pair of eyeballs is two. Parts under a tenth of the points are left in the
+    nearest major part's company (they do not split the obstacle). Returns the major parts' index arrays."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    from scipy.spatial import cKDTree
+    n = len(O0); reach = gap_share * float(np.linalg.norm(np.ptp(O0, axis=0)))
+    pairs = cKDTree(O0).query_pairs(reach, output_type='ndarray') if reach > 0 else np.zeros((0, 2), int)
+    _, labels = connected_components(coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(n, n)),
+                                     directed=False)
+    sizes = np.bincount(labels)
+    return [np.flatnonzero(labels == j) for j in np.argsort(-sizes) if sizes[j] >= .1 * n]
+
+
+def _clearance_row(P, points, O, entry, minimum, phases, parts=None, assign=None):
     """Shortfall of the points that start outside the obstacle, each keeping the smaller of the minimum and its own rest
-    clearance; points inside the envelope at rest (a socket beside or behind the obstacle) are not followed."""
+    clearance; points inside the envelope at rest (a socket beside or behind the obstacle) are not followed. With several
+    obstacle parts (two eyeballs in one object) each point is measured against its nearest part from that part's centre."""
     gaps = []
+    groups = [(np.arange(len(points)), None)] if not parts or len(parts) < 2 else [
+        (np.flatnonzero(assign == j), part) for j, part in enumerate(parts)]
     for g in range(len(phases)):
-        centre = (np.asarray(entry['centre'], float) if entry.get('centre') is not None else O[g].mean(axis=0))
-        pts = P[g][points]
-        env = keep_clearance(pts, O[g], centre, -1., angular_radius_degrees=entry.get('angular_radius_degrees', 2.))['envelope']
-        gaps.append(np.linalg.norm(pts - centre, axis=1) - env)
+        pts = P[g][points]; gap = np.full(len(points), np.nan)
+        for members, part in groups:
+            if not len(members):
+                continue
+            obstacle = O[g] if part is None else O[g][part]
+            centre = (np.asarray(entry['centre'], float) if entry.get('centre') is not None else obstacle.mean(axis=0))
+            env = keep_clearance(pts[members], obstacle, centre, -1.,
+                                 angular_radius_degrees=entry.get('angular_radius_degrees', 2.))['envelope']
+            gap[members] = np.linalg.norm(pts[members] - centre, axis=1) - env
+        gaps.append(gap)
     gaps = np.array(gaps)                                  # (phases, points); NaN where the obstacle is not behind
     followed = np.isfinite(gaps[0]) & (gaps[0] >= 0)
     need = np.minimum(minimum, gaps[0])
@@ -275,6 +299,14 @@ def _measure(d, states, base, baseline=None, mover_cut=None):
             points = region if entry.get('points', 'region') == 'region' else _indices(
                 entry['points'], base, 'points', n, 'clearance points')
             O = _stack(states, entry['obstacle']); minimum = float(entry.get('minimum', 0.))
+            parts, assign, centre_used = None, None, 'declared' if entry.get('centre') is not None else 'obstacle centroid'
+            if entry.get('centre') is None:                # the obstacle's own centroid is only meaningful for one part
+                parts = _obstacle_parts(O[0], float(entry.get('part_gap', .05)))
+                if len(parts) > 1:
+                    from scipy.spatial import cKDTree
+                    near = np.stack([cKDTree(O[0][part]).query(P[0][points])[0] for part in parts])
+                    assign = near.argmin(axis=0)
+                    centre_used = f'nearest of {len(parts)} obstacle parts'
             variants = [('rest gaze', O)]
             gaze = entry.get('gaze')
             for axis_vector, degrees in (gaze or {}).get('rotations', []):
@@ -282,8 +314,11 @@ def _measure(d, states, base, baseline=None, mover_cut=None):
                 variants.append((f'{degrees:+g} deg about {list(axis_vector)}', (O - pivot) @ R.T + pivot))
             worst_row = None
             for label, obstacle in variants:
-                row = _clearance_row(P, points, obstacle, entry, minimum, phases)
-                row.update(obstacle=entry['obstacle'], gaze=label)
+                row = _clearance_row(P, points, obstacle, entry, minimum, phases, parts, assign)
+                row.update(obstacle=entry['obstacle'], gaze=label, centre=centre_used)
+                if assign is not None:
+                    row['parts'] = [{'points': int(len(part)), 'centre_at_rest': O[0][part].mean(axis=0).tolist(),
+                                     'clearance_points': int(np.count_nonzero(assign == j))} for j, part in enumerate(parts)]
                 if worst_row is None or row['shortfall'] > worst_row['shortfall']:
                     worst_row = row
             if len(variants) > 1:
