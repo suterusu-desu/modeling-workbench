@@ -41,15 +41,11 @@ def select_triangles(arrays, selection=None):
     return ids[mask]
 
 
-def nearest_surface(arrays, point, selection=None):
-    p = np.asarray(point, dtype=float)
-    if p.shape != (3,) or not np.isfinite(p).all():
-        raise ValueError('Query point must be one finite XYZ coordinate')
-    ids = select_triangles(arrays, selection)
-    if not len(ids):
-        return {'status': 'unsupported', 'reason': 'No triangles satisfy the declared selection', 'eligible_triangles': 0}
-    triangles = arrays['co'][arrays['tri'][ids]]
-    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+def _triangle_candidates(p, a, b, c):
+    """Closest-point candidates of points p on triangles (a, b, c), row by row: the plane projection when it falls inside
+    the triangle (else infinitely far), then the closest point on each edge. Returns (4, K, 3) points, (4, K) squared
+    distances, the (K, 3) unnormalized triangle normals and (4, K, 3) barycentric weights that reconstruct each candidate
+    from the corners (an edge candidate's weights come from its edge parameter, so they hold on a degenerate triangle)."""
     ab, ac = b-a, c-a
     normal = np.cross(ab, ac)
     n2 = np.einsum('ij,ij->i', normal, normal)
@@ -66,13 +62,70 @@ def nearest_surface(arrays, point, selection=None):
     inside = (n2 > 1e-30) & (v >= -1e-12) & (w >= -1e-12) & (v+w <= 1+1e-12)
     candidates = [projection]
     distances = [np.where(inside, np.sum((projection-p)**2, axis=1), np.inf)]
-    for start, end in ((a,b), (b,c), (c,a)):
+    inner = np.clip(np.stack([1-v-w, v, w], axis=1), 0, None)
+    weights = [inner / np.maximum(inner.sum(axis=1, keepdims=True), 1e-300)]
+    for k, (start, end) in enumerate(((a,b), (b,c), (c,a))):
         edge = end-start
         t = np.clip(np.einsum('ij,ij->i', p-start, edge) / np.maximum(np.sum(edge*edge,axis=1), 1e-300), 0, 1)
         closest = start+t[:,None]*edge
         candidates.append(closest)
         distances.append(np.sum((closest-p)**2, axis=1))
-    ds = np.stack(distances)
+        weight = np.zeros((len(t), 3)); weight[:, k] = 1-t; weight[:, (k+1) % 3] = t
+        weights.append(weight)
+    return np.stack(candidates), np.stack(distances), normal, np.stack(weights)
+
+
+def closest_points(points, positions, triangles):
+    """Exact closest point on a triangle surface for every query point.
+
+    The search is complete, not a shortlist: the distance to the nearest surface vertex bounds the answer from above,
+    and a triangle can only lie within that bound if its centroid does within the bound plus the triangle's own radius
+    about its centroid, so every such triangle is measured exactly. Returns the closest points, distances, triangle
+    indices and barycentric weights of each closest point in its triangle that reconstruct it from the corners (on a
+    degenerate triangle too, where the point lies on an edge). No query points give empty results.
+    """
+    from scipy.spatial import cKDTree
+    Q, co, tri = np.asarray(points, float), np.asarray(positions, float), np.asarray(triangles)
+    if Q.ndim != 2 or Q.shape[1:] != (3,) or not np.isfinite(Q).all():
+        raise ValueError('Query points must be finite XYZ rows')
+    if (co.ndim != 2 or co.shape[1:] != (3,) or not np.isfinite(co).all() or tri.ndim != 2 or tri.shape[1:] != (3,)
+            or tri.dtype.kind not in 'iu' or not len(tri) or tri.min() < 0 or tri.max() >= len(co)):
+        raise ValueError('A finite surface with triangles indexing its positions is required')
+    if not len(Q):
+        return {'points': np.zeros((0, 3)), 'distances': np.zeros(0), 'triangles': np.zeros(0, np.int64),
+                'barycentric': np.zeros((0, 3))}
+    tri = tri.astype(np.int64); corners = co[tri]
+    centroid = corners.mean(axis=1)
+    radius = np.linalg.norm(corners - centroid[:, None], axis=2).max(axis=1)
+    used = np.unique(tri)
+    bound = cKDTree(co[used]).query(Q)[0] * (1 + 1e-12) + 1e-300
+    lists = cKDTree(centroid).query_ball_point(Q, bound + radius.max())
+    rows = np.repeat(np.arange(len(Q)), [len(x) for x in lists])
+    cand = np.fromiter((t for x in lists for t in x), np.int64, len(rows))
+    keep = np.linalg.norm(Q[rows] - centroid[cand], axis=1) - radius[cand] <= bound[rows]
+    rows, cand = rows[keep], cand[keep]
+    hits, d2, _, weights = _triangle_candidates(Q[rows], corners[cand, 0], corners[cand, 1], corners[cand, 2])
+    region = np.argmin(d2, axis=0); pair_d2 = d2[region, np.arange(len(rows))]
+    pair_hit, pair_weight = hits[region, np.arange(len(rows))], weights[region, np.arange(len(rows))]
+    # The smallest pair distance per query; ties keep the lowest triangle index.
+    order = np.lexsort((cand, pair_d2, rows))
+    first = order[np.r_[True, rows[order][1:] != rows[order][:-1]]]
+    if len(first) != len(Q):
+        raise ValueError('Closest-point search lost a query; the surface bound is inconsistent')
+    return {'points': pair_hit[first], 'distances': np.sqrt(pair_d2[first]), 'triangles': cand[first],
+            'barycentric': pair_weight[first]}
+
+
+def nearest_surface(arrays, point, selection=None):
+    p = np.asarray(point, dtype=float)
+    if p.shape != (3,) or not np.isfinite(p).all():
+        raise ValueError('Query point must be one finite XYZ coordinate')
+    ids = select_triangles(arrays, selection)
+    if not len(ids):
+        return {'status': 'unsupported', 'reason': 'No triangles satisfy the declared selection', 'eligible_triangles': 0}
+    triangles = arrays['co'][arrays['tri'][ids]]
+    candidates, ds, normal, _ = _triangle_candidates(p[None], triangles[:, 0], triangles[:, 1], triangles[:, 2])
+    n2 = np.einsum('ij,ij->i', normal, normal)
     region, row = np.unravel_index(np.argmin(ds), ds.shape)
     index = int(ids[row]); hit = candidates[region][row]
     result = {'status': 'completed', 'point': hit.tolist(), 'distance': float(np.sqrt(ds[region,row])),

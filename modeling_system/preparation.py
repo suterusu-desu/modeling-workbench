@@ -8,8 +8,8 @@ from . import material_operations
 from .preparation_contracts import PreparationOperation
 from .result_reporting import json_data, compact_summary
 from .triangle_contact import projected_triangle_contact
-from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout,
-                             smooth_region)
+from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, conform_to_surface,
+                             planar_relayout, smooth_region)
 from .correction_scope import correction_scope
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
                            shared_schedule, travel_weight, hinge_change, hinge_landing, hinge_carry, hinge_lift)
@@ -94,7 +94,8 @@ def pose_correspondence(guide_points, pose_points, pose_values):
 
 
 ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric': surface_fem_metric,
-    'relax_displacement': relax_displacement, 'rigid_deform': rigid_deform, 'planar_relayout': planar_relayout,
+    'relax_displacement': relax_displacement, 'rigid_deform': rigid_deform, 'conform_to_surface': conform_to_surface,
+    'planar_relayout': planar_relayout,
     'correction_scope': correction_scope,
     'section_fit': guide_fitting.prepare_section_fit,
     'material_path': guide_fitting.remap_material_path, 'compose_correspondence': compose_correspondence,

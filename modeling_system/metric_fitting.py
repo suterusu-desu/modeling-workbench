@@ -254,6 +254,51 @@ def relax_displacement(reference, deformed, triangles, held, *, units, frame, re
                       'Depth changes wherever material slides over curvature; the held set is an explicit owner choice.'}
 
 
+def _arap_setup(rest, start, tri, mask, units, frame, relative_area_tolerance):
+    """The as-rigid-as-possible core shared by rigid_deform and conform_to_surface: the patch's own vertices, free and
+    held sets, clamped intrinsic cotangent edge weights of the reference and their Laplacian."""
+    from scipy.sparse import coo_matrix
+
+    n = len(rest); tri = tri.astype(np.int64); used = np.unique(tri)
+    local = np.full(n, -1, dtype=np.int64); local[used] = np.arange(len(used))
+    metric = surface_fem_metric(rest[used], local[tri], units=units, frame=frame, relative_area_tolerance=relative_area_tolerance)
+    held_local = mask.astype(bool)[used]
+    free = np.flatnonzero(~held_local); fixed = np.flatnonzero(held_local)
+    if not len(free) or not len(fixed):
+        raise ValueError('Both free and held vertices are required in the patch')
+    boundary = np.zeros(len(used), bool); boundary[np.asarray(metric['boundary_vertices'], dtype=np.int64)] = True
+    if boundary[free].any():
+        raise ValueError('Free vertices must be interior to the patch; hold its boundary')
+    # Cotangent edge weights are the negated off-diagonal P1 stiffness entries of the reference surface.
+    rows, cols, values = (np.asarray(metric[k]) for k in ('stiffness_rows', 'stiffness_columns', 'stiffness_values'))
+    off = rows != cols
+    i, j, w = rows[off].astype(np.int64), cols[off].astype(np.int64), -values[off].astype(float)
+    positive = w[w > 0]
+    floor = 1e-3 * float(positive.mean()) if len(positive) else 1e-12
+    clamped = int((w < floor).sum()); w = np.maximum(w, floor)
+    m = len(used); p = rest[used].astype(float); x = start[used].astype(float).copy()
+    degree = np.bincount(i, weights=w, minlength=m)
+    laplacian = (coo_matrix((-w, (i, j)), shape=(m, m)) + coo_matrix((degree, (np.arange(m), np.arange(m))), shape=(m, m))).tocsr()
+    return tri, used, free, fixed, i, j, w, clamped, m, p, x, degree, laplacian
+
+
+def _arap_rotations(i, j, w, edges, y, m):
+    """Per-vertex best rotations of the reference edges onto the current ones (reflections removed)."""
+    covariance = np.zeros((m, 3, 3))
+    np.add.at(covariance, i, w[:, None, None] * edges[:, :, None] * (y[i] - y[j])[:, None, :])
+    u, _, vt = np.linalg.svd(covariance)
+    r = np.einsum('nji,nkj->nik', vt, u)
+    flip = np.linalg.det(r) < 0
+    if flip.any():
+        u = u.copy(); u[flip, :, -1] *= -1; r[flip] = np.einsum('nji,nkj->nik', vt[flip], u[flip])
+    return r
+
+
+def _arap_right(i, j, w, edges, r, m):
+    right = np.zeros((m, 3)); np.add.at(right, i, .5 * w[:, None] * np.einsum('nab,nb->na', r[i] + r[j], edges))
+    return right
+
+
 def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_area_tolerance,
                  iterations=50, tolerance=1e-9, compressed_below=.5, targets=None, target_weights=None,
                  interval_axis=None, lower=None, upper=None, interval_weight=1e3, project_active=True):
@@ -281,7 +326,7 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
     outside by about force / weight). A small interval_weight without projection makes the band a soft pull that the
     shape term smooths: the material follows the band's volume instead of tracing a steep edge of it.
     """
-    from scipy.sparse import coo_matrix, diags
+    from scipy.sparse import diags
     from scipy.sparse.linalg import factorized
     from .construction_diagnostics import compare_stretch
 
@@ -316,26 +361,8 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
             raise ValueError('A finite positive interval_weight is required')
         if not isinstance(project_active, bool):
             raise ValueError('project_active must be True or False')
-    n = len(rest); tri = tri.astype(np.int64); used = np.unique(tri)
-    local = np.full(n, -1, dtype=np.int64); local[used] = np.arange(len(used))
-    metric = surface_fem_metric(rest[used], local[tri], units=units, frame=frame, relative_area_tolerance=relative_area_tolerance)
-    held_local = mask.astype(bool)[used]
-    free = np.flatnonzero(~held_local); fixed = np.flatnonzero(held_local)
-    if not len(free) or not len(fixed):
-        raise ValueError('Both free and held vertices are required in the patch')
-    boundary = np.zeros(len(used), bool); boundary[np.asarray(metric['boundary_vertices'], dtype=np.int64)] = True
-    if boundary[free].any():
-        raise ValueError('Free vertices must be interior to the patch; hold its boundary')
-    # Cotangent edge weights are the negated off-diagonal P1 stiffness entries of the reference surface.
-    rows, cols, values = (np.asarray(metric[k]) for k in ('stiffness_rows', 'stiffness_columns', 'stiffness_values'))
-    off = rows != cols
-    i, j, w = rows[off].astype(np.int64), cols[off].astype(np.int64), -values[off].astype(float)
-    positive = w[w > 0]
-    floor = 1e-3 * float(positive.mean()) if len(positive) else 1e-12
-    clamped = int((w < floor).sum()); w = np.maximum(w, floor)
-    m = len(used); p = rest[used].astype(float); x = start[used].astype(float).copy()
-    degree = np.bincount(i, weights=w, minlength=m)
-    laplacian = (coo_matrix((-w, (i, j)), shape=(m, m)) + coo_matrix((degree, (np.arange(m), np.arange(m))), shape=(m, m))).tocsr()
+    tri, used, free, fixed, i, j, w, clamped, m, p, x, degree, laplacian = _arap_setup(
+        rest, start, tri, mask, units, frame, relative_area_tolerance)
     soft = np.zeros(m) if targets is None else target_weights[used] * degree
     goal = np.zeros((m, 3)) if targets is None else targets[used]
     solve = factorized((laplacian + diags(soft))[free][:, free].tocsc()); coupling = laplacian[free][:, fixed]
@@ -355,14 +382,7 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
         return np.where(bounded, np.maximum(np.maximum(low_l - v, v - high_l), 0.), 0.)
 
     def rotations(y):
-        covariance = np.zeros((m, 3, 3))
-        np.add.at(covariance, i, w[:, None, None] * edges[:, :, None] * (y[i] - y[j])[:, None, :])
-        u, _, vt = np.linalg.svd(covariance)
-        r = np.einsum('nji,nkj->nik', vt, u)
-        flip = np.linalg.det(r) < 0
-        if flip.any():
-            u = u.copy(); u[flip, :, -1] *= -1; r[flip] = np.einsum('nji,nkj->nik', vt[flip], u[flip])
-        return r
+        return _arap_rotations(i, j, w, edges, y, m)
 
     def energy(y, r):
         value = float((w * np.sum(((y[i] - y[j]) - np.einsum('nab,nb->na', r[i], edges)) ** 2, axis=1)).sum()
@@ -375,7 +395,7 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
     converged, set_changes = False, 0
     for _ in range(int(iterations)):
         r = rotations(x)
-        right = np.zeros((m, 3)); np.add.at(right, i, .5 * w[:, None] * np.einsum('nab,nb->na', r[i] + r[j], edges))
+        right = _arap_right(i, j, w, edges, r, m)
         right += soft[:, None] * goal
         for k in range(3):
             if k == axis and active.any():
@@ -430,6 +450,302 @@ def rigid_deform(reference, initial, triangles, held, *, units, frame, relative_
             'limits': 'Shape preservation of the chosen reference only: no guide, depth, anatomical or appearance qualification '
                       'beyond the supplied intervals, which bound one coordinate and fit nothing inside them. '
                       'A folded reference keeps its folds; local minima depend on the initial positions; the held set is an explicit owner choice.'}
+
+
+def _qualify_support(positions, triangles, relative_area_tolerance):
+    """An oriented support surface: nondegenerate, manifold, consistently wound triangles; its components, area-weighted
+    vertex normals and open-boundary edges and vertices."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    co, tri = np.asarray(positions), np.asarray(triangles)
+    if (co.ndim != 2 or co.shape[1:] != (3,) or co.dtype.kind not in 'fiu' or not np.isfinite(co).all()
+            or tri.ndim != 2 or tri.shape[1:] != (3,) or tri.dtype.kind not in 'iu' or not len(tri)
+            or tri.min() < 0 or tri.max() >= len(co)):
+        raise ValueError('A finite support surface with triangles indexing its positions is required')
+    co, tri = co.astype(float), tri.astype(np.int64)
+    if len(np.unique(np.sort(tri, axis=1), axis=0)) != len(tri):
+        raise ValueError('Duplicate support triangles')
+    a, b = co[tri[:, 1]] - co[tri[:, 0]], co[tri[:, 2]] - co[tri[:, 0]]
+    normal = np.cross(a, b); area2 = np.linalg.norm(normal, axis=1)
+    longest2 = np.maximum.reduce([np.sum(a*a, 1), np.sum(b*b, 1), np.sum((b-a)**2, 1)])
+    if np.any(area2 <= relative_area_tolerance * longest2):
+        raise ValueError('Degenerate support triangle under the declared area tolerance')
+    edges = np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]])
+    unique, inverse, counts = np.unique(np.sort(edges, axis=1), axis=0, return_inverse=True, return_counts=True)
+    if np.any(counts > 2):
+        raise ValueError('Nonmanifold support edge; a signed offset needs a manifold support')
+    direction = np.where(edges[:, 0] < edges[:, 1], 1, -1)
+    if np.any((counts == 2) & (np.bincount(inverse.ravel(), weights=direction, minlength=len(unique)) != 0)):
+        raise ValueError('Inconsistently wound support: a signed offset needs one side of the surface; rewind it')
+    graph = coo_matrix((np.ones(len(edges)), (edges[:, 0], edges[:, 1])), shape=(len(co), len(co)))
+    _, vertex_component = connected_components(graph, directed=False)
+    component = np.unique(vertex_component[tri[:, 0]], return_inverse=True)[1].ravel()
+    vertex_normal = np.zeros_like(co)
+    for k in range(3):
+        np.add.at(vertex_normal, tri[:, k], normal)
+    boundary_edges = unique[counts == 1]
+    boundary_vertex = np.zeros(len(co), bool); boundary_vertex[boundary_edges.ravel()] = True
+    edge_key = set((boundary_edges[:, 0] * len(co) + boundary_edges[:, 1]).tolist())
+    return {'positions': co, 'triangles': tri, 'face_normal': normal / area2[:, None], 'vertex_normal': vertex_normal,
+            'component': component, 'components': int(component.max()) + 1, 'boundary_vertex': boundary_vertex,
+            'boundary_edge_key': edge_key, 'size': float(np.linalg.norm(np.ptp(co[np.unique(tri)], axis=0)))}
+
+
+def _support_query(support, points):
+    """Closest support point of each point, the offset along the interpolated support normal there (the winding's side
+    is positive), the distance across the support's open boundary and the support component."""
+    from .geometry import closest_points
+    hit = closest_points(points, support['positions'], support['triangles'])
+    t = hit['triangles']; bary = hit['barycentric']; corners = support['triangles'][t]
+    normal = np.einsum('nk,nkd->nd', bary, support['vertex_normal'][corners])
+    length = np.linalg.norm(normal, axis=1)
+    face = support['face_normal'][t]
+    normal = np.where(length[:, None] > 1e-12, normal / np.maximum(length, 1e-300)[:, None], face)
+    offset_vector = np.asarray(points, float) - hit['points']
+    offset = np.sum(offset_vector * normal, axis=1)
+    # On the open boundary when the closest point is on a boundary edge (one barycentric zero) or boundary vertex.
+    zero = bary <= 1e-9; nzero = zero.sum(axis=1)
+    on_boundary = np.zeros(len(t), bool)
+    at_vertex = nzero == 2
+    if at_vertex.any():
+        on_boundary[at_vertex] = support['boundary_vertex'][corners[at_vertex, np.argmax(bary[at_vertex], axis=1)]]
+    on_edge = np.flatnonzero(nzero == 1)
+    if len(on_edge):
+        k = np.argmax(zero[on_edge], axis=1)
+        e0, e1 = corners[on_edge, (k + 1) % 3], corners[on_edge, (k + 2) % 3]
+        key = np.minimum(e0, e1) * len(support['positions']) + np.maximum(e0, e1)
+        on_boundary[on_edge] = np.fromiter((q in support['boundary_edge_key'] for q in key.tolist()), bool, len(key))
+    across = np.linalg.norm(offset_vector - face * np.sum(offset_vector * face, axis=1)[:, None], axis=1)
+    return {'closest': hit['points'], 'distance': hit['distances'], 'normal': normal, 'offset': offset,
+            'beyond': np.where(on_boundary, across, 0.), 'component': support['component'][t], 'triangle': t}
+
+
+def conform_to_surface(reference, initial, triangles, held, support_positions, support_triangles, *, units, frame,
+                       relative_area_tolerance, lower=0., upper=0., support_weights=1., band_weight=1e3, iterations=50,
+                       tolerance=1e-9, compressed_below=.5, project_active=True, distance_tolerance=None,
+                       position_tolerance=None):
+    """As-rigid-as-possible deformation of a patch whose free vertices are kept on (or within an offset band of) an
+    arbitrary oriented triangle support surface, measured along the support's own normal.
+
+    The shape term, held and free sets and the report are those of rigid_deform. Each iteration every free vertex with
+    a positive support weight is matched to its exact closest point on the support (complete search) and the support's
+    area-weighted vertex normals interpolated there; its signed offset along that normal (positive on the side the
+    support's winding faces) should lie in [lower, upper]. A vertex outside is pulled onto the violated bound by a penalty
+    band_weight * support_weight * degree on that normal component only (a 3x3 block n n^T in one coupled XYZ solve), so
+    its position along the surface is left to the shape term. Closest points, normals and the active set are re-queried
+    after every solve. The solve has converged when the set stops changing, the energy settles (relative `tolerance`)
+    and no vertex moved further than `position_tolerance` in the last step (default: `distance_tolerance`, itself by
+    default 1e-6 of the support's size); with no weighted free vertex it is exactly rigid_deform, criteria included.
+    With project_active every free vertex still outside its band, whatever its positive weight, then moves onto the
+    violated bound along the normal, re-queried three times; every measure is taken after that projection. Convergence
+    of the solve and support of the result are reported separately.
+
+    Unlike rigid_deform's intervals on one coordinate, the constraint does not weaken where the support turns away
+    from an axis. It cannot create area: surplus material is compressed along the surface (reported), and a patch that
+    is pushed past the support's open boundary slides off it (reported as beyond the boundary, not as supported).
+    """
+    from scipy.sparse import coo_matrix, kron, identity
+    from scipy.sparse.linalg import factorized
+    from .construction_diagnostics import compare_stretch
+
+    rest, start, tri = np.asarray(reference), np.asarray(initial), np.asarray(triangles)
+    mask = np.asarray(held)
+    if (rest.shape != start.shape or rest.ndim != 2 or rest.shape[1:] != (3,) or not np.isfinite(start).all()
+            or not np.isfinite(rest).all() or mask.shape != (len(rest),) or mask.dtype.kind not in 'biu'):
+        raise ValueError('Corresponding finite reference/initial positions and one held flag per vertex required')
+    if not (int(iterations) >= 1 and np.isfinite(tolerance) and tolerance >= 0 and 0 < compressed_below < 1):
+        raise ValueError('Require iterations >= 1, a finite nonnegative tolerance and 0 < compressed_below < 1')
+    if tri.ndim != 2 or tri.shape[1:] != (3,) or tri.dtype.kind not in 'iu' or not len(tri) or tri.min() < 0 or tri.max() >= len(rest):
+        raise ValueError('Patch triangles must index the supplied vertices')
+    n = len(rest)
+    low, high = (np.broadcast_to(np.asarray(v, float), (n,)).copy() for v in (lower, upper))
+    weight = np.broadcast_to(np.asarray(support_weights, float), (n,)).copy()
+    low, high = np.where(np.isnan(low), -np.inf, low), np.where(np.isnan(high), np.inf, high)
+    if (low > high).any() or (low == np.inf).any() or (high == -np.inf).any():
+        raise ValueError('Each offset band needs lower <= upper')
+    if not np.isfinite(weight).all() or (weight < 0).any():
+        raise ValueError('Support weights must be finite and nonnegative')
+    if not (np.isfinite(band_weight) and band_weight > 0) or not isinstance(project_active, bool):
+        raise ValueError('A finite positive band_weight and a boolean project_active are required')
+    support = _qualify_support(support_positions, support_triangles, relative_area_tolerance)
+    tol = 1e-6 * support['size'] if distance_tolerance is None else float(distance_tolerance)
+    step_tol = tol if position_tolerance is None else float(position_tolerance)
+    if not (np.isfinite(tol) and tol >= 0 and np.isfinite(step_tol) and step_tol >= 0):
+        raise ValueError('Finite nonnegative distance and position tolerances are required')
+
+    tri, used, free, fixed, i, j, w, clamped, m, p, x, degree, laplacian = _arap_setup(
+        rest, start, tri, mask, units, frame, relative_area_tolerance)
+    low_l, high_l, weight_l = low[used], high[used], weight[used]
+    is_free = np.zeros(m, bool); is_free[free] = True
+    constrained = is_free & (weight_l > 0)
+    watched = weight_l > 0                          # held ones are measured for conflicts, never moved
+    kappa = float(band_weight) * weight_l * degree
+    edges = p[i] - p[j]
+    solve = factorized(laplacian[free][:, free].tocsc()); coupling = laplacian[free][:, fixed]
+    stiffness3 = kron(laplacian[free][:, free], identity(3), format='csr')
+    position_in_free = np.full(m, -1, np.int64); position_in_free[free] = np.arange(len(free))
+
+    def query(y, which):
+        out = {'offset': np.full(m, np.nan), 'normal': np.zeros((m, 3)), 'closest': np.full((m, 3), np.nan),
+               'distance': np.full(m, np.nan), 'beyond': np.zeros(m), 'component': np.full(m, -1)}
+        ids = np.flatnonzero(which)
+        if len(ids):
+            q = _support_query(support, y[ids])
+            for key in out:
+                out[key][ids] = q[key]
+        return out
+
+    def residual(q):
+        return np.where(watched, np.nan_to_num(np.maximum(np.maximum(low_l - q['offset'], q['offset'] - high_l), 0.)), 0.)
+
+    def constraint(q):
+        # Active: outside the band along the normal. The penalty's plane: n . y = n . closest + violated bound.
+        active = constrained & ((q['offset'] < low_l) | (q['offset'] > high_l))
+        bound = np.where(q['offset'] < low_l, low_l, high_l)
+        level = np.where(active, np.sum(q['normal'] * q['closest'], axis=1) + np.where(active, bound, 0.), 0.)
+        return active, level
+
+    def energy(y, r, q, active, level):
+        value = float((w * np.sum(((y[i] - y[j]) - np.einsum('nab,nb->na', r[i], edges)) ** 2, axis=1)).sum())
+        if active.any():
+            value += float((kappa[active] * (np.sum(q['normal'][active] * y[active], axis=1) - level[active]) ** 2).sum())
+        return value
+
+    q = query(x, watched); first_query = q
+    before_residual, before_beyond = residual(q), q['beyond'].copy()
+    initial_component = q['component'].copy()
+    active, level = constraint(q)
+    energies, converged, set_changes, component_changes, last_move = [], False, 0, 0, 0.
+    for _ in range(int(iterations)):
+        r = _arap_rotations(i, j, w, edges, x, m)
+        right = _arap_right(i, j, w, edges, r, m)
+        previous = x.copy()
+        if active.any():
+            # Coupled XYZ solve: the normal penalty is a 3x3 block that leaves the tangential directions free.
+            ids = np.flatnonzero(active); at = position_in_free[ids]
+            block = kappa[ids, None, None] * q['normal'][ids, :, None] * q['normal'][ids, None, :]
+            rows = (3 * at[:, None, None] + np.arange(3)[None, :, None]).repeat(3, axis=2)
+            cols = (3 * at[:, None, None] + np.arange(3)[None, None, :]).repeat(3, axis=1)
+            system = stiffness3 + coo_matrix((block.ravel(), (rows.ravel(), cols.ravel())), shape=stiffness3.shape)
+            load = right[free] - coupling @ x[fixed]
+            load[at] += (kappa[ids] * level[ids])[:, None] * q['normal'][ids]
+            x[free] = factorized(system.tocsc())(load.ravel()).reshape(-1, 3)
+        else:
+            for k in range(3):
+                x[free, k] = solve(right[free, k] - coupling @ x[fixed, k])
+        energies.append(energy(x, _arap_rotations(i, j, w, edges, x, m), q, active, level))
+        last_move = float(np.linalg.norm(x - previous, axis=1).max())
+        fresh = query(x, watched)
+        component_changes += int(np.count_nonzero(constrained & (fresh['component'] != q['component'])))
+        q = fresh
+        now, level = constraint(q)
+        changed = not np.array_equal(now, active); set_changes += int(changed); active = now
+        # Closest points can keep sliding on an energy plateau: with a support the last step must be small too.
+        if (not changed and len(energies) > 1
+                and abs(energies[-2] - energies[-1]) <= tolerance * max(energies[-2], 1e-300)
+                and (not constrained.any() or last_move <= step_tol)):
+            converged = True; break
+    if not np.isfinite(x).all():
+        raise ValueError('Surface-constrained deformation did not produce finite positions; qualify the held set')
+    penalty_residual = float(residual(q)[constrained].max()) if constrained.any() else 0.
+    projection_changes, projection_moves = 0, 0.
+    if project_active:
+        for _ in range(3):
+            active_now, _level = constraint(q)
+            if not active_now.any():
+                break
+            bound = np.where(q['offset'] < low_l, low_l, high_l)
+            step = ((bound - q['offset'])[active_now])[:, None] * q['normal'][active_now]
+            x[active_now] += step; projection_moves = max(projection_moves, float(np.linalg.norm(step, axis=1).max()))
+            fresh = query(x, watched)
+            projection_changes += int(np.count_nonzero(constrained & (fresh['component'] != q['component'])))
+            q = fresh
+    deformed = start.astype(float).copy(); deformed[used[free]] = x[free]
+    after = query(x, watched)
+    after_residual = residual(after)
+
+    # Facing is measured only on patch triangles whose three vertices have a positive weight (held ones included),
+    # against the mean support normal at their closest points; the others are not measured.
+    loc = np.full(n, -1, np.int64); loc[used] = np.arange(m); tri_local = loc[tri]
+    measured = watched[tri_local].all(axis=1)
+
+    def facing(y, qq):
+        if not measured.any():
+            return [0, 0]
+        t = tri_local[measured]
+        tn = np.cross(y[t[:, 1]] - y[t[:, 0]], y[t[:, 2]] - y[t[:, 0]])
+        dot = np.sum(tn * qq['normal'][t].sum(axis=1), axis=1)
+        return [int(np.count_nonzero(dot > 0)), int(np.count_nonzero(dot <= 0))]
+
+    stretch_before = compare_stretch(rest, start, tri, compressed_below=compressed_below, limit=1)['all']
+    stretch_after = compare_stretch(rest, deformed, tri, compressed_below=compressed_below, limit=1)['all']
+    unsupported_free = constrained & ((after_residual > tol) | (after['beyond'] > tol))
+    held_watch = watched & ~is_free
+    held_conflict = held_watch & ((after_residual > tol) | (after['beyond'] > tol))
+    free_ids, fixed_ids = used[free], used[fixed]
+    c = constrained
+
+    def tail(values, mask_):
+        return (float(values[mask_].max()), float(np.percentile(values[mask_], 95))) if mask_.any() else (0., 0.)
+    band_max_after, band_p95_after = tail(after_residual, c)
+    switched = int(np.count_nonzero(c & (after['component'] != initial_component)))
+    metrics = {'free_vertices': int(len(free_ids)), 'held_vertices': int(len(fixed_ids)),
+               'support_vertices': int(c.sum()), 'unconstrained_free_vertices': int((is_free & ~c).sum()),
+               'iterations': len(energies), 'converged': converged, 'energy_first': energies[0], 'energy_last': energies[-1],
+               'last_step_max_move': last_move, 'position_tolerance': step_tol, 'clamped_weights': clamped,
+               'band_active': int(active.sum()), 'projection_max_move': projection_moves,
+               'band_set_changes': set_changes, 'band_penalty_residual': penalty_residual, 'band_projected': project_active,
+               'distance_tolerance': tol,
+               'band_outside_before': int(np.count_nonzero(c & (before_residual > tol))),
+               'band_outside_after': int(np.count_nonzero(c & (after_residual > tol))),
+               'band_max_before': float(before_residual[c].max()) if c.any() else 0.,
+               'band_max_after': band_max_after, 'band_p95_after': band_p95_after,
+               'support_distance_max_after': float(np.nanmax(after['distance'][c])) if c.any() else 0.,
+               'beyond_boundary_before': int(np.count_nonzero(c & (before_beyond > tol))),
+               'beyond_boundary_after': int(np.count_nonzero(c & (after['beyond'] > tol))),
+               'beyond_boundary_max_after': float(after['beyond'][c].max()) if c.any() else 0.,
+               'unsupported_after': int(unsupported_free.sum()), 'supported_after': int((c & ~unsupported_free).sum()),
+               'held_on_support': int(held_watch.sum()), 'held_conflicts': int(held_conflict.sum()),
+               'held_conflict_max': float(np.maximum(after_residual, after['beyond'])[held_conflict].max()) if held_conflict.any() else 0.,
+               'support_components': support['components'], 'component_switches': switched,
+               'component_changes_during': component_changes, 'component_changes_projection': projection_changes,
+               'patch_triangles': int(len(tri)), 'support_facing_measured_triangles': int(measured.sum()),
+               'support_facing_before': facing(np.asarray(start, float)[used], first_query),
+               'support_facing_after': facing(x, after),
+               'max_position_change': float(np.linalg.norm(deformed - start, axis=1).max()),
+               'compressed_before': stretch_before['compressed'], 'compressed_after': stretch_after['compressed'],
+               'stretched_before': stretch_before['stretched'], 'stretched_after': stretch_after['stretched'],
+               'smallest_stretch_q01_before': stretch_before['smallest_stretch_q01'],
+               'smallest_stretch_q01_after': stretch_after['smallest_stretch_q01'],
+               'normal_reversals_before': stretch_before['normal_reversals'], 'normal_reversals_after': stretch_after['normal_reversals'],
+               'local_reversals_before': stretch_before['local_reversals'], 'local_reversals_after': stretch_after['local_reversals']}
+    warnings = []
+    if switched or component_changes or projection_changes:
+        warnings.append('Closest points moved between disconnected support components; the support does not say which '
+                        'part a vertex belongs to')
+    if metrics['beyond_boundary_after']:
+        warnings.append('Vertices lie beyond the support\'s open boundary: their normal offset does not make them supported')
+    if held_conflict.any():
+        warnings.append('Held vertices lie off their support band; they keep their exact positions')
+    if not converged:
+        warnings.append('Iteration limit reached before the band set, energy and positions settled')
+    if measured.sum() < len(tri):
+        warnings.append('Support facing measured on %d of %d patch triangles (the rest have a vertex with zero weight)'
+                        % (int(measured.sum()), len(tri)))
+    offset = np.full(n, np.nan); offset[used] = after['offset']
+    band = np.zeros(n); band[used] = after_residual
+    beyond = np.zeros(n); beyond[used] = after['beyond']
+    return {'delta': deformed - start, 'deformed': deformed, 'free_vertices': free_ids, 'held_vertices': fixed_ids,
+            'energies': energies, 'support_offset': offset, 'band_residual': band, 'beyond_boundary': beyond,
+            'public_metrics': metrics, 'warnings': warnings,
+            'objective': 'As-rigid-as-possible energy of the reference shape with intrinsic cotangent weights, plus a '
+                         'degree-scaled penalty on the offset along the support\'s interpolated normal outside [lower, upper] '
+                         'at each weighted free vertex\'s exact closest support point, re-queried every solve; held vertices exact',
+            'limits': 'Keeps material on the supplied support only: no guide, anatomical or appearance qualification, and no '
+                      'correspondence (the closest point is not a semantic match). It cannot create area; surplus is '
+                      'compressed along the surface. A folded reference keeps its folds; the support facing counts and '
+                      'reversals are measures on this result, not a proof of an unfolded or self-intersection-free sheet.'}
 
 
 def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis=1, depth_samples=None, depth_map=None,

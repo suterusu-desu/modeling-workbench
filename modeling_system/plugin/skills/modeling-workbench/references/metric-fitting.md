@@ -8,8 +8,8 @@ piecewise-linear finite-element stiffness and lumped area mass from the actual
 chart triangles. It does not choose guides, fitting directions, regularization
 strength or native actions.
 
-The deformers on this page (relaxation, shape-preserving deformation, planar
-re-layout) are bounded clean-up of a surface, not a way to create motion. Several
+The deformers on this page (relaxation, shape-preserving deformation, on a
+support surface or not, planar re-layout) are bounded clean-up of a surface, not a way to create motion. Several
 real-use cases below repaired a per-point blink that was later replaced by a hinged
 lid ([build the mechanism first](build-the-mechanism-first.md)): when the same kind
 of mark keeps returning in a moving part, change its construction instead.
@@ -205,6 +205,73 @@ the finished shape at 0 on the fold's core and rising with distance from it. Thr
 
 When both end poses of a motion are established and only the in-between poses are wrong, build the in-betweens from
 the two poses with [motion paths](motion-paths.md) (pace, rolled or hinged paths) instead of fitting further keys.
+
+## Keep material on a support surface
+
+An interval on one coordinate and `planar_relayout` with a front depth map constrain material through a chart: a
+height field over one axis or plane. A `radius_map` is a radial chart about a supplied centre and follows some steep
+lateral surfaces, but it too needs the target to be single-valued along its rays. Where the target turns away from the
+chart (skin above an outer eye corner facing the temple, seen from the front), a view-axis band bounds only the part of
+a pleat that points along the view, and surplus material can buckle out of the surface there. `conform_to_surface(
+reference, initial, triangles, held, support_positions, support_triangles, units=..., frame=...,
+relative_area_tolerance=..., lower=0., upper=0., support_weights=1.)` (also an `ArrayPreparation` / `construct`
+operation) is `rigid_deform` with the band measured along the local normal of an arbitrary qualified triangle support,
+with no chart and no single-valued requirement; motion along the support is left to the shape term. Repeated buckling
+of that kind motivates trying it; it does not diagnose every hood or pleat.
+
+```python
+from modeling_system.metric_fitting import conform_to_surface
+
+result = conform_to_surface(rest, start, patch_triangles, held, support_co, support_tri,
+                            units="m", frame="object", relative_area_tolerance=1e-9,
+                            lower=0.0005, upper=0.002,              # just outside the support, per vertex or one value
+                            support_weights=weights,                # 0 frees a vertex from the support
+                            project_active=True)                    # False keeps the soft (penalty-only) result
+closed = result["deformed"]; report = result["public_metrics"]; result["warnings"]
+```
+
+- Offset convention. Each iteration every free vertex with a positive weight gets its exact closest point `c` on the
+  support (a complete search, `geometry.closest_points`, not a shortlist) and the normal `n` there: the support's
+  area-weighted vertex normals interpolated with the barycentric weights of `c` and normalized. Its offset is
+  `n . (x - c)`, positive on the side the support's winding faces, and should lie in `[lower, upper]` (NaN leaves a side
+  open). Inside the band material is free, like the intervals. Outside, a penalty (`band_weight`, default 1e3, times its
+  weight and cotangent degree) pulls only that normal component, in one coupled XYZ solve.
+- The support must be manifold, nondegenerate and consistently wound (it refuses otherwise; rewind it). Choose it and
+  its extent yourself; the tool never enlarges it.
+- Convergence: closest points, normals and the set outside the band are re-queried after every solve; the solve has
+  converged when that set is unchanged, the energy settles (`tolerance`) and the last step moved no vertex further than
+  `position_tolerance` (default `distance_tolerance`, itself 1e-6 of the support's size). An energy plateau while
+  closest points still slide is not convergence. With every weight zero it is exactly `rigid_deform`.
+- Final projection (`project_active`, default): every free vertex still outside its band moves along `n` onto the
+  violated bound, re-queried three times, and every measure is taken after that. It applies to every positive weight
+  alike, so it does not keep a weight fade: a small weight only makes the penalty weak during the solve. To keep a fade
+  (support weight falling off toward a brow), use `project_active=False` and read the soft result and its residuals, or
+  give the vertices that should leave the support zero weight. On a curved support the offset re-measured after
+  projection can differ slightly from the bound; it is reported.
+- The report separates the solve (`converged`, `iterations`, `last_step_max_move`, `band_penalty_residual`,
+  `projection_max_move`) from support of the result. Band counts and tails (`band_outside_*`, `band_max_*`,
+  `band_p95_after`, `support_distance_max_after`, `beyond_boundary_*`, `supported_after` / `unsupported_after`) count
+  free vertices with a positive weight only. Held vertices with a weight are measured separately (`held_on_support`,
+  `held_conflicts`, `held_conflict_max`: they keep their exact positions); zero-weight vertices are not measured
+  (`unconstrained_free_vertices`). A vertex whose closest point is on the support's open edge and lies past it counts as
+  beyond the boundary and unsupported even when its normal offset is zero. Closest points that move between support
+  components are counted during the solve (`component_changes_during`), during projection
+  (`component_changes_projection`) and from start to end (`component_switches`). `support_facing_before/after` give
+  patch triangles facing with / against the support normal, measured only on the `support_facing_measured_triangles`
+  of `patch_triangles` whose three vertices have a positive weight (wind the patch like the support). The stretch tails
+  and reversals are those of `rigid_deform`. Per-vertex `support_offset`, `band_residual` and `beyond_boundary` arrays
+  come back for display.
+
+Hold what is established (margin rows, a landing, the brow) and choose the weights where the material should keep to
+the support.
+
+Limits. It cannot create area: surplus material is compressed along the surface (see `smallest_stretch_q01_after` and
+`compressed_after`) and a patch with far too much material for the support still needs a construction change. The
+closest point is not a correspondence: it does not say which part of a disconnected support a vertex belongs to, and a
+normal band does not establish clearance from anything but the support. A zero-weight vertex beside weighted ones is not
+constrained but moves with them through the shape term, so it differs from the plain `rigid_deform` result. The
+reference must be fold-free, the result depends on the initial positions, and zero facing flips on the measured
+triangles do not prove that a sheet is unfolded or free of self-intersection.
 
 ## Smooth a region on the mesh
 

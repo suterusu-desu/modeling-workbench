@@ -6,8 +6,9 @@ import tempfile
 import unittest
 import numpy as np
 from scipy.sparse import coo_matrix, diags
-from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, planar_relayout,
-                             smooth_region)
+from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, conform_to_surface,
+                             planar_relayout, smooth_region)
+from .geometry import closest_points, nearest_surface
 from .preparation import ArrayPreparation
 
 
@@ -423,6 +424,258 @@ class RigidDeformTests(unittest.TestCase):
             result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
             self.assertEqual(result['status'], 'completed')
             self.assertIn('interval_active', result['summary'])
+
+
+def grid_triangles(columns, rows):
+    index = np.arange(columns * rows).reshape(rows, columns)
+    a, b, c, d = index[:-1, :-1].ravel(), index[:-1, 1:].ravel(), index[1:, 1:].ravel(), index[1:, :-1].ravel()
+    return np.r_[np.c_[a, b, c], np.c_[a, c, d]]
+
+
+def plane(x0, x1, y0, y1, z=0., columns=9, rows=9):
+    """A flat support facing +z (counter-clockwise seen from +z)."""
+    x, y = np.meshgrid(np.linspace(x0, x1, columns), np.linspace(y0, y1, rows))
+    return np.c_[x.ravel(), y.ravel(), np.full(x.size, float(z))], grid_triangles(columns, rows)
+
+
+class ClosestPointTests(unittest.TestCase):
+    def test_matches_an_exhaustive_search_on_random_queries(self):
+        rng = np.random.default_rng(3)
+        co, tri = plane(-1, 1, -1, 1, columns=7, rows=5)
+        co[:, 2] = .3 * np.sin(2 * co[:, 0]) * np.cos(3 * co[:, 1])
+        queries = rng.uniform(-1.5, 1.5, (60, 3))
+        result = closest_points(queries, co, tri)
+        for q, hit, distance in zip(queries, result['points'], result['distances']):
+            exact = nearest_surface({'co': co, 'tri': tri}, q)
+            np.testing.assert_allclose(distance, exact['distance'], atol=1e-12)
+            np.testing.assert_allclose(hit, exact['point'], atol=1e-9)
+        corners = co[tri[result['triangles']]]
+        np.testing.assert_allclose(np.einsum('nk,nkd->nd', result['barycentric'], corners), result['points'], atol=1e-12)
+
+    def test_a_large_nearby_triangle_with_a_distant_centroid_is_found(self):
+        # A long sliver passes 0.05 below the query; its centroid is 30 away. Small triangles near the query are 0.2 away.
+        co = np.array([[-1, -.05, 0], [60, -.05, 0], [60, -.06, 0],        # sliver
+                       [-.2, .2, 0], [.2, .2, 0], [0, .5, 0]], float)      # small triangle, centroid close to the query
+        tri = np.array([[0, 1, 2], [3, 4, 5]])
+        result = closest_points([[0., 0., 0.]], co, tri)
+        self.assertEqual(int(result['triangles'][0]), 0)
+        self.assertAlmostEqual(float(result['distances'][0]), .05, places=12)
+
+    def test_no_queries_give_empty_results(self):
+        co, tri = plane(-1, 1, -1, 1, columns=3, rows=3)
+        result = closest_points(np.zeros((0, 3)), co, tri)
+        self.assertEqual(result['points'].shape, (0, 3)); self.assertEqual(result['barycentric'].shape, (0, 3))
+        self.assertEqual(result['distances'].shape, (0,)); self.assertEqual(result['triangles'].shape, (0,))
+
+    def test_barycentric_weights_reconstruct_the_point_on_a_degenerate_triangle(self):
+        co = np.array([[0., 0, 0], [1, 0, 0], [2, 0, 0]]); tri = np.array([[0, 1, 2]])
+        result = closest_points([[1., 1, 0], [3., 0, 0], [.25, -2, 0]], co, tri)
+        np.testing.assert_allclose(result['points'], [[1, 0, 0], [2, 0, 0], [.25, 0, 0]], atol=1e-12)
+        np.testing.assert_allclose(result['barycentric'] @ co, result['points'], atol=1e-12)
+        np.testing.assert_allclose(result['barycentric'].sum(axis=1), 1)
+
+
+class ConformToSurfaceTests(unittest.TestCase):
+    parameters = {'units': 'synthetic length', 'frame': 'synthetic orthonormal', 'relative_area_tolerance': 1e-9}
+
+    def sheet(self, columns=11, rows=11, z=0., size=1.):
+        rest, tri = plane(-size, size, -size, size, z=z, columns=columns, rows=rows)
+        held = (np.abs(rest[:, 0]) == size) | (np.abs(rest[:, 1]) == size)
+        return rest, tri, held
+
+    def cylinder_case(self):
+        """A sheet 1.1 times wider than an arc of a unit cylinder about z that turns 80 degrees away from the view axis
+        (-y) on each side, laid over the arc with its boundary on it and seeded with pleats along the surface normal."""
+        angles = np.radians(np.linspace(-88, 88, 89)); heights = np.linspace(-.6, .6, 25)
+        a, h = np.meshgrid(angles, heights)
+        support = np.c_[np.sin(a).ravel(), -np.cos(a).ravel(), h.ravel()]
+        support_tri = grid_triangles(len(angles), len(heights))
+        u, v = np.meshgrid(np.linspace(-1, 1, 41), np.linspace(-.4, .4, 17)); u, v = u.ravel(), v.ravel()
+        turn = np.radians(80) * u
+        rest = np.c_[1.1 * np.radians(80) * u, np.zeros_like(u), v]
+        pleat = .06 * np.sin(3 * np.pi * u) ** 2 * np.cos(np.pi * v / .8)
+        initial = np.c_[(1 + pleat) * np.sin(turn), -(1 + pleat) * np.cos(turn), v]
+        held = (np.abs(u) == 1) | (np.abs(v) == .4)
+        return rest, initial, grid_triangles(41, 17), held, support, support_tri, turn
+
+    def test_the_sheet_stays_on_a_support_that_turns_away_where_a_view_axis_band_does_not(self):
+        rest, initial, tri, held, support, support_tri, turn = self.cylinder_case()
+        free = ~held; steep = free & (np.abs(turn) > np.radians(55))
+        result = conform_to_surface(rest, initial, tri, held, support, support_tri, iterations=100, **self.parameters)
+        # The same shape term with a band on the view axis only (the cylinder's depth at each vertex's column).
+        depth = -np.cos(turn)
+        banded = rigid_deform(rest, initial, tri, held, iterations=100, interval_axis=1, lower=depth, upper=depth,
+                              **self.parameters)
+
+        def off_cylinder(x):
+            return np.abs(np.hypot(x[:, 0], x[:, 1]) - 1)
+        chord = 1 - np.cos(np.radians(1))                  # facets of the support lie inside the cylinder by at most this
+        metrics = result['public_metrics']
+        self.assertTrue(metrics['converged'])
+        self.assertLess(off_cylinder(result['deformed'])[free].max(), chord + 1e-9)
+        self.assertEqual(metrics['band_outside_after'], 0); self.assertLess(metrics['band_max_after'], 1e-9)
+        self.assertEqual(metrics['unsupported_after'], 0); self.assertEqual(metrics['supported_after'], int(free.sum()))
+        self.assertEqual(metrics['support_facing_after'][1], 0)
+        self.assertEqual(metrics['local_reversals_after'], 0)
+        # The view-axis band only bounds the depth component of the pleat, which vanishes where the support turns away.
+        self.assertGreater(off_cylinder(banded['deformed'])[steep].max(), 10 * chord)
+        # The surplus is compressed along the surface and reported, not removed.
+        self.assertLess(metrics['smallest_stretch_q01_after'], .95)
+        np.testing.assert_array_equal(result['deformed'][held], initial[held])
+
+    def test_all_zero_weights_reproduce_rigid_deform_exactly(self):
+        rest, initial, tri, held, support, support_tri, _ = self.cylinder_case()
+        plain = rigid_deform(rest, initial, tri, held, iterations=30, **self.parameters)
+        zero = conform_to_surface(rest, initial, tri, held, support, support_tri, support_weights=0., iterations=30,
+                                  **self.parameters)
+        np.testing.assert_array_equal(zero['deformed'], plain['deformed'])
+        self.assertEqual(zero['energies'], plain['energies'])
+        self.assertEqual(zero['public_metrics']['support_vertices'], 0)
+
+    def test_zero_weight_vertices_are_not_constrained_but_follow_their_neighbours(self):
+        rest, initial, tri, held, support, support_tri, turn = self.cylinder_case()
+        weight = (turn < 0).astype(float)                  # one half on the support, the other half free of it
+        result = conform_to_surface(rest, initial, tri, held, support, support_tri, support_weights=weight,
+                                    iterations=100, **self.parameters)
+        metrics, free = result['public_metrics'], ~held
+        self.assertEqual(metrics['support_vertices'], int((free & (weight > 0)).sum()))
+        self.assertEqual(metrics['unconstrained_free_vertices'], int((free & (weight == 0)).sum()))
+        self.assertEqual(metrics['band_outside_after'], 0)
+        self.assertTrue(np.isnan(result['support_offset'][free & (weight == 0)]).all())
+        # Facing is only measured where all three corners are weighted, and the report says how much that covers.
+        measured = metrics['support_facing_measured_triangles']
+        self.assertLess(measured, metrics['patch_triangles']); self.assertEqual(sum(metrics['support_facing_after']), measured)
+        self.assertTrue(any('facing measured on' in text for text in result['warnings']))
+        # Coupled through the shape term, the unweighted half is not the plain solve's result.
+        plain = rigid_deform(rest, initial, tri, held, iterations=100, **self.parameters)['deformed']
+        self.assertGreater(np.abs(result['deformed'] - plain)[free & (weight == 0)].max(), 1e-6)
+
+    def test_offset_band_is_measured_along_the_support_normal_on_its_winding_side(self):
+        support, support_tri = plane(-2, 2, -2, 2)
+        rest, tri, held = self.sheet(z=.15)
+        inside = conform_to_surface(rest, rest, tri, held, support, support_tri, lower=.1, upper=.2, **self.parameters)
+        np.testing.assert_allclose(inside['deformed'], rest, atol=1e-12)  # already inside the band: nothing moves
+        self.assertEqual(inside['public_metrics']['band_active'], 0)
+        np.testing.assert_allclose(inside['support_offset'], .15, atol=1e-12)
+        lifted = conform_to_surface(rest, rest, tri, held, support, support_tri, lower=.25, upper=.4, **self.parameters)
+        height = lifted['deformed'][~held, 2]
+        # Inside the band material is free (the held ring bows the sheet up); the active ones finish on the bound.
+        self.assertTrue(((height > .25 - 1e-12) & (height < .4 + 1e-12)).all())
+        self.assertGreater(int(np.count_nonzero(np.abs(height - .25) < 1e-12)), 0)
+        self.assertGreater(height.max(), .26)
+        self.assertEqual(lifted['public_metrics']['band_outside_after'], 0)
+        self.assertEqual(lifted['public_metrics']['held_conflicts'], int(held.sum()))   # held rows stay at .15
+        np.testing.assert_array_equal(lifted['deformed'][held], rest[held])
+        flipped = conform_to_surface(rest, rest, tri, held, support, support_tri[:, ::-1], lower=-.2, upper=-.1,
+                                     **self.parameters)
+        np.testing.assert_allclose(flipped['support_offset'], -.15, atol=1e-12)
+        self.assertEqual(flipped['public_metrics']['band_active'], 0)
+
+    def test_held_vertices_keep_their_bytes_and_their_conflict_is_reported(self):
+        support, support_tri = plane(-2, 2, -2, 2)
+        rest, tri, held = self.sheet()
+        initial = rest.copy(); initial[held, 2] = .05                      # the held ring sits off the zero band
+        initial[~held, 2] = .3
+        result = conform_to_surface(rest, initial, tri, held, support, support_tri, **self.parameters)
+        np.testing.assert_array_equal(result['deformed'][held], initial[held])
+        metrics = result['public_metrics']
+        self.assertEqual(metrics['held_conflicts'], int(held.sum())); self.assertAlmostEqual(metrics['held_conflict_max'], .05)
+        self.assertEqual(metrics['band_outside_after'], 0)
+        self.assertTrue(any('Held vertices' in text for text in result['warnings']))
+        unweighted = np.where(held, 0., 1.)
+        quiet = conform_to_surface(rest, initial, tri, held, support, support_tri, support_weights=unweighted, **self.parameters)
+        self.assertEqual(quiet['public_metrics']['held_conflicts'], 0)
+
+    def test_material_pushed_past_an_open_support_boundary_is_not_counted_as_supported(self):
+        support, support_tri = plane(-2, .3, -2, 2)                      # ends at x = .3 under the sheet
+        rest, tri, held = self.sheet()
+        initial = rest.copy(); initial[~held, 2] = .2
+        result = conform_to_surface(rest, initial, tri, held, support, support_tri, **self.parameters)
+        metrics = result['public_metrics']
+        beyond = ~held & (rest[:, 0] > .3 + 1e-9)
+        # The normal pull lands them level with the support: zero normal residual, yet off its edge.
+        self.assertLess(np.abs(result['band_residual'][beyond]).max(), 1e-9)
+        self.assertEqual(metrics['beyond_boundary_after'], int(beyond.sum()))
+        self.assertEqual(metrics['unsupported_after'], int(beyond.sum()))
+        self.assertEqual(metrics['supported_after'], int((~held).sum() - beyond.sum()))
+        np.testing.assert_allclose(result['beyond_boundary'][beyond], rest[beyond, 0] - .3, atol=1e-6)
+        self.assertTrue(any('open boundary' in text for text in result['warnings']))
+
+    def test_moving_between_disconnected_support_parts_is_reported(self):
+        left, left_tri = plane(-1.5, 1.2, -2, 2)
+        right, right_tri = plane(1.3, 4, -2, 2)
+        support = np.r_[left, right]; support_tri = np.r_[left_tri, right_tri + len(left)]
+        rest, tri, held = self.sheet(size=.5)
+        initial = rest.copy(); initial[held, 0] += 1.5                       # the held ring moves over the right part
+        result = conform_to_surface(rest, initial, tri, held, support, support_tri, iterations=100, **self.parameters)
+        metrics = result['public_metrics']
+        self.assertEqual(metrics['support_components'], 2)
+        self.assertGreater(metrics['component_switches'], 0)
+        self.assertTrue(any('disconnected' in text for text in result['warnings']))
+        np.testing.assert_allclose(result['deformed'], rest + [1.5, 0, 0], atol=1e-6)
+
+    def test_convergence_needs_the_positions_to_settle(self):
+        rest, initial, tri, held, support, support_tri, _ = self.cylinder_case()
+        settled = conform_to_surface(rest, initial, tri, held, support, support_tri, iterations=100, **self.parameters)
+        metrics = settled['public_metrics']
+        self.assertTrue(metrics['converged'])
+        self.assertLessEqual(metrics['last_step_max_move'], metrics['position_tolerance'])
+        strict = conform_to_surface(rest, initial, tri, held, support, support_tri, iterations=100, position_tolerance=0.,
+                                    **self.parameters)
+        self.assertFalse(strict['public_metrics']['converged'])
+        self.assertEqual(strict['public_metrics']['iterations'], 100)
+        self.assertTrue(any('Iteration limit' in text for text in strict['warnings']))
+        # Solve convergence and support of the result are separate: the result is still on the support.
+        self.assertEqual(strict['public_metrics']['band_outside_after'], 0)
+
+    def test_the_final_projection_reports_moves_between_support_parts(self):
+        # One free vertex beyond the edge of an upper part; a weak band leaves it there, the projection drops it level
+        # with that part, where a lower part is nearer, and then onto the lower part.
+        upper, upper_tri = plane(-2, 0, -2, 2)
+        lower, lower_tri = plane(0, 2, -2, 2, z=-.35)
+        support = np.r_[upper, lower]; support_tri = np.r_[upper_tri, lower_tri + len(upper)]
+        rest, tri = plane(.3, .5, -.1, .1, z=.3, columns=3, rows=3)
+        held = np.ones(9, bool); held[4] = False
+        weight = np.where(held, 0., 1.)
+        result = conform_to_surface(rest, rest, tri, held, support, support_tri, support_weights=weight, band_weight=1e-9,
+                                    **self.parameters)
+        metrics = result['public_metrics']
+        self.assertEqual(metrics['component_changes_during'], 0)
+        self.assertGreater(metrics['component_changes_projection'], 0); self.assertEqual(metrics['component_switches'], 1)
+        np.testing.assert_allclose(result['deformed'][4], [.4, 0, -.35], atol=1e-6)
+        self.assertTrue(any('disconnected' in text for text in result['warnings']))
+
+    def test_refuses_supports_without_one_side(self):
+        support, support_tri = plane(-2, 2, -2, 2)
+        rest, tri, held = self.sheet()
+        mixed = support_tri.copy(); mixed[0] = mixed[0, ::-1]
+        with self.assertRaisesRegex(ValueError, 'Inconsistently wound'):
+            conform_to_surface(rest, rest, tri, held, support, mixed, **self.parameters)
+        fins = np.r_[support, [[0, 0, 1.], [0, 0, -1.]]]; a, b = support_tri[0, :2]      # a third face on one edge
+        with self.assertRaisesRegex(ValueError, 'Nonmanifold'):
+            conform_to_surface(rest, rest, tri, held, fins, np.r_[support_tri, [[b, a, len(support)], [a, b, len(support) + 1]]],
+                               **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'lower <= upper'):
+            conform_to_surface(rest, rest, tri, held, support, support_tri, lower=.2, upper=.1, **self.parameters)
+        with self.assertRaisesRegex(ValueError, 'nonnegative'):
+            conform_to_surface(rest, rest, tri, held, support, support_tri, support_weights=-1., **self.parameters)
+
+    def test_preparation_route_takes_the_support_arrays(self):
+        support, support_tri = plane(-2, 2, -2, 2)
+        rest, tri, held = self.sheet()
+        initial = rest.copy(); initial[~held, 2] = .1
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / 'source.npz'
+            np.savez(source, reference=rest, initial=initial, triangles=tri, held=held.astype(np.int8),
+                     support_positions=support, support_triangles=support_tri, support_weights=np.ones(len(rest)))
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            names = ('reference', 'initial', 'triangles', 'held', 'support_positions', 'support_triangles', 'support_weights')
+            item = {'reads': {'geometry': digest}, 'workbench': {'profile': 'analysis'},
+                'payload': {'operation': 'conform_to_surface', 'parameters': dict(self.parameters, upper=.02),
+                    'inputs': {name: {'path': str(source), 'sha256': digest, 'array': name} for name in names}}}
+            result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
+            self.assertEqual(result['status'], 'completed')
+            self.assertEqual(result['summary']['band_outside_after'], 0)
 
 
 class PlanarRelayoutTests(unittest.TestCase):
