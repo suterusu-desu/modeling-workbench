@@ -16,6 +16,9 @@ Python script) and `output_root`. Optional `input` selects a `.blend` file;
 `scene` selects its working scene. File paths resolve relative to the job file.
 The script receives `JOB`, `OUT_DIR` and `bpy`. Outputs belong under `OUT_DIR`.
 Do not access the live Blender bridge or overwrite source assets from a worker.
+Import NumPy (and anything else Blender ships) before putting any other Python
+runtime's paths on `sys.path`: found in real use, a workbench runtime's NumPy
+built for another Python version was picked up inside Blender and the job failed.
 
 The runner copies input to a new run directory and isolates all `BLENDER_USER_*`
 profile directories. It starts factory background Blender with autoexec disabled

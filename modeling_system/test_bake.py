@@ -3,12 +3,14 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 
 import numpy as np
 
-from .bake import BASES, bake_shapes, check_unity_anim, clip_curve, evaluate, export_fbx, write_bake, write_unity_anim
+from .bake import (BASES, bake_poses, bake_shapes, check_unity_anim, clip_curve, evaluate, export_fbx, split_sides,
+                   write_bake, write_unity_anim)
 from .motion_paths import hinge_carry, path_positions
 from . import test_checks as eye
 
@@ -106,6 +108,72 @@ class BakeTests(unittest.TestCase):
             write_unity_anim(root / 'x.anim', clip, {'Skin': 'Body'}, shapes={'Skin': ['blink', 'not_baked']})
         with self.assertRaisesRegex(ValueError, 'its own renderer path'):
             write_unity_anim(root / 'x.anim', clip, {'Skin': 'Body', 'Lash': 'Body'})
+
+    def test_a_bake_splits_into_left_and_right_shapes_for_winks(self):
+        pair = np.concatenate([eye.REST, eye.REST * [-1, 1, 1] + [-2., 0., 0.]])          # two lids, mirrored at x = -1
+        poses = np.concatenate([rolled(), rolled() * [-1, 1, 1] + [-2., 0., 0.]], axis=1)
+        bake = bake_shapes({'Face': (pair, poses)}, PHASES, tolerance=1e-12, max_shapes=2)
+        sided = split_sides(bake, {'Face': pair}, axis=0, plane=-1.)
+        self.assertEqual(sided['drivers'], {'blink_L': 'main', 'blink_R': 'main', 'blink_L_mid': 'mid', 'blink_R_mid': 'mid'})
+        shapes = sided['shapes']['Face']; n = len(eye.REST)
+        for name, left, right in (('blink', 'blink_L', 'blink_R'), ('blink_mid', 'blink_L_mid', 'blink_R_mid')):
+            L, R = shapes[left], shapes[right]
+            np.testing.assert_allclose(L + R, bake['shapes']['Face'][name], atol=1e-15)      # the halves add up
+            self.assertEqual((np.abs(L[n:]).max(), np.abs(R[:n]).max()), (0., 0.))           # + x holds the left
+        wink = clip_curve({k: v for k, v in sided['drivers'].items() if '_L' in k})
+        self.assertEqual(set(wink['frames'][0]['weights']), {'blink_L', 'blink_L_mid'})
+        torn = pair.copy(); torn[eye.row(eye.UPPER)[0], 0] = -1.                          # a moving point on the midline
+        with self.assertRaisesRegex(ValueError, 'move points on the midline'):
+            split_sides(bake, {'Face': torn}, axis=0, plane=-1.)
+
+    def test_export_names_replace_object_names_that_would_break_unity_paths(self):
+        root = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, root, True)
+        arrays = {f'{g}::Rig / Face::co': P for g, P in zip(PHASES, rolled())}; arrays['0.0::Rig / Face::tri'] = eye.TRI
+        np.savez(root / 'poses.npz', **arrays)
+        with self.assertRaisesRegex(ValueError, 'separates Unity paths'):
+            bake_poses(root / 'poses.npz', ['Rig / Face'], tolerance=.05, output=root / 'bad.npz')
+        report = bake_poses(root / 'poses.npz', ['Rig / Face'], tolerance=.05, output=root / 'bake.npz',
+                            names={'Rig / Face': 'Face'}, sides={'axis': 0, 'plane': -.65})
+        self.assertEqual(report['export_names'], {'Rig / Face': 'Face'})
+        with np.load(report['bake_file']) as data:
+            self.assertIn('Face::shape::blink_L', data.files)
+
+    @unittest.skipUnless(BLENDER and Path(BLENDER).is_file(), 'set MODELING_BLENDER to a Blender executable')
+    def test_fbx_from_the_source_keeps_its_materials_and_uv_maps(self):
+        root = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, root, True)
+        build = f"""
+import bpy, numpy as np
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.ops.mesh.primitive_grid_add(x_subdivisions=8, y_subdivisions=8, size=1.)
+ob = bpy.context.active_object; ob.name = 'Face'; ob.location = (.1, -.2, .3); ob.scale = (2., 2., 2.)
+ob.data.uv_layers.new(name='Detail')
+material = bpy.data.materials.new('Skin'); ob.data.materials.append(material)
+bpy.context.view_layer.update()
+M = np.array(ob.matrix_world); co = np.empty(len(ob.data.vertices) * 3); ob.data.vertices.foreach_get('co', co)
+co = co.reshape(-1, 3) @ M[:3, :3].T + M[:3, 3]
+tri = np.array([[p.vertices[0], p.vertices[i], p.vertices[i + 1]] for p in ob.data.polygons for i in range(1, len(p.vertices) - 1)])
+np.savez(r'{(root / 'rest.npz').as_posix()}', co=co, tri=tri)
+bpy.ops.wm.save_as_mainfile(filepath=r'{(root / 'source.blend').as_posix()}')
+"""
+        subprocess.run([BLENDER, '--background', '--factory-startup', '--python-expr', build], check=True,
+                       capture_output=True, timeout=300)
+        with np.load(root / 'rest.npz') as data:
+            rest, tri = data['co'], data['tri']
+        lift = np.c_[np.zeros((len(rest), 2)), .1 * np.exp(-np.sum((rest[:, :2] - [.1, -.2]) ** 2, 1) / .1)]
+        poses = rest[None] + PHASES[:, None, None] * lift[None]
+        bake = bake_shapes({'Face': (rest, poses)}, PHASES, tolerance=1e-9)
+        write_bake(root / 'bake.npz', bake, {'Face': tri}, {'Face': rest})
+        record = export_fbx(root / 'bake.npz', clip_curve(bake['drivers'], fps=30), blender=BLENDER,
+                            output_root=root / 'export', timeout=300, source=root / 'source.blend')
+        self.assertEqual(record['status'], 'passed', record)
+        face = record['objects']['Face']
+        self.assertEqual((face['materials']['source'], face['materials']['imported']), (['Skin'], ['Skin']))
+        self.assertEqual(face['uv_maps']['imported'], ['Detail', 'UVMap'])
+        self.assertLess(max(face['uv_maps']['largest_error'].values()), 1e-6)
+        write_bake(root / 'moved.npz', bake, {'Face': tri}, {'Face': rest + [0., 0., .01]})   # not the source's rest
+        refused = export_fbx(root / 'moved.npz', clip_curve(bake['drivers'], fps=30), blender=BLENDER,
+                             output_root=root / 'export2', timeout=300, source=root / 'source.blend')
+        self.assertEqual(refused['status'], 'failed')
 
     def test_refusals(self):
         with self.assertRaisesRegex(ValueError, 'Phases must rise'):

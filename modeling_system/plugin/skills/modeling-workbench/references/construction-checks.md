@@ -73,6 +73,11 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   used, default the nearest margin vertex), each group's point on the margin (within `on_margin`, .0005) its root, the
   others its tips. On a real lid (a band plus loose strands) it gave 70 roots and 2,488 pairs and every lash check
   passed; pairings that ignored the carrier put a root 3.6 mm off the margin or crossed groups.
+- `attachments`: attached objects that ride the skin (lash lines, seams, markings): `[{"object": ..., "host": optional
+  skin vertex per point, "points": optional}]`, the host defaulting to the nearest skin vertex at rest. Carried points
+  must keep their host's share of travel at every phase (`attachment_timing`), and points on still hosts must stay still
+  (`attachment_still`). A lower lash line left on an old modifier stack failed both on real arrays (timing off by 1.18,
+  .095 of the largest travel on still skin); carried with `hinge_carry` it passed (.0013, .009).
 - `combinations`: poses files (the declaration's object; the last phase is the combined closed pose, for example blink
   plus an expression) whose seam is measured against the facing edge; `up` in `closing` (default +z) gives the sign.
 - `carrier`: the tolerance within which blend shapes must reproduce the motion; `weights` maps phases to shape weights
@@ -103,6 +108,8 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 | `lash_turn` | a lash's largest turn about its root on the lid (with a hinge, the lid's roll at the host taken out), degrees | 35 |
 | `lash_length` | a lash's largest root-to-tip length change, share of its rest length | .25 |
 | `lash_timing` | the largest difference between a root's and its host's share of travel at a phase | .1 |
+| `attachment_timing` | largest difference between an attached point's and its host's share of travel, carried points | .1 |
+| `attachment_still` | largest travel of an attached point whose host stays still, share of the largest travel | .02 |
 | `combination_seam` | the largest median signed seam gap of a combined closed pose (positive open, negative crossed), share of the opening | .05 |
 | `carrier_shapes` | blend shapes needed: one straight shape, or with a mid shape driven at 4s(1-s) | 2 |
 
@@ -145,8 +152,10 @@ changed length by up to 96 %; the hinged rebuild's lash moved .99-1.01 of it,
 turned at most 13.5° on the lid (median .1°) and kept its length within 4 % and its timing within .01. Measured without
 taking out the lid's roll it turns 54°, which a plain 35° limit would have failed. Both builds' corners moved .06-.08 of
 the corner distance with the margin's travel rising over a third of its length from each, and both bands stopped at
-.35 of the width. A 180-point strip that looked like a lash was a lid-line ribbon a fifth of the width above the margin:
-pick the lash's roots, do not trust the nearest object.
+.35 of the width. A 180-point strip near the upper lash was not it: it was the lower lash line (most of its points
+.004 from the lower margin), still driven by an old modifier stack that strayed up to .0069 from the skin under it and
+could not be baked (.0047 with two shapes); carried with `hinge_carry` on the same timing it baked at .00003. Pick the
+lash's roots, do not trust the nearest object, and check every attached object (`attachments`).
 
 `corner_compression` on a real blunt corner: the lid whose band stepped beside the canthus squeezed 758 triangles over
 the in-between phases within .18 of the corner distance, the rebuild with `band_smooth` 694 (fewer at every phase, 33 to

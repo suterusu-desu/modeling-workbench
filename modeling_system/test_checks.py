@@ -433,6 +433,27 @@ class EyeCheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'one skin vertex per lash point'):
             lash_pairs(lash, REST, margin, carrier=carrier[:-1])
 
+    def test_attached_objects_follow_the_skin_under_them(self):
+        lower = row(LOWER); upper = row(UPPER)
+        line = REST[lower] + [0., -.004, 0.]                                   # a lower lash line on the still lower lid
+        seam = REST[upper] + [0., -.004, 0.]                                   # a line carried on the upper margin
+        carried = hinge_carry(seam, REST[upper], CLOSED[upper], CENTRE, AXIS, fraction=PHASES)['positions']
+        lagging = hinge_carry(seam, REST[upper], CLOSED[upper], CENTRE, AXIS, fraction=np.asarray(PHASES) ** 2)['positions']
+
+        def run(line_poses, seam_poses):
+            extra = {f'{g}::Line::co': line_poses[k] for k, g in enumerate(PHASES)}
+            extra.update({f'{g}::Seam::co': seam_poses[k] for k, g in enumerate(PHASES)})
+            d = self.declare(attachments=[{'object': 'Line'}, {'object': 'Seam'}])
+            return run_checks(d, {**states(hinged()), **extra})
+        still_line = [line] * len(PHASES)
+        good = run(still_line, carried)
+        self.assertEqual(self.status(good, 'attachment_timing', 'attachment_still'), ['pass', 'pass'])
+        rows = {r['object']: r for r in self.check(good, 'attachment_timing')['detail']['objects']}
+        self.assertEqual((rows['Line']['on_still_hosts'], rows['Seam']['carried']), (len(lower), len(upper)))
+        stray = [line + [0., 0., .07 * np.sin(np.pi * g)] for g in PHASES]      # an old stack moving it on its own
+        self.assertEqual(self.status(run(stray, carried), 'attachment_still'), ['fail'])
+        self.assertEqual(self.status(run(still_line, lagging), 'attachment_timing'), ['fail'])
+
     def test_a_lash_left_behind_lagging_flipping_or_stretching_fails(self):
         behind = self.lash_report(fraction=.7 * np.asarray(PHASES))
         self.assertEqual(self.status(behind, 'lash_travel'), ['fail'])

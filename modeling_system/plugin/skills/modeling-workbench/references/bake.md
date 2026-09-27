@@ -39,6 +39,12 @@ drivers)` gives the baked positions at any weight.
 its driver of the main weight. In a [face audit](face-checks.md) declaration, list the correctives under the control's
 `correctives` with their drivers, so their bumps are accepted as the bake's and not refused as phase-gated keys.
 
+**Winks and names.** `sides={'axis': 0, 'plane': 0., 'left': '+'}` (in `bake_poses`, or `split_sides` on a bake)
+splits every shape into `<name>_L` / `<name>_R` (correctives `<name>_L_mid`, ...), each keeping its driver; points on
+the plane must be still in every shape, or the split refuses. A wink's clip is `clip_curve` on one side's drivers.
+Object names become FBX object names and Unity path segments, so a name with '/' is refused; `names` maps each object to
+its export name.
+
 **Unity clip.** Reference avatars do not blink through the avatar descriptor: they blink from an FX-layer clip on the
 shape weights. `write_unity_anim(path, clip, renderers)` writes the clip as a Unity .anim with one `blendShape.<shape>`
 curve (weights 0-100) for every shape on every renderer; `renderers` maps each baked object to its
@@ -47,6 +53,12 @@ reads the file back and reports any renderer or shape missing and any key off th
 `renderers` and writes `<output>.anim` beside the clip, refusing a map that does not name exactly the baked objects.
 Checked in Unity 2022.3: the clip imported with its four bindings (two renderers, two shapes), and sampling it on
 generated renderers gave the clip's weights at every frame.
+
+**FBX from the source.** `export_fbx(..., source='work.blend', source_objects={export name: source object})` (and
+`bake_poses(..., source=...)`) builds each exported mesh from its source object's evaluated geometry instead of the
+arrays, so the source's materials and UV maps go into the FBX; the evaluated rest must match the bake's rest (open the
+source at rest), and the round trip compares material names and every UV map as well as positions and curves. Without a
+source the proof FBX has no materials or UVs.
 
 **FBX.** `export_fbx` builds the meshes with their shape keys and the clip in a clean Blender, exports an FBX, imports it
 back and compares every shape key's positions and every weight curve (`roundtrip.json`). Found while building it:

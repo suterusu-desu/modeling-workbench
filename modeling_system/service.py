@@ -803,15 +803,16 @@ class ModelingService:
         return aligned_overlay(render,drawing,render_points,drawing_points,output,crop=crop,lines=lines or (),alpha=alpha)
 
     def bake_poses(self, poses: str, objects: list[str], tolerance: float, output: str, blender: str | None = None,
-                   fps: int = 60, timing: dict | None = None, renderers: dict | None = None) -> dict:
-        """Bake saved poses (a trial's evaluated.npz) to the fewest blend shapes that carry every object's motion within the tolerance (the end pose plus correctives driven by bumps of the same weight), write the bake file and the blink clip, with `renderers` (each baked object's SkinnedMeshRenderer path under the animated root) also the Unity .anim keying every shape on every renderer, and with a Blender executable export an FBX and verify its round trip."""
+                   fps: int = 60, timing: dict | None = None, renderers: dict | None = None, names: dict | None = None,
+                   sides: dict | None = None, source: str | None = None) -> dict:
+        """Bake saved poses (a trial's evaluated.npz) to the fewest blend shapes that carry every object's motion within the tolerance (the end pose plus correctives driven by bumps of the same weight), write the bake file and the blink clip, with `renderers` (each baked object's SkinnedMeshRenderer path under the animated root) also the Unity .anim keying every shape on every renderer, and with a Blender executable export an FBX and verify its round trip. `names` gives export names (no '/'), `sides` ({axis, plane, left}) splits every shape into left and right for winks, and `source` (the .blend the poses came from) builds the FBX from the source objects so their materials and UV maps go with it and are checked."""
         from .bake import bake_poses, check_unity_anim, clip_curve, export_fbx, write_unity_anim
         target=Path(output)
         if target.exists(): raise FileExistsError('Refusing to overwrite an existing bake: '+str(target))
         if renderers is not None and set(renderers)!=set(objects):
             raise ValueError('Renderer paths are needed for exactly the baked objects: '+', '.join(sorted(set(objects)^set(renderers))))
         target.parent.mkdir(parents=True,exist_ok=True)
-        report=bake_poses(poses,objects,tolerance=tolerance,output=target)
+        report=bake_poses(poses,objects,tolerance=tolerance,output=target,names=names,sides=sides)
         clip=clip_curve(report['drivers'],timing=timing,fps=fps)
         clip_path=target.with_suffix('.clip.json'); clip_path.write_text(json.dumps(clip,indent=1),encoding='utf-8')
         report['clip_file']=str(clip_path.resolve())
@@ -819,7 +820,8 @@ class ModelingService:
             anim=target.with_suffix('.anim'); write_unity_anim(anim,clip,renderers)
             report['anim_file']=str(anim.resolve()); report['anim_check']=check_unity_anim(anim,clip,renderers)
         if blender:
-            report['fbx']=export_fbx(target,clip,blender=blender,output_root=target.parent/(target.stem+'-fbx'))
+            report['fbx']=export_fbx(target,clip,blender=blender,output_root=target.parent/(target.stem+'-fbx'),source=source,
+                                     source_objects={report['export_names'][o]:o for o in objects} if source else None)
         return report
 
     def review_sheet(self, rows: list[dict], columns: list[str], output: str, title: str | None = None) -> dict:

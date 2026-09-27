@@ -6,6 +6,10 @@ exports `bake.fbx` (Blender's FBX exporter with the scene's animation baked, so 
 per-object action export drops them). It clears the scene, imports the
 FBX and compares, per object, every shape key's world positions with the baked ones and every weight curve with the
 clip. Writes `roundtrip.json` (status passed when positions agree within `JOB['tolerance']` and weights within 1e-4).
+
+With `JOB['from_source']` the runner's input is the source .blend: each baked object's mesh is taken from its source
+object's evaluated geometry (`source_objects` maps baked to source names), so it keeps the source's materials and UV
+maps; its evaluated rest must match the bake's rest, and the round trip also compares material names and every UV map.
 """
 import hashlib
 import json
@@ -21,17 +25,50 @@ with np.load(JOB['bake']) as data:
 objects = sorted({k.split('::')[0] for k in arrays})
 scene = bpy.context.scene
 scene.render.fps = int(clip['fps']); scene.frame_start = 0; scene.frame_end = clip['frames'][-1]['frame']
-built = {}
+built = {}; carried = {}
+from_source = bool(JOB.get('from_source')); source_names = JOB.get('source_objects') or {}
+depsgraph = bpy.context.evaluated_depsgraph_get() if from_source else None
+
+
+def uv_maps(mesh):
+    out = {}
+    for layer in mesh.uv_layers:
+        uv = np.empty(len(layer.data) * 2); layer.data.foreach_get('uv', uv); out[layer.name] = uv.reshape(-1, 2)
+    return out
+
+
 for name in objects:
     rest = arrays[f'{name}::rest']; faces = arrays[f'{name}::faces']
-    mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(rest.tolist(), [], faces.tolist()); mesh.update()
-    ob = bpy.data.objects.new(name, mesh); scene.collection.objects.link(ob)
+    if from_source:                   # the source's evaluated geometry, with its materials and UV maps
+        source = bpy.data.objects.get(source_names.get(name, name))
+        if source is None or source.type != 'MESH':
+            raise ValueError(f'No source mesh object for {name!r}')
+        mesh = bpy.data.meshes.new_from_object(source.evaluated_get(depsgraph), preserve_all_data_layers=True,
+                                               depsgraph=depsgraph)
+        mesh.name = name; M = np.array(source.matrix_world)
+        local = np.empty(len(mesh.vertices) * 3); mesh.vertices.foreach_get('co', local); local = local.reshape(-1, 3)
+        if len(local) != len(rest):
+            raise ValueError(f'{name!r}: the source evaluates to {len(local)} vertices, the bake has {len(rest)}')
+        off = float(np.abs(local @ M[:3, :3].T + M[:3, 3] - rest).max())
+        if off > max(tolerance, float(JOB.get('rest_tolerance', 1e-5))):
+            raise ValueError(f'{name!r}: the source at rest is {off:.3g} from the bake rest; open the source at rest')
+        if source.name == name:                  # the export object takes the name; the source steps aside
+            source.name = name + ' (source)'
+        ob = bpy.data.objects.new(name, mesh); ob.matrix_world = source.matrix_world.copy()
+        scene.collection.objects.link(ob)
+        carried[name] = {'materials': [m.name if m else None for m in mesh.materials], 'uv': uv_maps(mesh),
+                         'rest_offset': off}
+        to_local = lambda world: (world - M[:3, 3]) @ np.linalg.inv(M[:3, :3]).T
+    else:
+        mesh = bpy.data.meshes.new(name)
+        mesh.from_pydata(rest.tolist(), [], faces.tolist()); mesh.update()
+        ob = bpy.data.objects.new(name, mesh); scene.collection.objects.link(ob)
+        to_local = lambda world: world
     ob.shape_key_add(name='Basis')
     shapes = sorted(k.split('::')[2] for k in arrays if k.startswith(f'{name}::shape::'))
     for shape in shapes:
         block = ob.shape_key_add(name=shape, from_mix=False)
-        block.data.foreach_set('co', (rest + arrays[f'{name}::shape::{shape}']).astype(np.float32).ravel())
+        block.data.foreach_set('co', to_local(rest + arrays[f'{name}::shape::{shape}']).astype(np.float32).ravel())
         block.value = 0.
     keys = mesh.shape_keys; keys.animation_data_create()
     keys.animation_data.action = bpy.data.actions.new(name + ' blink')
@@ -44,10 +81,13 @@ for name in objects:
 fbx = OUT_DIR / 'bake.fbx'
 # Blender's default preset exports actions per object and NLA strips; animation that exists only on shape keys is
 # then dropped (no animation stack at all). Exporting the scene's animation keeps the shape-key curves.
+for other in scene.objects:                                            # only the baked objects go out
+    other.select_set(other.name in built)
 bpy.ops.export_scene.fbx(filepath=str(fbx), object_types={'MESH'}, bake_anim=True, bake_anim_use_all_actions=False,
-                         bake_anim_use_nla_strips=False, use_mesh_modifiers=False, add_leaf_bones=False)
+                         bake_anim_use_nla_strips=False, use_mesh_modifiers=False, add_leaf_bones=False,
+                         use_selection=True)
 
-for collection in (bpy.data.objects, bpy.data.meshes, bpy.data.actions):     # an empty scene for the import
+for collection in (bpy.data.objects, bpy.data.meshes, bpy.data.actions, bpy.data.materials):   # empty for the import
     for block in list(collection):
         collection.remove(block)
 bpy.ops.import_scene.fbx(filepath=str(fbx), anim_offset=0.)            # the importer's default shifts keys by a frame
@@ -91,6 +131,15 @@ for name, want in built.items():
             curves[shape] = float(max(abs(curve.evaluate(f['frame']) - f['weights'].get(shape, 0.)) for f in clip['frames']))
     row.update(position_error=errors, weight_error=curves)
     ok = all(e is not None and e <= tolerance for e in errors.values()) and all(c is not None and c <= 1e-4 for c in curves.values())
+    if name in carried:                                                    # materials and UV maps kept
+        was = carried[name]; now_uv = uv_maps(ob.data)
+        now_materials = [m.name if m else None for m in ob.data.materials]
+        uv_error = {k: (float(np.abs(now_uv[k] - v).max()) if k in now_uv and now_uv[k].shape == v.shape else None)
+                    for k, v in was['uv'].items()}
+        row.update(materials={'source': was['materials'], 'imported': now_materials},
+                   uv_maps={'source': sorted(was['uv']), 'imported': sorted(now_uv), 'largest_error': uv_error},
+                   source_rest_offset=was['rest_offset'])
+        ok = ok and now_materials == was['materials'] and all(e is not None and e <= 1e-5 for e in uv_error.values())
     row['passed'] = ok; passed &= ok
     report['objects'][name] = row
 report.update(status='passed' if passed else 'failed', tolerance=tolerance)

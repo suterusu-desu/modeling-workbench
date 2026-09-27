@@ -44,6 +44,8 @@ LIMITS = {
     'lash_turn': 35.,               # largest turn of a lash about its root relative to the lid it rides (degrees)
     'lash_length': .25,             # largest change of a lash's root-to-tip length, share of its rest length
     'lash_timing': .1,              # largest difference between a lash root's and its host's share of travel at a phase
+    'attachment_timing': .1,        # largest difference between an attached point's and its host's share of travel
+    'attachment_still': .02,        # largest travel of an attached point whose host stays still, share of the largest travel
     'combination_seam': .05,        # largest |median signed seam gap| of a declared combination, share of the opening
     'carrier_shapes': 2.,           # blend shapes needed to carry the motion within the declared tolerance
 }
@@ -110,7 +112,7 @@ def validate_declaration(declaration):
     if not isinstance(d, dict) or not isinstance(d.get('object'), str) or not d['object'] or 'region' not in d:
         raise ValueError('A declaration needs the moving object and the region allowed to move')
     unknown = set(d) - {'object', 'region', 'region_label', 'rest', 'protected', 'clearance', 'symmetry', 'closing',
-                        'carrier', 'limits', 'arrays', 'description', 'band', 'lash', 'combinations'}
+                        'carrier', 'limits', 'arrays', 'description', 'band', 'lash', 'combinations', 'attachments'}
     if unknown:
         raise ValueError(f'Unknown declaration fields: {sorted(unknown)}')
     if not all((isinstance(p, str) and p) or (isinstance(p, dict) and isinstance(p.get('object'), str) and p['object']
@@ -149,6 +151,9 @@ def validate_declaration(declaration):
     if lash is not None and (not isinstance(lash, dict) or not isinstance(lash.get('object'), str)
                              or len(lash.get('roots', [])) == 0 or len(lash.get('roots', [])) != len(lash.get('tips', []))):
         raise ValueError('The lash check needs the lash object and matching root and tip vertices')
+    for entry in d.get('attachments', []):
+        if not isinstance(entry, dict) or not isinstance(entry.get('object'), str) or not entry['object']:
+            raise ValueError("Each attachment needs its object (and optionally 'host' and 'points')")
     for combo in d.get('combinations', []):
         if not isinstance(combo, dict) or not combo.get('name') or not combo.get('poses'):
             raise ValueError('Each combination needs a name and a poses file whose last phase is the combined closed pose')
@@ -189,6 +194,7 @@ def applicable_checks(declaration):
         ids += ['band_reach'] if d.get('band') is not None else []
         ids += ['lash_travel', 'lash_turn', 'lash_length', 'lash_timing'] if d.get('lash') else []
         ids += ['combination_seam'] if d.get('combinations') else []
+    ids += ['attachment_timing', 'attachment_still'] if d.get('attachments') else []
     ids += ['carrier_shapes'] if d.get('carrier') else []
     return ids
 
@@ -404,6 +410,9 @@ def _measure(d, states, base, baseline=None, mover_cut=None):
         if d.get('combinations'):
             out['combination_seam'] = _combinations(d, P, moving_edge, facing_edge, s['rest_opening_median'], base)
 
+    if d.get('attachments'):
+        out.update(_attachments(states, P, d['attachments'], base))
+
     if d.get('carrier'):
         weights = d['carrier'].get('weights') or {}
         s = np.array([float(weights.get(g, g)) for g in phases])
@@ -566,6 +575,34 @@ def lash_pairs(lash_rest, skin_rest, margin, *, carrier=None, on_margin=.0005, p
     return {'roots': roots, 'tips': tips, 'host': hosts, 'groups': int(len(np.unique(host[use]))),
             'groups_with_root': int(len(root_off)), 'groups_without_root': skipped,
             'root_distance_max': float(max(root_off)) if root_off else None}
+
+
+def _attachments(states, P, entries, base):
+    """Attached objects (lash lines, seams, markings) following the skin under them: each point's host is the nearest
+    skin vertex at rest unless given. Carried points (host moving at least a twentieth of the largest travel) must keep
+    their host's share of travel at every phase; points on still hosts must stay still."""
+    from scipy.spatial import cKDTree
+    largest = max(float(np.linalg.norm(P - P[0], axis=2).max()), 1e-300)
+    rows, timing, still = [], 0., 0.
+    for entry in entries:
+        A = _stack(states, entry['object'])
+        pts = (np.arange(A.shape[1]) if entry.get('points') is None
+               else _indices(entry['points'], base, 'points', A.shape[1], 'attachment points'))
+        host = (_load(entry['host'], base, 'host').astype(np.int64) if entry.get('host') is not None
+                else cKDTree(P[0]).query(A[0][pts])[1])
+        if host.shape != pts.shape or host.min() < 0 or host.max() >= P.shape[1]:
+            raise ValueError(f"Attachment {entry['object']!r}: one skin vertex per attached point")
+        at = np.linalg.norm(A[:, pts] - A[0, pts], axis=2); ht = np.linalg.norm(P[:, host] - P[0, host], axis=2)
+        carried = ht[-1] >= .05 * largest; resting = ht.max(axis=0) <= .01 * largest
+        t = float(np.abs(at[:, carried] / np.maximum(at[-1, carried], 1e-300)
+                         - ht[:, carried] / ht[-1, carried]).max()) if carried.any() else 0.
+        r = float(at[:, resting].max() / largest) if resting.any() else 0.
+        rows.append({'object': entry['object'], 'points': int(len(pts)), 'carried': int(carried.sum()),
+                     'on_still_hosts': int(resting.sum()), 'timing': t, 'still_travel_share': r,
+                     'worst_still_point': int(pts[resting][np.argmax(at[:, resting].max(axis=0))]) if r > 0 else None})
+        timing, still = max(timing, t), max(still, r)
+    return {'attachment_timing': (timing, {'objects': rows}), 'attachment_still': (still, {'objects': rows,
+                                                                                          'largest_travel': largest})}
 
 
 def _polyline_nearest(points, line):

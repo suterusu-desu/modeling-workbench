@@ -241,8 +241,43 @@ def check_unity_anim(path, clip, renderers, *, shapes=None):
             'key_count_mismatch': int(sum(counts)), 'largest_key_error': float(error), 'curves': len(found)}
 
 
+def split_sides(bake, rest, *, axis=0, plane=0., left='+', still=None):
+    """Split every baked shape into a left and a right shape for winks: `<name>_L` / `<name>_R`, correctives
+    `<name>_L_mid` and so on, each keeping its driver. `rest` gives each object's rest positions; points on the plane
+    (`axis`, `plane`) must be still in every shape (else the split would tear the midline and it refuses). `left` is the
+    side of the plane holding the left shapes ('+' or '-'; in Blender the character's left is +x)."""
+    if axis not in (0, 1, 2) or left not in ('+', '-'):
+        raise ValueError("Sides need an axis 0, 1 or 2 and left '+' or '-'")
+    names = {}
+    for shape, driver in bake['drivers'].items():
+        base, suffix = (shape, '') if driver == 'main' else (shape[:-len(driver) - 1], '_' + driver)
+        names[shape] = (base, suffix)
+    shapes = {}
+    for obj, named in bake['shapes'].items():
+        R = np.asarray(rest[obj], float); x = R[:, axis] - float(plane)
+        mid = np.abs(x) <= 1e-9 * max(float(np.ptp(R, axis=0).max()), 1e-300)
+        largest = max(float(np.linalg.norm(d, axis=1).max()) for d in named.values())
+        limit = still if still is not None else 1e-6 * max(largest, 1e-300)
+        moving = [n for n, d in named.items() if mid.any() and np.linalg.norm(np.asarray(d)[mid], axis=1).max() > limit]
+        if moving:
+            raise ValueError(f'{obj}: shapes {moving} move points on the midline; a left/right split would tear it')
+        lsel, rsel = (x > 0, x < 0) if left == '+' else (x < 0, x > 0)
+        shapes[obj] = {}
+        for shape, delta in named.items():
+            base, suffix = names[shape]
+            shapes[obj][f'{base}_L{suffix}'] = np.asarray(delta) * lsel[:, None]
+            shapes[obj][f'{base}_R{suffix}'] = np.asarray(delta) * rsel[:, None]
+    drivers = {f'{names[s][0]}_{side}{names[s][1]}': d for s, d in bake['drivers'].items() for side in ('L', 'R')}
+    return {**bake, 'shapes': shapes, 'drivers': drivers,
+            'sides': {'axis': axis, 'plane': float(plane), 'left': left}}
+
+
 def write_bake(path, bake, faces, rest):
-    """Save a bake for `bake_export.py`: per object its rest positions, faces (triangles) and shape deltas."""
+    """Save a bake for `bake_export.py`: per object its rest positions, faces (triangles) and shape deltas. Object
+    names become FBX object names and parts of Unity paths, so '/' and '::' are refused (rename with `names`)."""
+    bad = [obj for obj in bake['shapes'] if '/' in obj or '::' in obj or not obj.strip()]
+    if bad:
+        raise ValueError(f'Object names {bad} cannot be exported: "/" separates Unity paths; give export names')
     arrays = {}
     for obj, shapes in bake['shapes'].items():
         arrays[f'{obj}::rest'] = np.asarray(rest[obj], float); arrays[f'{obj}::faces'] = np.asarray(faces[obj], np.int64)
@@ -252,13 +287,21 @@ def write_bake(path, bake, faces, rest):
     return str(path)
 
 
-def export_fbx(bake_file, clip, *, blender, output_root, python=None, timeout=600, tolerance=1e-5):
-    """Build the meshes with their shape keys and the clip in a clean Blender, export an FBX with Blender's default
-    preset, import it back and compare positions and curves. Returns the round-trip record (`roundtrip.json`)."""
+def export_fbx(bake_file, clip, *, blender, output_root, python=None, timeout=600, tolerance=1e-5, source=None,
+               source_objects=None):
+    """Build the meshes with their shape keys and the clip in a clean Blender, export an FBX, import it back and
+    compare positions and curves. Returns the round-trip record (`roundtrip.json`).
+
+    With `source` (a .blend) the meshes are built from the source objects' evaluated geometry instead of the arrays, so
+    they carry the source's materials and UV maps; `source_objects` maps each baked object to its source object (default
+    the same name). The evaluated rest must match the bake's rest, and the round trip also compares materials and UVs."""
     root = Path(output_root).resolve(); root.mkdir(parents=True, exist_ok=True)
     job = {'script': str(Path(__file__).with_name('bake_export.py')), 'blender': str(blender),
            'output_root': str(root / 'runs'), 'bake': str(Path(bake_file).resolve()), 'clip': clip,
            'tolerance': tolerance, 'timeout_seconds': timeout, 'resolution': 64, 'clay': False}
+    if source is not None:
+        job.update(input=str(Path(source).resolve(strict=True)), source_objects=dict(source_objects or {}),
+                   from_source=True)
     path = root / 'bake-export-job.json'; path.write_text(json.dumps(job, indent=1), encoding='utf-8')
     done = subprocess.run([str(python or sys.executable), '-m', 'modeling_system.isolated_blender', str(path)],
                           capture_output=True, text=True, timeout=timeout + 60, cwd=str(Path(__file__).resolve().parents[1]))
@@ -269,19 +312,27 @@ def export_fbx(bake_file, clip, *, blender, output_root, python=None, timeout=60
     return {**json.loads(record.read_text(encoding='utf-8')), 'receipt': receipt}
 
 
-def bake_poses(states, objects, *, tolerance, output, name='blink', obstacles=None):
+def bake_poses(states, objects, *, tolerance, output, name='blink', obstacles=None, names=None, sides=None):
     """Bake saved poses (a trial's `evaluated.npz`, `<phase>::<object>::co|tri`) and write the bake file for
-    `export_fbx`: phases from the file (0 to 1), faces from the rest phase's triangles. Returns the bake report without
-    its arrays, the drivers and the bake file."""
+    `export_fbx`: phases from the file (0 to 1), faces from the rest phase's triangles. `names` maps objects to export
+    names (no '/'); `sides` ({'axis', 'plane', 'left'}) splits every shape into left and right (`split_sides`). Returns
+    the bake report without its arrays, the drivers, the export names and the bake file."""
     from .checks import load_states
     poses = load_states(states); phases = [float(p) for p in poses]
+    export = {obj: (names or {}).get(obj, obj) for obj in objects}
+    if len(set(export.values())) != len(export):
+        raise ValueError('Export names must be distinct')
     data, faces, rest = {}, {}, {}
     for obj in objects:
         stack = np.stack([np.asarray(poses[p][obj]['co'], float) for p in poses])
-        data[obj] = (stack[0], stack); rest[obj] = stack[0]
-        faces[obj] = np.asarray(poses[next(iter(poses))][obj]['tri'], np.int64)
-    bake = bake_shapes(data, phases, tolerance=tolerance, name=name, obstacles=obstacles)
+        data[export[obj]] = (stack[0], stack); rest[export[obj]] = stack[0]
+        faces[export[obj]] = np.asarray(poses[next(iter(poses))][obj]['tri'], np.int64)
+    watch = {export[k]: v for k, v in (obstacles or {}).items()} or None
+    bake = bake_shapes(data, phases, tolerance=tolerance, name=name, obstacles=watch)
+    if sides:
+        bake = split_sides(bake, rest, **sides)
     write_bake(output, bake, faces, rest)
     return {'bake_file': str(Path(output).resolve()), 'drivers': bake['drivers'], 'shape_count': bake['shape_count'],
+            'export_names': export, 'sides': bake.get('sides'),
             'within_tolerance': bake['within_tolerance'], 'max_error': bake['max_error'], 'tolerance': bake['tolerance'],
             'objects': bake['objects'], 'candidates': bake['candidates'], 'limits': bake['limits']}
