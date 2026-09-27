@@ -53,7 +53,9 @@ volume fits are bounded clean-up of a surface, not the way to create motion ([me
 protected objects, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and how many blend
 shapes carry the motion ([construction checks](references/construction-checks.md)); for the face, every shape, control
 and combination through the [face audit](references/face-checks.md). Diagnose persistent creases,
-crowding and section bends with [construction diagnostics](references/construction-diagnostics.md).
+crowding and section bends with [construction diagnostics](references/construction-diagnostics.md). Before
+editing for a mark seen in a render, trace its pixels to the recorded surfaces that could produce it
+([find the geometry a visible defect belongs to](references/construction-diagnostics.md#find-the-geometry-a-visible-defect-belongs-to)).
 
 **study** - learn the construction from the reference avatars: extract their shapes and measure the moving band, the
 simple motion that explains it, travel ratios, corners, the closed line, loop topology, the jaw hinge and viseme mixes

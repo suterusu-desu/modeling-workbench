@@ -1,6 +1,6 @@
 # Diagnose a constructed surface before fitting
 
-Use these checks when an aggregate objective hides local ridges, a predicted support cap disagrees with native geometry, or section plots appear disconnected. They inspect saved data without calling Blender. The Python helpers below are included in 0.2.12; they add no MCP operations. Verify the selected package and interpreter before using them. Their availability does not establish active-operator adoption or upgrade a running native adapter.
+Use these checks when an aggregate objective hides local ridges, a predicted support cap disagrees with native geometry, or section plots appear disconnected. They inspect saved data without calling Blender. The Python helpers below are included in 0.2.12 and add no MCP operations; tracing a visible defect uses the existing `query_pixel` service operation. Verify the selected package and interpreter before using them. Their availability does not establish active-operator adoption or upgrade a running native adapter.
 
 ## Local shape and presentation
 
@@ -32,6 +32,107 @@ Boundary, nonmanifold, inconsistently wound and explicit excluded edge counts re
 An unwelded preview insert has a display perimeter. Identify it separately from real interior geometry; exclude a perimeter only for a declared diagnostic question, and review the actual eventual join. A continuous preview cannot establish native boundary continuity.
 
 For exact cuts, use the existing `geometry.plane_sections(arrays, axis, value, selection)` or the recorded-geometry section query. The existing cutter retains exact vertex-on-plane hits and deduplicates endpoints within each triangle. A plane along an edge produces that segment; an isolated tangent point produces no segment. Coplanar triangles are counted and excluded rather than silently turned into curves. Shared segments can have multiple triangle owners. This function uses an absolute 1e-12 coordinate tolerance; extremely small features or near-plane degeneracies require a declared scale/tolerance study, not automatic gap interpretation. It returns full segments, so retain them privately and use existing bounded record reads for agent summaries. Tests cover exact vertex crossings, on-plane edges, tangency and coplanarity. These planar cuts do not prove global three-dimensional connectivity.
+
+## Find the geometry a visible defect belongs to
+
+Before choosing what to edit for a mark seen in a render (a speck, a dark gap, a line), find the recorded surfaces that
+could produce it. The region under suspicion, the nearest margin or a projection of candidate vertices can all point at
+the wrong layer. This uses the existing service operation `query_pixel` (and `geometry.ray_hits` beneath it), not the
+Python helpers of the other sections.
+
+**Bind the exact evidence.** Use the stored observation of that image: its saved bytes, geometry state and pose, the
+calibrated camera (`view_projection_matrix`, evaluated camera and owning scene), native resolution and crop.
+`query_pixel` refuses an uncalibrated observation.
+- Take pixel coordinates from that saved image at its native size, never from a resized or tiled review sheet.
+- The pixel is crop-local and continuous. `query_pixel` adds the crop offset (`crop` = left, top, width, height in
+  native pixels) and no half pixel, so the centre of raster column `i`, row `j` is `[i + .5, j + .5]`.
+- Image rows run down; the projection's y runs up.
+- Check that the stored state's objects and coverage describe the evaluated pose shown in the image (deformed, posed
+  arrays), not base mesh arrays. `query_pixel` traces the recorded arrays; it does not establish that they are what was
+  rendered.
+
+**Get the observation into the store** by one of the service's routes:
+- `capture_view_bundle` captures the live native view.
+- `ingest_capture(receipt_path)` imports an existing native capture receipt: its `record_path` scene record and its
+  `observations`, each with `image`, `role` and calibrated metadata.
+- `record_observation(state, image_path, metadata)` records an image against a state already imported with
+  `import_scene`. The metadata must carry that state's `scene_state_id`, the image's `image_sha256`,
+  `view_projection_matrix`, `resolution` and the evaluated camera and owning scene (or `view_matrix` and `scene`), plus
+  `native_resolution` and `crop` for a cropped image.
+
+The native adapter must provide the source-bound scene record and matching metadata. Other saved outputs of a native
+run, such as an image list with camera matrices beside a file of evaluated arrays, are not capture receipts, and
+`ingest_capture` does not read them. Never manufacture calibration or source identity from a camera matrix alone. The
+low-level route, `geometry.ray_hits` with the image's own projection unprojected as `query_pixel` does, is a separate
+offline trace. It needs the same evidence (exact image, evaluated arrays of that pose, camera, resolution, crop);
+record it as such.
+
+**Declare every visible object.** `object_names` is exactly what gets traced; nothing is inferred from the render.
+- Match the objects actually rendered in that image, attachments included (lashes, cover layers, glasses). Record any
+  deliberate exclusion, such as an attachment the image was rendered without.
+- Do not narrow to the suspected region first. `selection` applies to every declared object alike, so it can remove
+  real occluders, and it refuses an object that lacks the named semantics.
+- A name the observation's state does not record refuses too. An attachment missing from the recorded state is missing
+  evidence, not a clear ray.
+- Trace unselected, then classify the hits.
+
+```python
+import numpy as np
+metadata = service.read_record(observation)["metadata"]  # check crop and resolutions against the image file
+col, row = 412, 230                                     # raster pixel of the mark in that saved image
+trace = service.query_pixel(observation, [col + .5, row + .5], ["Skin", "Cover", "Lashes"], maximum_hits=20)
+assert trace["total_hits"] <= len(trace["hits"]), "truncated: raise maximum_hits (at most 100)"
+direction = np.asarray(trace["ray_direction"])
+for hit in trace["hits"]:                               # front to back over all declared objects
+    arrays = service.wb.arrays(trace["state"], hit["object"])   # the evaluated arrays that were traced
+    a, b, c = arrays["co"][arrays["tri"][hit["triangle_index"]]]
+    facing = "front" if np.cross(b - a, c - a) @ direction < 0 else "back"
+    print(hit["object"], hit["triangle_index"], hit["distance"], facing, hit["barycentric"])
+```
+
+The same trace is a service operation: `python -m modeling_system query_pixel --input args.json` with `observation`,
+`pixel`, `object_names` and `maximum_hits`.
+
+**Read the trace as sorted geometric candidates.**
+- `hits` are sorted front to back across all declared objects, at most `maximum_hits` (1 to 100). `total_hits` counts
+  every intersection. When it is larger, the back layers have not been seen.
+- A ray through a shared edge or vertex returns each owning triangle at the same distance. Ties are not resolved;
+  report both owners.
+- Facing is not returned. Compute it as above from the hit object's own evaluated triangle and the returned ray
+  direction. It follows that object's winding. A back-facing hit is a geometric candidate for a fold or a flipped sheet,
+  not proof of what the renderer drew.
+- The trace does not model transparency and alpha, materials, backface culling, overlays, guide display, or anything
+  missing from the recorded arrays. An undeclared object is simply absent. Check the first hit against the image's
+  colour and shading before trusting it.
+
+**Keep near-coincident layers distinct.** An attachment lying on the skin (a cover layer, a retained copy) is often the
+first hit. Keep it as its own owner, with its own evaluated arrays.
+- Its triangle indices are not the skin's unless you verify the same topology, the same vertex positions up to the
+  recorded offset, and the same transform.
+- Otherwise the hit point's nearest skin point, `geometry.closest_points([hit["point"]], skin_co, skin_tri)`, gives an
+  offset and a nearby skin triangle. That is a geometric neighbour within the qualified region, not an authenticated
+  correspondence between the layers.
+- Offsets well under the size of the mark still decide which layer draws a speck.
+
+**From owners to a cause.**
+1. Sample the actual mark and clean pixels beside it. Widen the sample if the attribution changes, and record what was
+   sampled.
+2. Tally owners by object, triangle, connected surface and facing.
+3. Map triangles to the construction's surfaces (outer skin, rim, returns, inner pocket, attachment) through recorded
+   semantics or your own qualified region sets.
+4. Inspect those surfaces where the mark is: support and depth along the rays, `plane_sections`, `compare_bends` and
+   `local_reversals`.
+5. Write down the hypothesis the trace disproved separately from the evidence for the cause it supports, before
+   choosing the edit.
+
+The ray says which recorded surfaces lie along that pixel. It does not by itself say which one the renderer drew, or
+why it is there.
+
+In real use, a proposed edit targeted hidden inner geometry behind a corner, where depth measurements pointed. A trace
+of the dark specks in the saved renders found no hits on that hidden geometry. It found folded exterior skin, many hits
+on back-facing triangles, and often a near-coincident attachment layer as the first hit. That redirected the diagnosis
+to the exterior and to the attachment layer, whose own evaluated geometry then had to be checked. The trace did not
+repair the corner.
 
 ## Material crowding behind persistent creases
 
