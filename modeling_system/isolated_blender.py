@@ -31,7 +31,7 @@ def main():
     out_root = (base/job['output_root']).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S-%fZ')
-    output = out_root / stamp
+    output = out_root / f'{stamp}-p{os.getpid()}'           # concurrent jobs sharing an output root never share a folder
     output.mkdir()
     job.update(script=str(script), output=str(output), started_utc=stamp)
     before = sha256(source) if source else None

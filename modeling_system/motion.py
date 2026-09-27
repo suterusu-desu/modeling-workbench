@@ -9,7 +9,7 @@ import io
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 import imageio_ffmpeg
-from .store import canonical, digest, atomic_write, native_path
+from .store import canonical, digest, atomic_write, native_path, write_once
 
 
 class Motion:
@@ -76,7 +76,7 @@ class Motion:
         # in a configurable short cache; durable frame assets remain in the store.
         cached=directory/('source'+source.suffix)
         if not cached.exists() or digest(cached.read_bytes())!=asset['sha256']:
-            atomic_write(cached,source.read_bytes())
+            write_once(cached,source.read_bytes())
         source=cached
         reader=imageio_ffmpeg.read_frames(str(source),pix_fmt='rgb24')
         metadata=next(reader);w,h=metadata['size'];fps=metadata['fps']

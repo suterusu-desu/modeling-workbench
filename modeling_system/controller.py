@@ -151,11 +151,9 @@ class PersistentController:
         return current
 
     def _event(self, kind, **fields):
-        with (self.directory / 'events.jsonl').open('a', encoding='utf-8') as stream:
-            stream.write(json.dumps({'event': kind, 'time': time.time(), **fields},
-                                    allow_nan=False) + '\n')
-            stream.flush()
-            os.fsync(stream.fileno())
+        from .store import append_line
+        append_line(self.directory / 'events.jsonl', json.dumps({'event': kind, 'time': time.time(), **fields},
+                                                                allow_nan=False))
 
     def _observe(self):
         state = deepcopy(self.observe())

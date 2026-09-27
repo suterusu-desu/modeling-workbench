@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import time
 import uuid
 
 
@@ -38,6 +39,55 @@ def atomic_write(path, data):
         temp.unlink(missing_ok=True)
 
 
+def write_once(path, data, *, wait=5.):
+    """Write content-addressed bytes that other processes may be writing at the same moment: when the replace fails
+    because another process just wrote (or is reading) the same file, the file is accepted if it holds these bytes."""
+    path = native_path(path)
+    deadline = time.monotonic() + wait
+    while True:
+        if path.exists():
+            try:
+                if path.read_bytes() == data:
+                    return
+            except PermissionError:
+                pass
+            else:
+                raise ValueError('Stored evidence was modified: ' + str(path))
+        try:
+            atomic_write(path, data)
+            return
+        except OSError:                       # Windows refuses a replace while another process holds the file
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(.02)
+
+
+def append_line(path, line, *, wait=10., stale=60.):
+    """Append one line to a shared journal from any number of processes: a lock file serializes the appends (append
+    mode alone is not atomic across processes on Windows). A lock older than `stale` seconds is taken as abandoned."""
+    path = native_path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    lock = path.with_name(path.name + '.lock'); deadline = time.monotonic() + wait
+    while True:
+        try:
+            with lock.open('x', encoding='utf-8') as stream:
+                stream.write(str(os.getpid()))
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > stale:
+                    lock.unlink(missing_ok=True); continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() > deadline:
+                raise RuntimeError('Journal ' + str(path) + ' stays locked; inspect ' + str(lock)) from None
+            time.sleep(.01)
+    try:
+        with path.open('a', encoding='utf-8') as stream:
+            stream.write(line.rstrip('\n') + '\n'); stream.flush(); os.fsync(stream.fileno())
+    finally:
+        lock.unlink(missing_ok=True)
+
+
 class Store:
     def __init__(self, path):
         self.root = native_path(path).resolve()
@@ -50,11 +100,7 @@ class Store:
         data = path.read_bytes()
         sha = digest(data)
         dest = self.root / 'assets' / sha[:2] / (sha + path.suffix.lower())
-        if dest.exists():
-            if digest(dest.read_bytes()) != sha:
-                raise ValueError('Stored evidence was modified: ' + str(dest))
-        else:
-            atomic_write(dest, data)
+        write_once(dest, data)
         return {'sha256': sha, 'path': str(dest.relative_to(self.root)), 'source': source, 'bytes': len(data)}
 
     def resolve_blob(self, blob):
@@ -70,10 +116,10 @@ class Store:
         key = digest(canonical(value))
         dest = self.root / 'records' / (key + '.json')
         data = canonical(value)
-        if dest.exists() and dest.read_bytes() != data:
-            raise ValueError('Record integrity mismatch')
-        if not dest.exists():
-            atomic_write(dest, data)
+        try:
+            write_once(dest, data)
+        except ValueError:
+            raise ValueError('Record integrity mismatch') from None
         return key
 
     def get(self, key, kind=None):

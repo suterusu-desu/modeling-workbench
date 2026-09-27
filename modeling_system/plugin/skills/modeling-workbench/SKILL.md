@@ -87,6 +87,8 @@ The workspace store keeps scoped reviews and lessons as an optional log ([retain
 - Offer choices as built options: when a modeling decision is uncertain, build each option as a what-if, show them
   together (each overlapped on the guide or drawing, plus one motion video with a column per option: `review_variants`)
   and ask one question whose answers are the built variants ([guides and display](references/guide-and-show.md#offer-choices-as-built-options)).
+  Helpers may build the options in parallel, each in its own isolated background Blender with its own tag; one lead is
+  the only writer to the live file and the checkpoints, and helpers never retain.
 - A new capability that the next edit needs belongs in the workbench, with tests, not in a private script.
 - Credentials, character material and native bindings stay in the private workspace.
 

@@ -32,6 +32,10 @@ writes `inventory.json` and saves `candidate.blend`. Protection here covers base
 mesh coordinates, connectivity and object transforms only. It does not establish
 guide fit, evaluated animation preservation, materials or artistic acceptance.
 
+Jobs may run side by side from one source, even into one `output_root`: each run
+folder is named by its start time and process id, holds its own profile and copy
+of the input, and the source is only read (checked by hash before and after).
+
 The run retains `job.json`, an isolated profile, copied input, log, candidate,
 images, inventory and `receipt.json`. Nonzero exit, timeout, changed source,
 missing inventory or missing candidate means failure. A candidate file by itself

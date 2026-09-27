@@ -117,6 +117,7 @@
     "test_bake.py",
     "test_bounded_reads.py",
     "test_checks.py",
+    "test_concurrency.py",
     "test_construction_diagnostics.py",
     "test_control_coverage.py",
     "test_controller.py",

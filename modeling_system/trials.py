@@ -25,6 +25,7 @@ import threading
 from .checks import run_checks
 from .native_recipes import NativeJob, RetainCheckpoint
 from .preservation import file_ref
+from .store import append_line
 
 HERE = Path(__file__).resolve().parent
 
@@ -55,8 +56,7 @@ class Trials:
                 'record': str(self.directory / tag / f'{verb}.json') if reason is None else None}
         if reason is not None:
             line['reason'] = reason
-        with (self.directory / 'journal.jsonl').open('a', encoding='utf-8') as stream:
-            stream.write(json.dumps(line) + '\n')
+        append_line(self.directory / 'journal.jsonl', json.dumps(line))    # helpers may run lanes side by side
 
     def _write(self, verb, tag, record):
         path = self.directory / tag / f'{verb}.json'

@@ -126,6 +126,13 @@ read-only native what-if of the same source, never retained). Render every optio
 values. Show each overlapped on the guide or the drawing (`overlap_views.py`, `aligned_overlay`), and all of them in one
 motion video with a column per option. Then ask one question whose answers are the built variants, recommendation first.
 
+Options may be built in parallel by helpers: each builds its option in its own isolated background Blender from the
+same saved source (a trial with its own tag, or an isolated job), renders it at the same cameras and control values and
+runs the read-only checks; the lead, the only writer to the live file and the checkpoints and the one who talks to the
+owner, composes the options and asks. Helpers never retain. Parallel jobs are safe: each run gets its own folder, profile
+and copy of the source (the source is only read), the store takes the same evidence from several processes, and lane
+journals serialize their appends; the live bridge answers helpers' read-only requests one at a time.
+
 `review_variants` (a service operation) composes the options in one call: `variants` maps each option to its captured
 frames, `{control value: {view: image path}}`, identical control values and views for every option (it refuses
 otherwise). It writes one video per view (normal speed, then slowed), and with `stills` a sheet per view with a row per
