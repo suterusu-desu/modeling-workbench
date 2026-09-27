@@ -72,12 +72,12 @@ def append_line(path, line, *, wait=10., stale=60.):
             with lock.open('x', encoding='utf-8') as stream:
                 stream.write(str(os.getpid()))
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError):     # Windows: a lock being deleted by another process refuses creation
             try:
                 if time.time() - lock.stat().st_mtime > stale:
                     lock.unlink(missing_ok=True); continue
-            except FileNotFoundError:
-                continue
+            except (FileNotFoundError, PermissionError):
+                pass
             if time.monotonic() > deadline:
                 raise RuntimeError('Journal ' + str(path) + ' stays locked; inspect ' + str(lock)) from None
             time.sleep(.01)

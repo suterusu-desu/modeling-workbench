@@ -152,6 +152,14 @@ class LiveRouteTests(unittest.TestCase):
         self.assertEqual([(r['step'], r['view']) for r in rows], [('open', 'front'), ('open', 'three-quarter-left'),
                                                                  ('closed', 'front'), ('closed', 'three-quarter-left')])
         self.assertTrue(all((out / r['image']).stat().st_size > 0 for r in rows))
+        from .review_sheets import clay_render                               # offline clay in the recorded camera
+        camera = rows[2]; M = np.array(camera['view_projection_matrix'])
+        np.testing.assert_allclose(M[3], [0, 0, 0, 1], atol=1e-9)
+        np.testing.assert_allclose(M[:2, 3], [0, 0], atol=1e-5)             # the view's target is the image centre
+        with np.load(self.root / 'closed-guide.npz') as guide:
+            clay = clay_render(guide['co'], guide['tri'], camera, out / 'clay-closed-front.png')
+        self.assertEqual(clay['resolution'], [200, 200])
+        self.assertGreater(clay['covered_share'], 0.)
 
 
 if __name__ == '__main__':

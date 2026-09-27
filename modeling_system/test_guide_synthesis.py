@@ -1,7 +1,7 @@
 """Pose guides from generated variants joined onto an accepted neutral (synthetic, no IO)."""
 import unittest
 import numpy as np
-from .guide_synthesis import (front_depth, behind_front, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
+from .guide_synthesis import (front_depth, behind_front, radius_map, onto_radius_map, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
                               evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
                               front_retreat, fit_band_field)
 from .preparation import ARRAY_OPERATIONS
@@ -69,6 +69,29 @@ class BehindFrontTests(unittest.TestCase):
         front_only = behind_front(P, T, picked[picked < n * n], cell=.05, tolerance=.01)
         self.assertEqual(front_only['behind_count'], 0)
         self.assertIn('behind_front', ARRAY_OPERATIONS)
+
+
+class RadiusMapTests(unittest.TestCase):
+    def test_points_move_along_their_rays_onto_a_retained_surface(self):
+        n = 60; u, v = np.meshgrid(np.linspace(.35, np.pi - .35, n), np.linspace(-1.2, 1.2, n))  # a front shell
+        shell = lambda r: np.c_[(r * np.sin(u) * np.sin(v)).ravel(), (-r * np.sin(u) * np.cos(v)).ravel(),
+                                (r * np.cos(u)).ravel()]
+        ids = np.arange(n * n).reshape(n, n)
+        T = np.array([t for a in range(n - 1) for b in range(n - 1) for t in
+                      ([ids[a, b], ids[a + 1, b], ids[a, b + 1]], [ids[a, b + 1], ids[a + 1, b], ids[a + 1, b + 1]])])
+        kept = shell(1.2); kept[:, 2] += 0.                                    # the retained closed surface
+        m = radius_map(kept, T, [0., 0., 0.], cell=2., smooth=1.)
+        self.assertGreater(m['public_metrics']['covered_share'], .5)
+        inner = shell(1.)                                                       # clean material, wrong volume
+        landed = onto_radius_map(inner, m)['positions']
+        r = np.linalg.norm(landed, axis=1); moved = np.abs(r - 1.) > 1e-9
+        self.assertGreater(moved.mean(), .8)
+        np.testing.assert_allclose(r[moved], 1.2, atol=2e-3)                   # on the retained surface ...
+        np.testing.assert_allclose(landed[moved] / r[moved, None], inner[moved], atol=1e-9)   # ... along its ray
+        half = onto_radius_map(inner, m, weights=np.full(len(inner), .5))['positions']
+        np.testing.assert_allclose(np.linalg.norm(half, axis=1)[moved], 1.1, atol=2e-3)
+        behind = np.array([[0., 1., 0.]])                                      # behind the centre: outside the map
+        np.testing.assert_array_equal(onto_radius_map(behind, m)['positions'], behind)
 
 
 class ThinReliefTests(unittest.TestCase):

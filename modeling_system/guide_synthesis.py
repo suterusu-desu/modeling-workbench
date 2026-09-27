@@ -113,6 +113,83 @@ def behind_front(positions, triangles, points, *, cell, tolerance, depth_axis=1,
                       'misread; a surface folded toward the viewer is its own front.'}
 
 
+def _sphere_frame(centre, forward, up):
+    c = np.asarray(centre, float); f = np.asarray(forward, float); f = f / np.linalg.norm(f)
+    u = np.asarray(up, float); u = u - (u @ f) * f
+    if np.linalg.norm(u) < 1e-9:
+        raise ValueError('up must not be parallel to forward')
+    u = u / np.linalg.norm(u)
+    return c, f, u, np.cross(u, f)
+
+
+def _sphere_coordinates(P, frame):
+    c, f, u, side = frame; v = np.asarray(P, float) - c; r = np.linalg.norm(v, axis=1)
+    lon = np.degrees(np.arctan2(v @ side, v @ f)); lat = np.degrees(np.arcsin(np.clip((v @ u) / np.maximum(r, 1e-300), -1, 1)))
+    return lon, lat, r
+
+
+def radius_map(positions, triangles, centre, *, forward=(0., -1., 0.), up=(0., 0., 1.), cell=1., smooth=3., window=None,
+               front='min'):
+    """The distance of a surface from a centre along every ray, on a longitude/latitude grid about it (degrees).
+
+    A z-buffer (`front_depth`) in longitude, latitude and radius: per `cell` the nearest (`front='min'`) or farthest
+    surface of `triangles` along the ray from `centre`, longitude measured about `up` from `forward`. `smooth` (cells) is
+    a Gaussian low-pass that ignores empty cells and keeps them empty. Pass only the surface that should be the target
+    (for a closed lid, its outer skin). Use with `onto_radius_map` to keep a retained shape's volume while its material
+    comes from elsewhere (for example the hinge applied to the rest). Longitude wraps at 180 degrees behind the centre.
+    """
+    frame = _sphere_frame(centre, forward, up); P = np.asarray(positions, float)
+    lon, lat, r = _sphere_coordinates(P, frame)
+    if window is None:
+        used = np.unique(np.asarray(triangles).ravel())
+        window = (float(lon[used].min()) - cell, float(lon[used].max()) + cell,
+                  float(lat[used].min()) - cell, float(lat[used].max()) + cell)
+    depth = front_depth(np.c_[lon, lat, r], triangles, window=window, cell=cell, depth_axis=2, chart_axes=(0, 1),
+                        front=front)['depth']
+    covered = np.isfinite(depth)
+    if smooth:
+        from scipy.ndimage import gaussian_filter
+        total = gaussian_filter(np.where(covered, depth, 0.), float(smooth), mode='constant')
+        weight = gaussian_filter(covered.astype(float), float(smooth), mode='constant')
+        depth = np.where(covered, total / np.maximum(weight, 1e-300), np.nan)
+    return {'radius': depth, 'window': [float(w) for w in window], 'cell': float(cell), 'centre': frame[0].tolist(),
+            'forward': frame[1].tolist(), 'up': frame[2].tolist(), 'smooth': float(smooth),
+            'public_metrics': {'cells': int(depth.size), 'covered_share': float(covered.mean())},
+            'objective': 'Nearest surface distance along each ray from the centre per longitude/latitude cell, low-passed',
+            'limits': 'Sampled at cell centres; a surface seen edge-on from the centre is thin in the map; longitude '
+                      'wraps behind the centre.'}
+
+
+def onto_radius_map(positions, radius_map_result, *, weights=None):
+    """Move each point along its ray from the map's centre onto the mapped surface by its weight (0 keeps it, 1 lands
+    it): the spherical cousin of a depth map in a plane. Points whose ray falls outside the map's coverage stay."""
+    m = radius_map_result; P = np.asarray(positions, float)
+    frame = _sphere_frame(m['centre'], m['forward'], m['up']); lon, lat, r = _sphere_coordinates(P, frame)
+    w = np.ones(len(P)) if weights is None else np.asarray(weights, float)
+    if w.shape != (len(P),) or not np.isfinite(w).all() or (w < 0).any() or (w > 1).any():
+        raise ValueError('Weights must be one value in [0, 1] per point')
+    R = np.asarray(m['radius'], float); cell = m['cell']; x0, _, y0, _ = m['window']
+    fx, fy = (lon - x0) / cell - .5, (lat - y0) / cell - .5                  # cell centres at half cells
+    i0, j0 = np.floor(fx).astype(int), np.floor(fy).astype(int); tx, ty = fx - i0, fy - j0
+    ok = (i0 >= 0) & (j0 >= 0) & (i0 + 1 < R.shape[1]) & (j0 + 1 < R.shape[0])
+    target = np.full(len(P), np.nan)
+    a, b = np.clip(i0, 0, R.shape[1] - 2), np.clip(j0, 0, R.shape[0] - 2)
+    corners = np.stack([R[b, a], R[b, a + 1], R[b + 1, a], R[b + 1, a + 1]], axis=1)
+    blend = np.stack([(1 - tx) * (1 - ty), tx * (1 - ty), (1 - tx) * ty, tx * ty], axis=1)
+    usable = ok & np.isfinite(corners).all(axis=1)
+    target[usable] = (corners[usable] * blend[usable]).sum(axis=1)
+    move = usable & (w > 0)
+    direction = (P - frame[0]) / np.maximum(r, 1e-300)[:, None]
+    out = P.copy(); out[move] = P[move] + (w[move] * (target[move] - r[move]))[:, None] * direction[move]
+    change = np.abs(target - r)
+    return {'positions': out, 'public_metrics': {'moved_points': int(move.sum()), 'outside_map': int((~usable).sum()),
+                                                 'largest_radial_change': float(np.nanmax(np.where(move, change, np.nan)))
+                                                 if move.any() else 0.},
+            'objective': 'Each weighted point moved along its ray from the centre toward the mapped surface',
+            'limits': 'Moves along rays only: material slides where the ray is oblique to the surface. Check folds and '
+                      'corner compression after it.'}
+
+
 def remove_thin_relief(depth, *, size, front='min'):
     """Remove thin parts that stand in front of the surface (lash fins, strands, fused strokes).
 

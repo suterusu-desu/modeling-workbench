@@ -63,6 +63,11 @@ class ServiceVerbTests(unittest.TestCase):
         unity = self.run_op('bake_poses', {'poses': str(self.root / 'evaluated.npz'), 'objects': ['Skin'], 'tolerance': .05,
                                            'output': str(self.root / 'bake' / 'unity.npz'), 'renderers': {'Skin': 'Body'}})
         self.assertEqual((unity['anim_check']['status'], unity['anim_check']['curves']), ('passed', 2))
+        named = self.run_op('bake_poses', {'poses': str(self.root / 'evaluated.npz'), 'objects': ['Skin'], 'tolerance': .05,
+                                           'output': str(self.root / 'bake' / 'named.npz'), 'renderers': {'Skin': 'Body'},
+                                           'name': 'Blink'})
+        self.assertEqual(named['drivers'], {'Blink': 'main', 'Blink_mid': 'mid'})
+        self.assertIn('m_Name: Blink\n', Path(named['anim_file']).read_text(encoding='utf-8'))
         self.assertTrue(Path(unity['anim_file']).is_file())
         refused = self.service.execute('bake_poses', {'poses': str(self.root / 'evaluated.npz'), 'objects': ['Skin'],
                                                       'tolerance': .05, 'output': str(self.root / 'bake' / 'x.npz'),

@@ -153,3 +153,52 @@ def aligned_overlay(render, drawing, render_points, drawing_points, output, *, c
                         'drawing': {'path': str(Path(drawing).resolve()), 'sha256': _sha(drawing)}},
             'interpretation': 'Two-landmark alignment only: the landmarks coincide exactly, everything else shows how '
                               'the render and the drawing differ; the comparison and its judgment are the reviewer\'s'}
+
+
+def clay_render(positions, triangles, camera, output, *, overlays=(), color=(214, 206, 196), light=(-.35, -1., .55),
+                background=(38, 38, 44), label=None):
+    """Offline clay of a mesh in a recorded orthographic camera: `camera` holds `view_projection_matrix` (4x4) and
+    `resolution` ([width, height]) as a native render records them (`overlap_views.py` writes them into overlaps.json).
+    `overlays` are other meshes drawn in the same depth buffer, `(positions, triangles, rgb)`, for example the eye.
+    Seconds per view instead of a native render: screen every build in the owner's review cameras (a hood beside the eye
+    showed in three-quarter and profile and not in the front). Lambert shading, no shadows; not the owner's view itself.
+    """
+    M = np.asarray(camera['view_projection_matrix'], float); W, H = (int(v) for v in camera['resolution'])
+    if M.shape != (4, 4) or not np.allclose(M[3], [0., 0., 0., 1.], atol=1e-9):
+        raise ValueError('An orthographic view-projection matrix (last row 0 0 0 1) is required')
+    L = np.asarray(light, float); L = L / np.linalg.norm(L); away = M[2, :3]
+    image = np.empty((H, W, 3)); image[:] = background; depth = np.full((H, W), np.inf); drawn = 0
+    for P, T, rgb in [(positions, triangles, color), *overlays]:
+        P, T = np.asarray(P, float), np.asarray(T, np.int64)
+        ndc = P @ M[:3, :3].T + M[:3, 3]
+        X, Y, Z = (ndc[:, 0] + 1) * .5 * W, (1 - ndc[:, 1]) * .5 * H, ndc[:, 2]
+        n = np.cross(P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]])
+        n = n / np.maximum(np.linalg.norm(n, axis=1), 1e-300)[:, None]
+        n = np.where((n @ away)[:, None] > 0, -n, n)                            # face the camera
+        tone = .25 + .75 * np.clip(n @ L, 0, 1)
+        for t, (a, b, c) in enumerate(T):
+            xs, ys = X[[a, b, c]], Y[[a, b, c]]
+            i0, i1 = max(int(np.floor(xs.min())), 0), min(int(np.ceil(xs.max())), W - 1)
+            j0, j1 = max(int(np.floor(ys.min())), 0), min(int(np.ceil(ys.max())), H - 1)
+            if i1 < i0 or j1 < j0:
+                continue
+            det = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2])
+            if abs(det) < 1e-12:
+                continue
+            gx, gy = np.meshgrid(np.arange(i0, i1 + 1) + .5, np.arange(j0, j1 + 1) + .5)
+            l0 = ((ys[1] - ys[2]) * (gx - xs[2]) + (xs[2] - xs[1]) * (gy - ys[2])) / det
+            l1 = ((ys[2] - ys[0]) * (gx - xs[2]) + (xs[0] - xs[2]) * (gy - ys[2])) / det
+            l2 = 1 - l0 - l1
+            inside = (l0 >= -1e-9) & (l1 >= -1e-9) & (l2 >= -1e-9)
+            z = l0 * Z[a] + l1 * Z[b] + l2 * Z[c]
+            box = depth[j0:j1 + 1, i0:i1 + 1]; nearer = inside & (z < box)
+            if nearer.any():
+                box[nearer] = z[nearer]
+                image[j0:j1 + 1, i0:i1 + 1][nearer] = np.asarray(rgb, float) * tone[t]; drawn += 1
+    picture = Image.fromarray(np.clip(image, 0, 255).astype(np.uint8))
+    if label:
+        ImageDraw.Draw(picture).text((6, 6), str(label), fill=(255, 255, 255))
+    output = Path(output); output.parent.mkdir(parents=True, exist_ok=True); picture.save(output)
+    covered = np.isfinite(depth)
+    return {'path': str(output.resolve()), 'sha256': _sha(output), 'resolution': [W, H],
+            'covered_share': float(covered.mean()), 'triangles_drawn': drawn}

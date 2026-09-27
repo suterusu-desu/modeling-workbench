@@ -43,7 +43,8 @@ its driver of the main weight. In a [face audit](face-checks.md) declaration, li
 splits every shape into `<name>_L` / `<name>_R` (correctives `<name>_L_mid`, ...), each keeping its driver; points on
 the plane must be still in every shape, or the split refuses. A wink's clip is `clip_curve` on one side's drivers.
 Object names become FBX object names and Unity path segments, so a name with '/' is refused; `names` maps each object to
-its export name.
+its export name. `name` (default 'blink') is the main shape's name, so a clip set up in Unity against `Blink_L` keeps
+binding; the service operation passes it through and also names the Unity clip with it.
 
 **Unity clip.** Reference avatars do not blink through the avatar descriptor: they blink from an FX-layer clip on the
 shape weights. `write_unity_anim(path, clip, renderers)` writes the clip as a Unity .anim with one `blendShape.<shape>`

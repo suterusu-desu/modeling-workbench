@@ -144,6 +144,15 @@ service.execute('review_variants', {'variants': {'A': a_frames, 'B': b_frames, '
                                     'stills': [0.5, 0.85, 1.0]})
 ```
 
+## Offline clay in the review cameras
+
+`review_sheets.clay_render(positions, triangles, camera, output, overlays=[(eye, eye_triangles, rgb)])` renders shaded clay
+of any build in a recorded orthographic camera, `camera` being a record with `view_projection_matrix` and `resolution`:
+`overlap_views.py` writes them into overlaps.json for every render, and native observation records carry the same
+fields. In real use it matched the native renders and caught a hood beside the eye that front clay screens missed, in
+seconds per build instead of minutes per native render: screen every option in the owner's three-quarter and profile
+views before rendering natively. It is a screen, not the owner's view.
+
 ## Motion videos with several columns
 
 `import_motion` takes a manifest whose frames hold, per column, one captured image per view; `export_replay` encodes

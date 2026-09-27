@@ -41,6 +41,25 @@ change no longer fits the smoothed rest. Remedy: smooth the rest and the end sha
 **A change nobody sees moves the back of the head.** Cause: a radius drawn in the front chart selects every layer behind
 the surface there. Remedy: check the selection with `behind_front`, or select by the front surface.
 
+**A lid closed from the rest stands off the eye.** Cause: the rest lid has a thick ledge (rows running out from the
+margin), and turned about the eye's hinge it keeps that distance (in real use 9.5-13 mm over the eye against the
+guide's ~3). Remedy: settle the lid's middle toward the eye, or keep a retained closed shape's volume and re-lay its
+material from the rest (`radius_map`, `onto_radius_map`).
+
+**Settling toward the eye's centre slides rows along the hinge axis and folds the rim.** Cause: a move toward the centre
+has an axial part (up to 3 mm near the inner third; a row passed its margin point). Toward the axis instead squeezes the
+corners, where the eyeball's section about the axis is small. Remedy: settle along the ray from the centre by the ray's
+own excess over the target, eased in from the landed margin over two rows.
+
+**A fan of streaks where fades run along sideways columns.** Cause: fades evaluated per point along chart columns that
+run sideways (an outer corner's columns run toward the temple) vary along a column and ridge its rows. Remedy: evaluate
+a corner fade once per column, at its margin point.
+
+**The closed lid swings out beside the eye (a hood in three-quarter and profile).** Cause: the in-betweens can take
+chords beside the eye (`path_positions(..., roll_weight=...)`), but the closed pose from `hinge_landing` still turns the
+lid beyond the eye's outline about the hinge. Sliding it there with its nearest margin point's displacement reduced it to
+folds; not solved. Look at three-quarter and profile views, not only the front (`clay_render` in the native cameras).
+
 **Skin sinks, lumps and creases move around between fixes.** Cause: correction fields and local re-lays stacked on an
 inherited motion, each fitted separately. Remedy: remove the layers and rebuild the motion from the mechanism; clean up
 once afterwards. A defect that returns after a patch belongs to the construction.

@@ -46,7 +46,7 @@ over `fade`; the edge keeps its exact landing and pinned edge points count as no
 .015, fade .015 (eye width .11) cut the band's step beside the canthus from about 13 to 4 degrees per .001 of axis,
 removed the squeezed column and left the landed margin identical; sigma .006 folded more. It leaves a small zigzag right
 at the canthus, where the smoothed band out-turns the margin's first points; capping each band point's turn at its
-nearest margin point's turn may remove it (untested). Turning the band from the nearest point along the margin, a
+nearest margin point's turn was tried later and only shrank that notch (inner-corner folds 8 to 6-7 at closure). Turning the band from the nearest point along the margin, a
 harmonic turn profile and a smoothing that fades in above the corner were tried and did worse or were not chosen.
 
 `hinge_carry(attached, host_reference, host_end, pivot, axis, fraction=1., host_index=None)` moves attached points (lashes,

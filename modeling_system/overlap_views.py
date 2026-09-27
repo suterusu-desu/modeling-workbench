@@ -116,8 +116,10 @@ def run(job, out_dir):
             scene.camera = cam; bpy.context.view_layer.update()
             path = Path(out_dir) / f"overlap-{step['label']}-{name}.png"
             scene.render.filepath = str(path); bpy.ops.render.render(write_still=True)
+            matrix = cam.calc_matrix_camera(bpy.context.evaluated_depsgraph_get(), x=size, y=size) @ cam.matrix_world.inverted()
             rows.append({'step': step['label'], 'view': name, 'controls': step.get('controls'),
-                         'guide': step.get('guide'), 'image': path.name})
+                         'guide': step.get('guide'), 'image': path.name, 'resolution': [size, size],
+                         'view_projection_matrix': [list(r) for r in matrix]})   # for review_sheets.clay_render
         if cage is not None:
             bpy.data.objects.remove(cage)
     (Path(out_dir) / 'overlaps.json').write_text(json.dumps(rows, indent=1), encoding='utf-8')

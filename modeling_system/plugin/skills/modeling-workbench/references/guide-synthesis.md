@@ -85,6 +85,22 @@ declared derivative of its runs: record the runs, the chart, the supports, each 
 and which of them were left unpinned, and qualify it by its band before a correction relies on it. Inside a wide band
 the guide does not decide the shape: say so, and choose the shape there by clean geometry and the reference images.
 
+## Keep a retained shape's volume, re-lay its material
+
+`radius_map(positions, triangles, centre, forward=..., up=..., cell=1., smooth=3.)` is a z-buffer about a centre: per
+longitude/latitude cell (degrees), the distance of the nearest given surface along the ray from the centre, low-passed
+without spreading into empty cells. `onto_radius_map(positions, map, weights=...)` moves each point along its ray onto
+that surface by its weight. Together they keep a retained shape's volume while its material comes from elsewhere, the
+spherical cousin of a depth map in a plane. Both are `construct` operations.
+
+In real use, a retained closed lid had the right volume and silhouette but crowded material (inherited from an old
+construction); the hinge applied to the rest gave clean material but the rest lid's ledge stood off the eye. The hinge
+from the rest, projected along rays from the eye's centre onto the radius map of the retained closed lid's outer skin
+(1-degree cells, 3-cell low-pass), weighted by rest height above the margin, per column and in the middle of the lid
+only, kept the volume and cut the lid body's median bend from 1.76 to 1.40 degrees (p90 5.17 to 3.50) and the squeezed
+lid triangles from 246 to 133, every check passing. The margin's roll and the top of the band, where the height weight
+fades, came out sharper: weight fades need care.
+
 ## A guide in front of the character's own anatomy
 
 A generated head carries its own anatomy under the part it poses: in real use, generated closed-eye heads had smaller,

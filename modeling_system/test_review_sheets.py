@@ -3,8 +3,18 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+import numpy as np
 from PIL import Image
-from .review_sheets import compose_review_sheet, rows_from_frames
+from .review_sheets import clay_render, compose_review_sheet, rows_from_frames
+
+
+def sphere(radius, n=40, centre=(0., 0., 0.)):
+    u, v = np.meshgrid(np.linspace(0, np.pi, n), np.linspace(0, 2 * np.pi, 2 * n))
+    P = np.c_[(np.sin(u) * np.cos(v)).ravel(), (np.sin(u) * np.sin(v)).ravel(), np.cos(u).ravel()] * radius + centre
+    ids = np.arange(P.shape[0]).reshape(2 * n, n)
+    T = np.array([t for a in range(2 * n - 1) for b in range(n - 1) for t in
+                  ([ids[a, b], ids[a + 1, b], ids[a, b + 1]], [ids[a, b + 1], ids[a + 1, b], ids[a + 1, b + 1]])])
+    return P, T
 
 
 class ReviewSheetTests(unittest.TestCase):
@@ -51,6 +61,27 @@ class ReviewSheetTests(unittest.TestCase):
         self.assertEqual(rows[0]['images'], ['b5.png', 'a5.png']); self.assertEqual(rows[1]['images'], [None, 'a7.png'])
         with self.assertRaisesRegex(ValueError, 'Ambiguous'):
             rows_from_frames(frames + [dict(frames[0], path='other.png')], views=['corner'], poses=[.5], states=['before'])
+
+
+class ClayRenderTests(unittest.TestCase):
+    def test_clay_in_a_recorded_orthographic_camera(self):
+        root = Path(tempfile.mkdtemp())
+        front = {'resolution': [160, 160], 'view_projection_matrix': [[1., 0., 0., 0.], [0., 0., 1., 0.],
+                                                                      [0., .1, 0., 0.], [0., 0., 0., 1.]]}   # looking along +y
+        ball, T = sphere(.5)
+        render = clay_render(ball, T, front, root / 'ball.png')
+        self.assertAlmostEqual(render['covered_share'], np.pi * .25 ** 2, delta=.01)   # a disk of a quarter width
+        with Image.open(render['path']) as im:
+            pixels = np.asarray(im, float).sum(axis=2)
+        self.assertGreater(pixels[60, 60], pixels[100, 100])                      # lit from the upper left front
+        bead, bt = sphere(.1, 12, (0., -.6, 0.))                                   # in front of the ball
+        both = clay_render(ball, T, front, root / 'both.png', overlays=[(bead, bt, (70, 70, 80))])
+        with Image.open(both['path']) as im:
+            centre = np.asarray(im)[80, 80]
+        self.assertLess(int(centre.max()), 90)                                      # the overlay is drawn in front
+        with self.assertRaisesRegex(ValueError, 'orthographic'):
+            clay_render(ball, T, dict(front, view_projection_matrix=[[1., 0., 0., 0.], [0., 0., 1., 0.],
+                                                                     [0., .1, 0., 0.], [0., 1., 0., 0.]]), root / 'x.png')
 
 
 class AlignedOverlayTests(unittest.TestCase):
