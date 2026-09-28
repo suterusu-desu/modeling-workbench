@@ -188,6 +188,97 @@ result = compare_bends(recorded_before['co'], recorded_after['co'], pose_triangl
 
 Selection indices must belong to that pose's pinned triangle array. The default `geometry.compare` refuses unequal triangle layouts; do not evade this by copying old topology into a native record. Its explicit `recorded_polygon_loops` mode can justify a vertex comparison while returning `triangle_layout_equal=False`; that does not validate triangle-index transfer. If within-pose tessellation differs, resolve the correspondence or explicitly choose a common chart for the question.
 
+## Compare native polygon shapes
+
+An aggregate fold count or a fixed-reference-plane area bound can miss a twisted
+evaluated quad. Use `compare_polygon_shapes` when the observed defect belongs to
+a recorded polygon, especially when native diagonals change. This is a read-only
+Python diagnostic, also exported from `construction_diagnostics`; it does not
+change standard fold thresholds, retention checks, fitters or native geometry.
+
+```python
+from modeling_system.checks import load_states
+from modeling_system.construction_diagnostics import compare_polygon_shapes
+
+baseline = load_states(source_capture_path)
+candidate = load_states(candidate_capture_path)
+report = compare_polygon_shapes(
+    baseline[phase][object_name], candidate[phase][object_name],
+    polygon_ids=selected_evaluated_polygon_ids,
+    units="m", frame="recorded common world frame", relative_tolerance=1e-10,
+)
+```
+
+Both captures must supply `co`, `tri`, `loops`, `polygon_starts`,
+`polygon_lengths` and `triangle_polygon`. The existing witness validator checks
+each capture's own native triangles against its directed loops (including n-2
+triangles per polygon, boundary edges, interior edge pairing and ownership).
+Both full ordered loop tables and vertex counts must match exactly. Missing,
+invalid or mismatched witness evidence returns `status="unknown"` with reasons;
+there is no fallback to old triangle rows or guessed nearest polygon identity.
+Malformed numerical inputs and out-of-range selections raise `ValueError`.
+Recorded evaluated polygon indices do not by themselves identify original
+editable polygons across modifiers or reindexing. Match pose, object identity,
+frame and units from the source receipts before calling. Do not copy loops from
+another pose to make a record pass.
+
+The complete selected polygon rows are returned, in caller selection order:
+
+- `before` and `after` each contain the actual native triangle IDs, vertex
+  triples, areas, unit normals, degenerate IDs and internal-edge normal angles.
+  `maximum_native_dihedral_degrees` summarizes measured internal edges only;
+  `native_dihedral_complete` exposes edges made unmeasurable by degenerate
+  triangles. A triangle has no internal diagonal, so its maximum is null.
+  Measurements depend on each native tessellation. The report never subtracts
+  unrelated old/new triangle rows or swaps in a common diagonal.
+- Loop edge lengths, collapsed-edge IDs, polygon vector area and its normal
+  describe the recorded perimeter. Per-triangle `dot_polygon_area_normal` is
+  local facing against that capture's vector area, or null when either normal
+  is undefined. `before_after_area_normal_dot` measures polygon rotation in the
+  declared common frame; a rigid half turn can give -1 without any deformation
+  or local fold. These dots are not acceptance flags.
+- `best_fit_plane` uses an SVD of the centered polygon vertices and reports
+  nonplanarity distances and normalized singular values. Collinearity, collapse
+  or an ambiguous smallest-singular-vector direction makes the plane and its
+  projected crossing classification **unknown**. Normal sign or an arbitrary
+  choice of in-plane axes does not affect the crossing test.
+- `projected_contacts` names nonadjacent perimeter edges with strict crossings
+  or near touches/collinear overlaps. Strict crossings include the 3D separation
+  of the two interpolated edge points at the projected crossing; this gap can
+  be nonzero. A projected bow-tie is therefore not a 3D intersection verdict.
+  Adjacent edges are excluded from this projected-contact test; their collapsed
+  lengths and affected triangle degeneracy are separate measurements.
+- `projected_crossing_transition` distinguishes `present_in_both`,
+  `introduced_in_projection`, `absent_after_in_projection`, `absent_in_both`
+  and `unknown`. This prevents an inherited baseline crossing from being called
+  new merely because it was discovered during the candidate review.
+
+`status="measured"` means the recorded correspondence supports this numerical
+comparison; it is compatible with degeneracy, unknown normals and severe bends.
+It does not mean a polygon passed a quality check. `self_intersection` is
+explicitly `not_measured`: neither crossings in one projection nor triangle
+normal angles establish full 3D self-intersection. Inter-polygon contact,
+occlusion, anatomical intent, material support, motion and appearance need
+separate source-bound evidence. Existing declared standard checks still apply.
+
+`relative_tolerance` is a caller-declared numerical resolution, strictly between
+0 and 1, not an anatomical fold threshold. Each polygon is translated and scaled
+by its bounding-box diagonal before measurement. Edge degeneracy uses normalized
+length; triangle degeneracy uses normalized double area; vector-normal
+availability uses normalized vector-area magnitude. Plane qualification requires
+both the second singular value and its gap from the third to exceed the
+tolerance. Projected orientation tests use tolerance times edge length; interval
+tests use the same normalized length tolerance. Original-unit lengths/areas and
+dimensionless measures are reported together. Qualify near-threshold cases at
+the intended numerical scale.
+
+Input hashes bind all six original arrays for both captures, the selected IDs,
+units/frame and numerical tolerance; preserve external capture paths/hashes and
+object/pose identities alongside the report. Full records are bounded to 200000
+vertices, 400000 native triangles and 800000 loop entries. Select at most 4096
+polygons of at most 64 corners each, with at most 2000000 nonadjacent edge pairs.
+The complete selected rows are returned without silently truncating witnesses.
+
 A deliberate fixed-chart comparison passes its pinned chart to `compare_bends` and records that choice, both native topology revisions and their agreement/disagreement with the chart. It remains a fixed-chart result on posed coordinates. `compare_bends` receives only one chart and cannot verify its native provenance for the caller. Native plane sections use each pose's actual triangle record; a nonplanar quad's alternative diagonals can change both bend angles and section geometry. Preserve the original fixed-chart result when adding an exact-native continuation.
 
 The synthetic changed-diagonal fixture in `test_construction_diagnostics` checks independently known quad angles and section points, native correspondence refusal and the separate fixed-chart result. No pose or anatomical identity is inferred from this fixture.

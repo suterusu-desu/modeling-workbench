@@ -4,6 +4,7 @@ import hashlib
 import numpy as np
 from .geometry import validate
 from .source_coverage import source_coverage
+from .polygon_diagnostics import compare_polygon_shapes
 
 
 def _points(value):
