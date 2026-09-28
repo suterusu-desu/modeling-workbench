@@ -825,13 +825,17 @@ class ProjectedBoundaryTests(unittest.TestCase):
         self.assertEqual(ell['loops'][0]['interior_angles'], 'defined on the domain side')
 
     def test_a_projected_bow_tie_crosses_and_leaves_interior_angles_undefined(self):
-        # The ring's far end twists: the two sheets are 0.5 apart in depth, and cross only in the projection.
-        positions, triangles = self.fan([[0, 0], [2, 2], [2, 0], [0, 2]], [1, .5], depth=[0, .5, .5, 0])
+        # The ring's far end twists. The two crossing boundary segments lie at depths 0 and 0.5: they cross only in the
+        # projection (a claim about these two segments, not about the triangles of the fan).
+        positions, triangles = self.fan([[0, 0], [2, 2], [2, 0], [0, 2]], [1, .5], depth=[0, 0, .5, .5])
         result = self.report(positions, triangles)
         self.assertEqual(result['public_metrics']['crossings'], 1)
         crossing = result['crossings'][0]
         self.assertEqual(sorted(tuple(e['edge']) for e in crossing['edges']), [(1, 2), (3, 4)])
         np.testing.assert_allclose(crossing['point'], [1, 1])
+        # At the crossing (the midpoint of both segments here) the segments are 0.5 apart in depth.
+        depth_at = [(positions[a, 1] + positions[b, 1]) / 2 for a, b in ((1, 2), (3, 4))]
+        self.assertAlmostEqual(abs(depth_at[1] - depth_at[0]), .5)
         loop = result['loops'][0]
         self.assertEqual(loop['turning_number'], 0); self.assertIsNone(loop['reflex_corners'])
         self.assertTrue(loop['interior_angles'].startswith('undefined'))
