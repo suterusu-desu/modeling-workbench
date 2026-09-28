@@ -60,6 +60,87 @@ class TrialLaneTests(unittest.TestCase):
         self.assertIn('current.blend', lane.journal()[0]['reason'])
 
 
+    def test_retention_rechecks_the_inputs_of_a_preserved_region_verdict(self):
+        """Offline: the native run is replaced by saved poses; the record binds what the checks measured."""
+        from .trials import Trials
+        from .test_checks import KEEP, PHASES, hinged, states
+        root = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, root, True)
+        mask = np.zeros(len(hinged()[0]), bool); mask[KEEP] = True; np.savez(root / 'keep.npz', mask=mask)
+        region = [int(v) for v in range(13, 78)]
+
+        launched = {}
+
+        def lane(name, preserved, during=None):
+            declaration = {'object': 'Skin', 'region': region}
+            if preserved:
+                declaration['preserved'] = {'units': 'synthetic length', 'tolerance': 1e-6, 'phases': PHASES,
+                                            'regions': [{'object': 'Skin', 'vertices': {'path': 'keep.npz', 'key': 'mask'}}]}
+            (root / f'{name}.json').write_text(json.dumps(declaration))
+
+            class Offline(Trials):
+                def _check_live(self, tag, source_ref):
+                    pass
+
+                def _run(self, tag, verb, **kwargs):
+                    launched[name] = [str(Path(p).resolve()) for p in kwargs['pinned']]
+                    if during:
+                        during()                                  # an edit while the native run is going
+                    out = self.directory / tag / 'run'; out.mkdir(parents=True)
+                    np.savez(out / 'evaluated.npz', **states(hinged())); np.savez(out / 'source-evaluated.npz', **states(hinged()))
+                    (out / 'candidate.blend').write_bytes(b'candidate')
+                    return {'status': 'completed', 'output': str(out)}
+
+            class Service:
+                workspace = root
+            return Offline(Service(), 'o', root / name, blender='b', reference={'working': 'F'}, objects=['Skin'],
+                           poses={'0': {}}, declaration=root / f'{name}.json')
+
+        source = root / 'source.blend'; source.write_bytes(b'source')
+        review = {'judgment': 'j', 'watched': ['v']}
+        for name, preserved in (('preserved', True), ('legacy', False)):
+            trials = lane(name, preserved)
+            record = trials.trial('t', source=source, construction=__file__)
+            self.assertEqual(record['checks']['status'], 'pass')
+            if preserved:                                          # pinned before launch, rechecked at retention
+                self.assertIn(str((root / 'keep.npz').resolve()), launched[name])
+                self.assertEqual(set(record['checks']['inputs']),
+                                 {'declaration', 'preserved:Skin[0]', 'candidate_poses', 'baseline_poses'})
+            else:
+                self.assertNotIn('inputs', record['checks'])
+                self.assertNotIn(str((root / 'keep.npz').resolve()), launched[name])
+            record['checks']['status'] = 'fail'; record['checks']['failing'] = ['synthetic']   # stop before native retention
+            (root / name / 't' / 'trial.json').write_text(json.dumps(record))
+            (root / name / 't' / 'reopen.json').write_text(json.dumps({'status': 'passed', 'verification': {}}))
+            with self.assertRaisesRegex(ValueError, 'did not pass'):             # inputs unchanged: the usual gate
+                trials.retain('t', target=root / 'x.blend', label='x', review=review)
+        changed = mask.copy(); changed[KEEP[0]] = False; np.savez(root / 'keep.npz', mask=changed)
+        with self.assertRaisesRegex(ValueError, 'changed or are missing since the trial'):
+            lane('preserved', True).retain('t', target=root / 'x.blend', label='x', review=review,
+                                           waive_checks='a waiver does not cover changed inputs')
+        with self.assertRaisesRegex(ValueError, 'did not pass'):                 # legacy lanes are not tightened
+            lane('legacy', False).retain('t', target=root / 'x.blend', label='x', review=review)
+        # The selection edited while the trial runs: nothing is measured against it, and retention refuses.
+        np.savez(root / 'keep.npz', mask=mask)
+        edit = lambda: np.savez(root / 'keep.npz', mask=changed)
+        during = lane('during', True, during=edit).trial('t', source=source, construction=__file__)
+        self.assertEqual(during['checks']['status'], 'unknown')
+        self.assertEqual(during['checks']['inputs_changed_during_trial'], [str((root / 'keep.npz').resolve())])
+        (root / 'during' / 't' / 'reopen.json').write_text(json.dumps({'status': 'passed', 'verification': {}}))
+        with self.assertRaisesRegex(ValueError, 'changed during the trial'):
+            lane('during', True).retain('t', target=root / 'x.blend', label='x', review=review, waive_checks='no')
+        # A preserved scope added to a plain declaration while the trial runs is not measured unbound.
+        def add_scope():
+            declaration = json.loads((root / 'added.json').read_text())
+            declaration['preserved'] = {'units': 'u', 'tolerance': 0., 'phases': PHASES,
+                                        'regions': [{'object': 'Skin', 'vertices': {'path': 'keep.npz', 'key': 'mask'}}]}
+            (root / 'added.json').write_text(json.dumps(declaration))
+        added = lane('added', False, during=add_scope).trial('t', source=source, construction=__file__)
+        self.assertEqual((added['checks']['status'], added['checks']['failing']), ('unknown', ['preserved_regions']))
+        (root / 'added' / 't' / 'reopen.json').write_text(json.dumps({'status': 'passed', 'verification': {}}))
+        with self.assertRaisesRegex(ValueError, 'changed during the trial'):
+            lane('added', False).retain('t', target=root / 'x.blend', label='x', review=review, waive_checks='no')
+
+
 @unittest.skipUnless(BLENDER and Path(BLENDER).is_file(), 'set MODELING_BLENDER to a Blender executable')
 class NativeTrialTests(unittest.TestCase):
     @classmethod

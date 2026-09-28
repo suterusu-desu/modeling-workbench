@@ -22,9 +22,9 @@ import json
 from pathlib import Path
 import threading
 
-from .checks import run_checks
+from .checks import _array_refs, run_checks, validate_declaration
 from .native_recipes import NativeJob, RetainCheckpoint
-from .preservation import file_ref
+from .preservation import file_ref, stale_references
 from .store import append_line
 
 HERE = Path(__file__).resolve().parent
@@ -117,6 +117,13 @@ class Trials:
         self._check_live(tag, source_ref)                  # before the tag folder: a refusal leaves the tag unused
         (self.directory / tag).mkdir(parents=True)
         extra = dict(job or {}); pinned = [Path(p) for p in dependencies]
+        declared = json.loads(self.declaration.read_text(encoding='utf-8')) if self.declaration else None
+        preserved_inputs = None
+        if declared is not None and 'preserved' in declared:
+            # Pinned before launch (and into the job's dependency hashes), rechecked before measuring and at retention.
+            preserved_inputs = {'declaration': file_ref(self.declaration),
+                                **_array_refs(validate_declaration(declared), self.declaration.parent)}
+            pinned += [Path(ref['path']) for ref in preserved_inputs.values()]
         if construction is not None:
             extra['construction'] = str(Path(construction).resolve(strict=True)); pinned.append(Path(construction))
             pinned.append(HERE / 'native_poses.py'); script = HERE / 'trial_worker.py'
@@ -127,11 +134,29 @@ class Trials:
             out = Path(result['output']); record['candidate'] = file_ref(out / 'candidate.blend')
             if self.declaration:
                 baseline = out / 'source-evaluated.npz'
-                report = run_checks(json.loads(self.declaration.read_text(encoding='utf-8')), out / 'evaluated.npz',
-                                    baseline if baseline.exists() else None, base=self.declaration.parent)
+                changed = stale_references(list(preserved_inputs.values())) if preserved_inputs else []
+                if changed:
+                    record['checks'] = {'declaration': preserved_inputs['declaration'], 'status': 'unknown',
+                                        'failing': ['preserved_regions'], 'preserved_inputs': preserved_inputs,
+                                        'inputs_changed_during_trial': [c['path'] for c in changed]}
+                    return self._write('trial', tag, record)
+                if preserved_inputs is None:                   # other declarations are read after the run, as before
+                    declared = json.loads(self.declaration.read_text(encoding='utf-8'))
+                    if 'preserved' in declared:                # a preserved scope added during the run is unbound
+                        record['checks'] = {'declaration': file_ref(self.declaration), 'status': 'unknown',
+                                            'failing': ['preserved_regions'], 'preserved_inputs': {},
+                                            'inputs_changed_during_trial': [str(self.declaration)]}
+                        return self._write('trial', tag, record)
+                report = run_checks(declared, out / 'evaluated.npz', baseline if baseline.exists() else None,
+                                    base=self.declaration.parent)
                 record['checks'] = {'declaration': file_ref(self.declaration), 'status': report['status'],
                                     'failing': [c['id'] for c in report['checks'] if c['status'] != 'pass'],
                                     'report': report}
+                if preserved_inputs is not None:
+                    # The exact files the preserved verdict was measured from; retention re-checks every one.
+                    record['checks'].update(preserved_inputs=preserved_inputs, inputs={
+                        **preserved_inputs, 'candidate_poses': file_ref(out / 'evaluated.npz'),
+                        **({'baseline_poses': file_ref(baseline)} if baseline.exists() else {})})
         return self._write('trial', tag, record)
 
     def reopen(self, tag, *, script=None, job=None, tolerance=1e-6):
@@ -163,6 +188,16 @@ class Trials:
         if not isinstance(review, dict) or not review.get('judgment') or not review.get('watched'):
             raise ValueError('Retention needs a review: the judgment and the motion watched (videos or frames)')
         checks = trial.get('checks')
+        if checks and checks.get('preserved_inputs') is not None:
+            # A preserved-region verdict holds only for the exact declaration, selections and poses it measured. A
+            # waiver can waive a metric's outcome; it does not cover changed inputs.
+            if checks.get('inputs_changed_during_trial'):
+                raise ValueError('Inputs of the preserved-region check changed during the trial ('
+                                 + '; '.join(checks['inputs_changed_during_trial']) + '); run a new trial')
+            stale = stale_references(list(checks['inputs'].values()))
+            if stale:
+                raise ValueError('Inputs of the preserved-region check changed or are missing since the trial ('
+                                 + '; '.join(s['path'] for s in stale) + '); run a new trial')
         if checks and checks['status'] != 'pass' and not waive_checks:
             raise ValueError(f"Standard checks did not pass ({', '.join(checks['failing'])}); change the candidate, "
                              'or record why with waive_checks')

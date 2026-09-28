@@ -112,7 +112,8 @@ def validate_declaration(declaration):
     if not isinstance(d, dict) or not isinstance(d.get('object'), str) or not d['object'] or 'region' not in d:
         raise ValueError('A declaration needs the moving object and the region allowed to move')
     unknown = set(d) - {'object', 'region', 'region_label', 'rest', 'protected', 'clearance', 'symmetry', 'closing',
-                        'carrier', 'limits', 'arrays', 'description', 'band', 'lash', 'combinations', 'attachments'}
+                        'carrier', 'limits', 'arrays', 'description', 'band', 'lash', 'combinations', 'attachments',
+                        'preserved'}
     if unknown:
         raise ValueError(f'Unknown declaration fields: {sorted(unknown)}')
     if not all((isinstance(p, str) and p) or (isinstance(p, dict) and isinstance(p.get('object'), str) and p['object']
@@ -165,7 +166,45 @@ def validate_declaration(declaration):
             raise ValueError(f'Limit {key!r} must be a known check with a nonnegative bound')
     if set(d.get('arrays', {})) - {'candidate', 'baseline'}:
         raise ValueError("Arrays name only the 'candidate' and 'baseline' files")
+    if 'preserved' in d:
+        _validate_preserved(d['preserved'])
     return d
+
+
+def _validate_preserved(spec):
+    """Selected vertex regions that must match the accepted baseline at declared phases (see `_preserved`)."""
+    if not isinstance(spec, dict) or set(spec) - {'units', 'frame', 'tolerance', 'phases', 'regions'}:
+        raise ValueError("preserved takes 'units', 'tolerance', 'phases', 'regions' and optionally 'frame'")
+    if not isinstance(spec.get('units'), str) or not spec['units'].strip():
+        raise ValueError('preserved needs the units of the saved positions, for example "m"')
+    if 'frame' in spec and (not isinstance(spec['frame'], str) or not spec['frame'].strip()):
+        raise ValueError('preserved frame must be a nonempty description')
+    if not _nonnegative(spec.get('tolerance')):
+        raise ValueError('preserved needs a finite nonnegative Euclidean distance tolerance in those units')
+    phases = spec.get('phases')
+    if (not isinstance(phases, list) or not phases
+            or not all(type(g) in (int, float) and math.isfinite(g) for g in phases)):
+        raise ValueError('preserved needs the phases to compare, as a nonempty list of finite numbers')
+    if len({float(g) for g in phases}) != len(phases):
+        raise ValueError('preserved phases must be distinct numbers (0 and 0.0 are the same phase)')
+    regions = spec.get('regions')
+    if not isinstance(regions, list) or not regions:
+        raise ValueError('preserved needs at least one region')
+    labels = []
+    for i, region in enumerate(regions):
+        if (not isinstance(region, dict) or set(region) - {'label', 'object', 'vertices'}
+                or not isinstance(region.get('object'), str) or not region['object'] or 'vertices' not in region):
+            raise ValueError("Each preserved region needs its 'object' and 'vertices' (and optionally a 'label')")
+        vertices = region['vertices']
+        if not (isinstance(vertices, list) or (isinstance(vertices, dict) and isinstance(vertices.get('path'), str)
+                                               and set(vertices) <= {'path', 'key'})):
+            raise ValueError("Preserved vertices are an inline index/mask list or {'path': .npz, 'key': array}")
+        label = region.get('label', f"{region['object']}[{i}]")
+        if not isinstance(label, str) or not label:
+            raise ValueError('A preserved region label must be a nonempty string')
+        labels.append(label)
+    if len(set(labels)) != len(labels):
+        raise ValueError('Preserved region labels must be distinct')
 
 
 def _nonnegative(value):
@@ -182,6 +221,7 @@ def applicable_checks(declaration):
     ids = ['rest_identity'] if 'rest' in d else []
     ids += ['still_outside']
     ids += ['protected_unchanged'] if d.get('protected') else []
+    ids += ['preserved_regions'] if d.get('preserved') else []
     ids += ['clearance_shortfall'] if d.get('clearance') else []
     ids += ['folds', 'reversing_vertices']
     ids += ['symmetry'] if d.get('symmetry') else []
@@ -627,6 +667,133 @@ def _combinations(d, P, moving, facing, opening, base):
     return worst, {'combinations': rows}
 
 
+def _phase_table(states, what):
+    """{phase value: saved key}; two keys with one value (0 and 0.0) make the phase ambiguous and refuse."""
+    table = {}
+    for key in states:
+        value = float(key)
+        if not math.isfinite(value):
+            raise ValueError(f'{what} phase {key!r} is not a finite number')
+        if value in table:
+            raise ValueError(f'{what} poses hold phase {value:g} twice ({table[value]!r} and {key!r}); '
+                             'phase identity is ambiguous')
+        table[value] = key
+    return table
+
+
+def _topology(states, name):
+    """The object's one saved triangle array (every saved copy must agree), or a reason it is unusable."""
+    found = [np.asarray(objects[name]['tri']) for objects in states.values()
+             if name in objects and 'tri' in objects[name]]
+    if not found:
+        return None, 'no triangles saved for the object'
+    first = found[0]
+    if any(t.ndim != 2 or t.shape[1:] != (3,) or t.dtype.kind not in 'iu' for t in found):
+        return None, 'saved triangles are not integer (m, 3) rows'
+    if any(not len(t) for t in found):
+        return None, 'saved triangles are empty'
+    # Bounds before narrowing: a huge unsigned index must not wrap into a small or negative one.
+    if any(int(t.min()) < 0 or int(t.max()) > np.iinfo(np.int64).max for t in found):
+        return None, 'saved triangles hold negative or out-of-range indices'
+    if any(t.shape != first.shape or not np.array_equal(t, first) for t in found[1:]):
+        return None, 'saved triangles differ between phases'
+    return first.astype(np.int64), None
+
+
+def _preserved(spec, cand, base_states, base, shown=20):
+    """Selected vertex regions must match the accepted baseline at every declared phase: (largest distance, detail).
+
+    The distance is Euclidean, between the candidate's and the baseline's position of the same vertex index at the same
+    phase, in the saved arrays' units and frame. Missing baseline, phase, object or correspondence evidence leaves the
+    check unmeasured (None, with reasons); a malformed selection or an ambiguous phase refuses.
+    """
+    tol = float(spec['tolerance']); required = [float(g) for g in spec['phases']]
+    name_of = lambda g: repr(g)
+    detail = {'units': spec['units'], 'units_source': "the caller's declared label; the arrays carry no units",
+              'frame': spec.get('frame', "the supplied captures' common frame; no alignment or conversion is applied"),
+              'tolerance': tol, 'distance': 'Euclidean, candidate against baseline, same vertex index, same phase',
+              'rule': 'pass when every distance <= tolerance', 'required_phases': required, 'reasons': []}
+    if base_states is None:
+        detail['reasons'].append('no baseline poses: preserved regions are compared only with an accepted baseline')
+        return None, detail
+    cand_phases, base_phases = _phase_table(cand, 'Candidate'), _phase_table(base_states, 'Baseline')
+    coverage = {'required': required,
+                'missing_in_candidate': [g for g in required if g not in cand_phases],
+                'missing_in_baseline': [g for g in required if g not in base_phases],
+                'extra_in_candidate': sorted(set(cand_phases) - set(required)),
+                'extra_in_baseline': sorted(set(base_phases) - set(required)),
+                'keys': {name_of(g): {'candidate': cand_phases.get(g), 'baseline': base_phases.get(g)} for g in required}}
+    detail['phases'] = coverage
+    if coverage['missing_in_candidate'] or coverage['missing_in_baseline']:
+        detail['reasons'].append('declared phases are missing: nothing is interpolated or taken from another phase')
+        return None, detail
+    rows, worst, unmeasured = [], None, False
+    for i, region in enumerate(spec['regions']):
+        label = region.get('label', f"{region['object']}[{i}]"); name = region['object']
+        row = {'label': label, 'object': name}
+        stacks, problem = [], None
+        for states, table, what in ((cand, cand_phases, 'candidate'), (base_states, base_phases, 'baseline')):
+            try:
+                raw = [np.asarray(states[table[g]][name]['co']) for g in required]
+            except KeyError:
+                problem = f'the {what} has no positions of {name!r} at a declared phase'; break
+            if any(a.dtype.kind not in 'fiu' for a in raw):
+                problem = f'the {what} positions of {name!r} are not real numbers'; break
+            if len({a.shape for a in raw}) != 1:
+                problem = f'the {what} positions of {name!r} differ in vertex count between phases'; break
+            stacks.append(np.stack(raw).astype(float))
+        if problem is None:
+            C, B = stacks
+            if C.ndim != 3 or C.shape[2] != 3 or C.shape != B.shape:
+                problem = f'candidate and baseline positions of {name!r} do not correspond in shape'
+            elif not (np.isfinite(C).all() and np.isfinite(B).all()):
+                problem = f'positions of {name!r} are not all finite'
+        if problem is None:
+            tri_c, why_c = _topology(cand, name); tri_b, why_b = _topology(base_states, name)
+            if why_c or why_b:
+                problem = f'topology of {name!r}: ' + '; '.join(f'{w}: {r}' for w, r in (('candidate', why_c), ('baseline', why_b)) if r)
+            elif tri_c.shape != tri_b.shape or not np.array_equal(tri_c, tri_b):
+                problem = f'candidate and baseline triangles of {name!r} differ'
+            elif len(tri_c) and tri_c.max() >= C.shape[1]:
+                problem = f'saved triangles of {name!r} index past its vertices'
+        if problem is not None:
+            row.update(status='unmeasured', reason=problem); rows.append(row); unmeasured = True
+            detail['reasons'].append(f'{label}: {problem}')
+            continue
+        idx = _indices(region['vertices'], base, 'vertices', C.shape[1], f'preserved region {label!r}')
+        with np.errstate(over='ignore', invalid='ignore'):
+            delta = C[:, idx] - B[:, idx]
+            # hypot neither underflows a tiny difference to 0 nor overflows a large finite one by squaring
+            D = np.hypot(np.hypot(delta[..., 0], delta[..., 1]), delta[..., 2])      # (phases, selected vertices)
+        if not np.isfinite(D).all():
+            problem = f'the distance of some {name!r} vertices from the baseline is not representable'
+            row.update(status='unmeasured', reason=problem); rows.append(row); unmeasured = True
+            detail['reasons'].append(f'{label}: {problem}')
+            continue
+        g, k = np.unravel_index(int(np.argmax(D)), D.shape)
+        over = D > tol; per_vertex = D.max(axis=0); order = np.argsort(-per_vertex)
+        row.update(status='measured', vertices=int(len(idx)), max_distance=float(D[g, k]),
+                   worst_vertex=int(idx[k]), worst_phase=required[g],
+                   per_phase={name_of(p): {'max_distance': float(D[j].max()), 'over_tolerance': int(over[j].sum())}
+                              for j, p in enumerate(required)},
+                   vertices_over_tolerance=int(np.count_nonzero(per_vertex > tol)))
+        examples = [{'vertex': int(idx[v]), 'distance': float(per_vertex[v]), 'phase': required[int(D[:, v].argmax())]}
+                    for v in order[:shown] if per_vertex[v] > tol]
+        row['worst_examples'] = examples
+        row['examples_shown'] = f'{len(examples)} of {row["vertices_over_tolerance"]} vertices over the tolerance'
+        rows.append(row)
+        if worst is None or row['max_distance'] > worst['max_distance']:
+            worst = row
+    detail['regions'] = rows
+    if worst is not None:
+        detail['worst'] = {k: worst[k] for k in ('label', 'object', 'worst_vertex', 'worst_phase', 'max_distance')}
+    # A measured excess fails even when another region is unmeasured; otherwise any unmeasured region leaves it unknown.
+    if worst is not None and worst['max_distance'] > tol:
+        detail['incomplete'] = unmeasured
+        return worst['max_distance'], detail
+    return (None if unmeasured or worst is None else worst['max_distance']), detail
+
+
 def _compare_sets(measured, before, shown=50):
     """Which reversing vertices and folded triangles are new against the baseline and which it had; private sets out."""
     rev, fold = measured['reversing_vertices'][1], measured['folds'][1]
@@ -673,6 +840,10 @@ def run_checks(declaration, candidate, baseline=None, *, base=None):
     cut = before['reversing_vertices'][1]['mover_cut'] if before else None
     measured = _measure(d, cand, base, base_states, mover_cut=cut)
     _compare_sets(measured, before)
+    if d.get('preserved'):
+        # Candidate against baseline at declared phases; never measured on the baseline alone.
+        measured['preserved_regions'] = _preserved(d['preserved'], cand, base_states, base)
+        limits['preserved_regions'] = float(d['preserved']['tolerance'])
     rows = []
     for key in applicable_checks(d):
         observed, detail = measured[key]
@@ -693,7 +864,7 @@ def run_checks(declaration, candidate, baseline=None, *, base=None):
         'unknown' if any(r['status'] == 'unknown' for r in rows) else 'pass')
     return {'status': status, 'checks': rows, 'phases': list(cand), 'object': d['object'],
             'objective': 'Standard construction checks of saved poses against a declaration: accepted rest, motion '
-                         'kept inside its region, protected objects, clearance, folds, reversals, symmetry, how an '
+                         'kept inside its region, protected objects, preserved regions, clearance, folds, reversals, symmetry, how an '
                          'edge closes and how many blend shapes carry the motion',
             'limits': 'Numbers can reject a candidate, never approve its appearance. Baseline values are shown for '
                       'comparison and do not gate. Triangles are the rest phase\'s; sampled phases do not certify the '
@@ -707,16 +878,28 @@ def standard_cells(declaration):
     in INCREASE_ONLY are judged against the trial's baseline poses, which the trial must therefore save."""
     d = validate_declaration(declaration)
     limits = {**LIMITS, **d.get('limits', {})}
+    if d.get('preserved'):
+        limits['preserved_regions'] = float(d['preserved']['tolerance'])
     region = d.get('region_label') or f"{d['object']} region"
-    return [{'id': key, 'region': region, 'pose': 'all phases', 'metric': key,
-             'rule': {'max_increase' if key in INCREASE_ONLY else 'maximum': limits[key]}}
-            for key in applicable_checks(d)]
+    cells = [{'id': key, 'region': region, 'pose': 'all phases', 'metric': key,
+              'rule': {'max_increase' if key in INCREASE_ONLY else 'maximum': limits[key]}}
+             for key in applicable_checks(d)]
+    for cell in cells:
+        if cell['id'] == 'preserved_regions':               # its own regions and phases, not the moving region's
+            spec = d['preserved']
+            names = [f"{r['object']} {r.get('label', r['object'] + f'[{i}]')}" for i, r in enumerate(spec['regions'])]
+            cell['region'] = 'preserved: ' + '; '.join(names)
+            cell['pose'] = 'declared phases ' + ', '.join(repr(float(g)) for g in spec['phases'])
+    return cells
 
 
 def _array_refs(d, base):
     from .preservation import file_ref
     refs = {}
-    for key, spec in (('region', d['region']), ('rest', d.get('rest'))):
+    specs = [('region', d['region']), ('rest', d.get('rest'))]
+    for i, region in enumerate((d.get('preserved') or {}).get('regions', [])):
+        specs.append(('preserved:' + region.get('label', f"{region['object']}[{i}]"), region['vertices']))
+    for key, spec in specs:
         if isinstance(spec, dict):
             path = Path(spec['path']); refs[key] = file_ref(path if path.is_absolute() else Path(base) / path)
     return refs
@@ -800,6 +983,8 @@ def measure(item, result, constraints):
                 raise ValueError('Declared cells and measured checks differ; the declaration changed')
             cells[cell['id']] = {k: cell[k] for k in ('region', 'pose', 'metric')}
             cells[cell['id']].update(observed=check['observed'], baseline=check.get('baseline_observed'))
+            if check['id'] == 'preserved_regions':            # where the worst distance is, and what was compared
+                cells[cell['id']]['detail'] = deepcopy(check['detail'])
         rows[row['id']] = {'baseline': row['baseline'], 'guide': row['guide'], 'cells': cells}
     return {'subject': result['subject'], 'construction': constraints['construction'], 'kind': 'evaluated_output',
             'evidence': evidence, 'outcomes': rows}

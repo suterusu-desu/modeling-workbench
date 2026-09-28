@@ -52,7 +52,7 @@ Before a planar re-layout, report its projected held boundary
 ([check the projected boundary](references/metric-fitting.md#check-the-projected-boundary-before-the-layout)).
 
 **check** - measure every candidate the same way from one declaration: rest identity, motion outside the region,
-protected objects, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and how many blend
+protected objects, selected regions that must match the accepted baseline at declared phases, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and how many blend
 shapes carry the motion ([construction checks](references/construction-checks.md)); for the face, every shape, control
 and combination through the [face audit](references/face-checks.md). Diagnose persistent creases,
 crowding and section bends with [construction diagnostics](references/construction-diagnostics.md). Before

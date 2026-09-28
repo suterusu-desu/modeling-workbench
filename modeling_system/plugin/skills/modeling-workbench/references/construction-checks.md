@@ -24,6 +24,9 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   "region_label": "left eye area",
   "rest": {"path": "accepted-neutral.npz", "key": "co"},
   "protected": ["Eyeball", "Teeth"],
+  "preserved": {"units": "m", "tolerance": 1e-6, "phases": [0, 0.25, 0.5, 0.75, 1],
+                "regions": [{"label": "inner upper lid", "object": "Face",
+                             "vertices": {"path": "keep.npz", "key": "inner_upper_lid"}}]},
   "clearance": [{"obstacle": "Eyeball", "minimum": 0.0005,
                  "gaze": {"pivot": [0.1, -0.2, 0.6], "rotations": [[[1, 0, 0], 25], [[1, 0, 0], -30]]}}],
   "symmetry": {"axis": 0},
@@ -44,6 +47,8 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
   rest). `{"object": "Lower lash", "against": "rest"}` requires the object to stay still at every phase whatever the
   baseline did: use it when the design deliberately changes that object's motion (a still lower lid replacing a rising
   one moved its lash .013 against the old baseline).
+- `preserved`: selected vertex regions (of any object, the moving one included) that must match the accepted baseline
+  at declared phases; see [preserve selected regions](#preserve-selected-regions-against-the-accepted-baseline).
 - `clearance`: obstacles the region must stay outside. `centre` defaults to the obstacle's centroid at each phase,
   which suits an eyeball; the obstacle must be star-shaped from it. An object holding separate parts (both eyeballs,
   one of them a live mirror) is split where its points are farther apart than `part_gap` (share of its extent, default
@@ -91,6 +96,7 @@ arrays can be inline or `{"path": "file.npz", "key": "name"}` relative to the de
 | `rest_identity` | largest distance from the accepted rest at phase 0 | 1e-6 |
 | `still_outside` | largest travel of any vertex outside the region, any phase | 1e-6 |
 | `protected_unchanged` | largest change of a protected object | 1e-6 |
+| `preserved_regions` | largest Euclidean distance of a selected vertex from the baseline's, at the declared phases | the declared `tolerance` |
 | `clearance_shortfall` | how far a point that starts outside the obstacle comes inside the smaller of the minimum and its own rest clearance | 0 |
 | `folds` | locally reversed region triangles at the worst phase (`local_reversals`) | 0 |
 | `reversing_vertices` | movers whose progress along their own rest-to-end chord falls back by more than 2 % | 0 |
@@ -163,6 +169,76 @@ the in-between phases within .18 of the corner distance, the rebuild with `band_
 the rebuild as baseline the stepped lid fails and its 50 newly squeezed triangles are listed. Later, an eye-area
 smoothing without a taper at the corners squeezed 11 more (787 against 776) and failed; with the taper, 748 passed.
 
+## Preserve selected regions against the accepted baseline
+
+`protected` covers whole objects and `still_outside` compares the moving object with its own rest. Neither sees a
+repair that changes accepted motion inside the moving region, for example a construction branch that drops the
+in-between law of material the repair was not meant to touch, while rest, closed pose and the allowed-motion region
+all still pass. In real use exactly that happened: a comparison of the untouched part of a lid with the accepted
+baseline at every saved phase found it, mid-motion only. `preserved` declares that comparison:
+
+```json
+"preserved": {"units": "m", "tolerance": 1e-6, "phases": [0, 0.25, 0.5, 0.75, 1],
+              "regions": [{"label": "inner upper lid", "object": "Face",
+                           "vertices": {"path": "keep.npz", "key": "inner_upper_lid"}}]}
+```
+
+1. **Baseline.** Capture the accepted baseline at the same poses as the candidate. On the trial route that is the
+   source's own `source-evaluated.npz`, saved in the same run; offline it is `run_checks`' `baseline`. The baseline is
+   required: without one the check is unknown (it never falls back to rest).
+2. **Phases.** Declare the phases that must match, explicitly. Every declared phase must be saved exactly once in
+   both files.
+   - Declared phases are JSON numbers, and saved phase keys are read as numbers, so a key `0`, `0.0` or `0.00` is phase
+     0.
+   - A file saving one phase under two spellings refuses as ambiguous.
+   - A missing declared phase leaves the check unknown and names it. Nothing is interpolated, and nothing is matched by
+     position or by the phases the two files happen to share.
+   - Saved phases that were not declared are listed as extras and not compared. Identical endpoints do not stand in
+     for middle phases.
+3. **Regions.**
+   - Name each region: its object, a label, and its vertices as a boolean mask (one per vertex) or distinct in-range
+     indices, inline or in an .npz. Empty, all-false, out-of-range, duplicate or wrong-length selections refuse.
+     Neighbouring unselected vertices may change freely.
+   - Keep the selections in files beside the declaration: each file is hashed into the guarded route.
+4. **Units and tolerance.** `tolerance` is a Euclidean distance in the saved positions' units; `units` is your label for
+   them. The arrays carry no units or frame, so both files must be captures in one common frame; nothing is aligned or
+   converted. Distances are computed without squaring (no underflow of tiny ones, no overflow of large finite ones);
+   one that cannot be represented leaves its region unmeasured. A distance equal to the tolerance passes. The check is
+   absolute, never an allowance over the baseline, and `limits` cannot change it.
+5. **Correspondence.** Vertex index `i` must be the same material in both captures.
+   - The check needs finite real positions with one vertex count across the declared phases of both files.
+   - Every triangle array saved for the object, at any phase in either file, must be nonempty, integer, in range and
+     identical. It is usually saved at rest only, and that is what gets compared.
+   - Missing or differing positions or topology leave the check unknown.
+   - Equal topology does not prove vertex identity after an arbitrary reindexing: use source-corresponding captures of
+     one mesh. Nothing is remapped.
+6. **Read the report.** The row's `observed` is the largest distance over all regions. `detail.worst` gives the region
+   label, object, original vertex ID and phase. Per region it also gives:
+   - its vertex count, per-phase maxima and counts over the tolerance;
+   - the worst vertices over the tolerance (up to 20, with the total);
+   - `detail.phases`: required, missing, extra, and the saved key strings matched in each file.
+
+   A measured excess fails even when another region could not be measured; otherwise any unmeasured region leaves the
+   check unknown, and unknown blocks retention.
+7. **Use the guarded route.**
+   - `standard_policy` adds one `preserved_regions` cell (maximum = the tolerance; its region and pose name the
+     declared regions and phases) and binds every selection file as a
+     `preserved:<label>` constraint, so the policy's freshness check, task reads, required inputs and native
+     dependency hashes all carry it. A changed selection or declaration refuses the bound task. The measured candidate
+     and baseline pose files are the assessment's evidence, and a changed one fails re-verification at retention. The
+     measurement receipt keeps the check's detail (worst location, phases, regions).
+   - `trials.Trials` pins the declaration and selection files before a trial starts (in the job's dependency hashes),
+     rechecks them before measuring, and at retention rechecks them with the measured pose files. Inputs changed
+     during or after the trial refuse retention, whatever `waive_checks` says. A `preserved` block added to the
+     declaration while a trial runs is not measured; run a new trial.
+   - These pins prove the bytes did not change. They do not prove the baseline is the accepted state or that a label is
+     right: that stays the owner's source record.
+
+Errors and unknowns:
+- A malformed declaration, selection or phase spelling refuses with an error on both routes.
+- Missing baseline, phase, object or correspondence evidence is reported as unknown on both routes.
+- If the declaration's main moving object is missing or malformed, the existing checks refuse before this one runs.
+
 ## Guards for native trials
 
 `trials.Trials` takes the declaration directly: every trial is measured and retention refuses a failing check
@@ -184,7 +260,8 @@ remain possible through a hand-written adapter when a question is not a standard
 
 ## Limits
 
-- Sampled phases do not certify the motion between them; triangles are the rest phase's.
+- Sampled phases do not certify the motion between them; triangles are the rest phase's. A preserved region that
+  matches at every declared phase can still differ between them.
 - Clearance uses the obstacle's envelope seen from its centre. Near the obstacle's outline the envelope is uncertain,
   and a point that crosses it can read a small false shortfall; confirm a reported penetration against the surface.
 - How many correction layers are stacked in a region is a property of the native construction and is not measured

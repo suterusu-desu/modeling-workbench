@@ -7,7 +7,8 @@ import unittest
 
 import numpy as np
 
-from .checks import LIMITS, applicable_checks, load_states, run_checks, standard_cells, standard_policy
+from .checks import (LIMITS, applicable_checks, load_states, run_checks, standard_cells, standard_policy,
+                     validate_declaration)
 from .motion_paths import hinge_carry, hinge_landing, path_positions
 from .preservation import file_ref
 
@@ -497,6 +498,187 @@ class EyeCheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'two vertices'):
             applicable_checks(self.declare(closing=dict(self.closing, corners=[1])))
 
+KEEP = row(2)[4:9]                                                         # a selected patch of the moving lid
+
+
+def meshed(poses):
+    """Saved poses with rest triangles for the other objects too (the preserved check needs topology evidence)."""
+    return dict(poses, **{'0.0::Body::tri': np.array([[0, 1, 2]]), '0.0::Eye::tri': np.array([[0, 1, 15], [1, 16, 15]])})
+
+
+def leaked(skin, phase_index=2, vertex=None, offset=(0., .003, .004)):
+    """The same poses with one selected vertex moved at one middle phase only (rest and closed untouched)."""
+    skin = skin.copy(); skin[phase_index][KEEP[2] if vertex is None else vertex] += offset
+    return skin
+
+
+class PreservedRegionTests(unittest.TestCase):
+    """Selected regions must match the accepted baseline at declared phases, on a moving object too."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp()); self.addCleanup(__import__('shutil').rmtree, self.root, True)
+        self.declaration = {'object': 'Skin', 'region': REGION.tolist(),
+                            'preserved': {'units': 'synthetic length', 'tolerance': 1e-6, 'phases': PHASES,
+                                          'regions': [{'label': 'lid middle', 'object': 'Skin', 'vertices': KEEP.tolist()}]}}
+
+    def check(self, candidate, baseline, declaration=None):
+        report = run_checks(declaration or self.declaration, candidate, baseline, base=self.root)
+        return next(c for c in report['checks'] if c['id'] == 'preserved_regions'), report
+
+    def test_a_leak_at_a_middle_phase_fails_with_its_euclidean_maximum_vertex_and_phase(self):
+        baseline = hinged()
+        row_, report = self.check(states(leaked(baseline)), states(baseline))
+        self.assertEqual(row_['status'], 'fail'); self.assertEqual(report['status'], 'fail')
+        self.assertAlmostEqual(row_['observed'], .005)                             # 3-4-5: not the largest coordinate
+        worst = row_['detail']['worst']
+        self.assertEqual((worst['object'], worst['label'], worst['worst_vertex'], worst['worst_phase']),
+                         ('Skin', 'lid middle', int(KEEP[2]), .5))
+        region = row_['detail']['regions'][0]
+        self.assertEqual(region['per_phase']['0.0']['max_distance'], 0.); self.assertEqual(region['per_phase']['1.0']['max_distance'], 0.)
+        self.assertEqual(region['vertices_over_tolerance'], 1)
+        self.assertEqual((row_['limit'], row_['rule'], row_['detail']['units']), (1e-6, 'maximum', 'synthetic length'))
+        self.assertNotIn('baseline_observed', row_)
+        # Rest and closed alone agree: the other checks cannot see this leak.
+        others = {c['id']: c['status'] for c in report['checks'] if c['id'] != 'preserved_regions'}
+        plain = run_checks({k: v for k, v in self.declaration.items() if k != 'preserved'}, states(leaked(baseline)),
+                           states(baseline), base=self.root)
+        self.assertEqual(others, {c['id']: c['status'] for c in plain['checks']})
+
+    def test_edits_beside_the_selection_pass_and_so_does_an_unchanged_moving_region(self):
+        baseline = hinged()
+        beside = leaked(baseline, vertex=row(2)[0])                                # a neighbour outside the selection
+        row_, _ = self.check(states(beside), states(baseline))
+        self.assertEqual((row_['status'], row_['observed']), ('pass', 0.))
+        self.assertGreater(np.linalg.norm(baseline[2][KEEP] - baseline[0][KEEP], axis=1).min(), .01)   # it does move
+
+    def test_several_regions_on_several_objects_from_masks_and_index_files(self):
+        mask = np.zeros(len(REST), bool); mask[KEEP] = True
+        np.savez(self.root / 'keep.npz', mask=mask, body=np.array([0, 2]))
+        d = deepcopy(self.declaration)
+        d['preserved']['regions'] = [{'label': 'lid', 'object': 'Skin', 'vertices': {'path': 'keep.npz', 'key': 'mask'}},
+                                     {'label': 'body', 'object': 'Body', 'vertices': {'path': 'keep.npz', 'key': 'body'}},
+                                     {'label': 'eye', 'object': 'Eye', 'vertices': [True] * len(EYE)}]
+        baseline = hinged(); body = {g: BODY for g in PHASES}
+        row_, _ = self.check(meshed(states(baseline, body)), meshed(states(baseline, body)), d)
+        self.assertEqual(row_['status'], 'pass')
+        self.assertEqual([r['vertices'] for r in row_['detail']['regions']], [len(KEEP), 2, len(EYE)])
+        moved = {g: BODY + ([0, 0, .1] if g == .75 else 0.) for g in PHASES}
+        row_, _ = self.check(meshed(states(baseline, moved)), meshed(states(baseline, body)), d)
+        self.assertEqual(row_['status'], 'fail')
+        self.assertEqual((row_['detail']['worst']['object'], row_['detail']['worst']['worst_phase']), ('Body', .75))
+
+    def test_equality_at_the_tolerance_passes_and_anything_above_fails(self):
+        baseline = hinged(); candidate = states(leaked(baseline))
+        observed = self.check(candidate, states(baseline))[0]['observed']
+        for tolerance, status in ((observed, 'pass'), (float(np.nextafter(observed, 0)), 'fail')):
+            d = deepcopy(self.declaration); d['preserved']['tolerance'] = tolerance
+            self.assertEqual(self.check(candidate, states(baseline), d)[0]['status'], status)
+
+    def test_missing_or_mismatched_evidence_is_never_a_pass(self):
+        baseline = hinged(); same = states(baseline)
+        row_, report = self.check(same, None)                                       # no baseline: no rest fallback
+        self.assertEqual((row_['status'], report['status']), ('unknown', 'unknown'))
+        self.assertIn('no baseline', row_['detail']['reasons'][0])
+        d = deepcopy(self.declaration); d['preserved']['phases'] = [0., .6, 1.]   # a declared phase nobody saved
+        row_, _ = self.check(same, same, d)
+        self.assertEqual(row_['status'], 'unknown')
+        self.assertEqual(row_['detail']['phases']['missing_in_candidate'], [.6])
+        # Identical endpoints do not stand in for the declared middle poses.
+        ends = {k: v for k, v in same.items() if k.split('::')[0] in ('0.0', '1.0')}
+        row_, _ = self.check(ends, ends)
+        self.assertEqual(row_['status'], 'unknown')
+        self.assertEqual(row_['detail']['phases']['missing_in_baseline'], [.25, .5, .75])
+        # Equal counts, different schedules: never matched by position.
+        shifted = {k.replace('0.25::', '0.2::').replace('0.75::', '0.8::'): v for k, v in same.items()}
+        row_, _ = self.check(same, shifted)
+        self.assertEqual((row_['status'], row_['detail']['phases']['missing_in_baseline']), ('unknown', [.25, .75]))
+        self.assertEqual(row_['detail']['phases']['extra_in_baseline'], [.2, .8])
+        d = deepcopy(self.declaration); d['preserved']['regions'] = [{'object': 'Lashes', 'vertices': [0]}]
+        self.assertEqual(self.check(same, same, d)[0]['status'], 'unknown')         # object missing
+        same = meshed(same); d = deepcopy(self.declaration); d['preserved']['regions'] = [{'object': 'Body', 'vertices': [0]}]
+        self.assertEqual(self.check(same, same, d)[0]['status'], 'pass')
+        fewer = {k: (v[:-1] if k.endswith('Body::co') else v) for k, v in same.items()}
+        row_, _ = self.check(same, fewer, d)                                         # vertex count differs
+        self.assertEqual(row_['status'], 'unknown'); self.assertIn('correspond', row_['detail']['reasons'][0])
+        nonfinite = dict(same); nonfinite['0.5::Body::co'] = BODY + [np.nan, 0, 0]
+        row_, _ = self.check(nonfinite, same, d)
+        self.assertEqual(row_['status'], 'unknown'); self.assertIn('finite', row_['detail']['reasons'][0])
+
+    def test_topology_is_compared_and_required(self):
+        same = states(hinged())
+        other = dict(same); other['0.0::Skin::tri'] = TRI[:, [0, 2, 1]]
+        row_, _ = self.check(same, other)
+        self.assertEqual(row_['status'], 'unknown'); self.assertIn('triangles', row_['detail']['reasons'][0])
+        drifted = dict(same); drifted['0.5::Skin::tri'] = TRI[::-1]                  # a phase topology that disagrees
+        self.assertEqual(self.check(drifted, same)[0]['status'], 'unknown')
+        empty = meshed(same); empty['0.0::Body::tri'] = np.empty((0, 3), int)
+        d = deepcopy(self.declaration); d['preserved']['regions'] = [{'object': 'Body', 'vertices': [0]}]
+        self.assertEqual(self.check(empty, empty, d)[0]['status'], 'unknown')
+        wrapped = meshed(same); wrapped['0.0::Body::tri'] = np.array([[2 ** 64 - 1, 0, 1]], np.uint64)   # not -1
+        self.assertEqual(self.check(wrapped, wrapped, d)[0]['status'], 'unknown')
+        fractional = dict(same); fractional['0.0::Skin::tri'] = TRI.astype(float) + .25
+        self.assertEqual(self.check(fractional, same)[0]['status'], 'unknown')
+        negative = dict(same); negative['0.0::Skin::tri'] = TRI - 1
+        self.assertEqual(self.check(negative, negative)[0]['status'], 'unknown')
+        d = deepcopy(self.declaration); d['preserved']['regions'] = [{'object': 'Body', 'vertices': [0]}]
+        complex_ = meshed(same); complex_['0.5::Body::co'] = BODY.astype(complex)
+        row_, _ = self.check(complex_, meshed(same), d)
+        self.assertEqual(row_['status'], 'unknown'); self.assertIn('real numbers', row_['detail']['reasons'][0])
+        bare = {k: v for k, v in same.items() if not k.endswith('::tri')}
+        row_, _ = self.check(bare, bare)
+        self.assertEqual(row_['status'], 'unknown'); self.assertIn('no triangles', row_['detail']['reasons'][0])
+        d = deepcopy(self.declaration); d['preserved']['regions'] = [{'object': 'Body', 'vertices': [0]}]
+        row_, _ = self.check(same, same, d)                                          # no triangles saved for Body
+        self.assertEqual(row_['status'], 'unknown'); self.assertIn('no triangles', row_['detail']['reasons'][0])
+
+    def test_phase_identity_is_numeric_and_aliases_refuse(self):
+        same = states(hinged())
+        renamed = {('0::' + k.split('::', 1)[1]) if k.startswith('0.0::') else k: v for k, v in same.items()}
+        self.assertEqual(self.check(renamed, same)[0]['status'], 'pass')               # 0 is 0.0
+        aliased = dict(same); aliased['0::Skin::co'] = same['0.0::Skin::co']
+        with self.assertRaisesRegex(ValueError, 'ambiguous'):
+            self.check(aliased, same)
+        formatted = dict(same); formatted['0.50::Skin::co'] = same['0.5::Skin::co']       # 0.50 is 0.5
+        with self.assertRaisesRegex(ValueError, 'ambiguous'):
+            self.check(same, formatted)
+        for phases in ([0, 0.], [0., float('nan')], [True, 1.], [], '0 1'):
+            d = deepcopy(self.declaration); d['preserved']['phases'] = phases
+            with self.subTest(phases=phases), self.assertRaisesRegex(ValueError, 'phases'):
+                validate_declaration(d)
+
+    def test_tiny_and_huge_finite_distances_are_measured_and_unrepresentable_ones_are_not(self):
+        same = meshed(states(hinged())); d = deepcopy(self.declaration)
+        d['preserved']['regions'] = [{'object': 'Body', 'vertices': [0]}]; d['preserved']['tolerance'] = 0.
+        for shift in (1e-200, 1e200):                                               # BODY[0] has x = 0
+            moved = dict(same); moved['0.5::Body::co'] = BODY + [[shift, 0., 0.], [0., 0., 0.], [0., 0., 0.]]
+            row_, _ = self.check(moved, same, d)
+            self.assertEqual((row_['status'], row_['observed']), ('fail', shift))
+            json.dumps(row_, allow_nan=False)
+        far, near = dict(same), dict(same)
+        far['0.5::Body::co'] = BODY + [[1.7e308, 0., 0.], [0., 0., 0.], [0., 0., 0.]]
+        near['0.5::Body::co'] = BODY + [[-1.7e308, 0., 0.], [0., 0., 0.], [0., 0., 0.]]
+        row_, _ = self.check(far, near, d)                                           # the difference overflows
+        self.assertEqual(row_['status'], 'unknown'); self.assertIn('not representable', row_['detail']['reasons'][0])
+        json.dumps(row_, allow_nan=False)
+
+    def test_unusable_selections_and_declarations_refuse(self):
+        same = states(hinged())
+        for vertices in ([], [False] * len(REST), [len(REST)], [1, 1], [True, False]):
+            d = deepcopy(self.declaration); d['preserved']['regions'][0]['vertices'] = vertices
+            with self.subTest(vertices=vertices), self.assertRaises(ValueError):
+                self.check(same, same, d)
+        base = self.declaration['preserved']
+        for change in ({'units': ''}, {'tolerance': -1}, {'tolerance': None}, {'regions': []}, {'extra': 1},
+                       {'regions': [base['regions'][0], base['regions'][0]]}, {'regions': [{'object': 'Skin'}]}):
+            d = deepcopy(self.declaration); d['preserved'] = {**base, **change}
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                validate_declaration(d)
+        d = deepcopy(self.declaration); d['limits'] = {'preserved_regions': 1.}
+        with self.assertRaisesRegex(ValueError, 'Limit'):
+            validate_declaration(d)
+        self.assertNotIn('preserved_regions', applicable_checks({'object': 'Skin', 'region': [0]}))
+
+
 class StandardPolicyTests(unittest.TestCase):
     """The declaration becomes a PreservationPolicy that measures a native trial's saved poses."""
 
@@ -555,6 +737,88 @@ class StandardPolicyTests(unittest.TestCase):
 
     def test_the_requirements_file_is_not_silently_replaced(self):
         changed = json.loads((self.root / 'declaration.json').read_text()); changed['limits'] = {'folds': 3}
+        (self.root / 'declaration.json').write_text(json.dumps(changed))
+        with self.assertRaisesRegex(ValueError, 'different requirements'):
+            standard_policy(self.root / 'declaration.json', self.root / 'requirements.json',
+                            construction=self.root / 'construction.py', authority=[self.root / 'AUTHORITY.md'],
+                            guide=self.root / 'guide.npz')
+
+
+class PreservedPolicyTests(StandardPolicyTests):
+    """The preserved-region check through the guarded route: bound selections, measured baselines, freshness."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp()); self.addCleanup(__import__('shutil').rmtree, self.root, True)
+        mask = np.zeros(len(REST), bool); mask[KEEP] = True
+        np.savez(self.root / 'keep.npz', mask=mask)
+        declaration = {'object': 'Skin', 'region': REGION.tolist(),
+                       'preserved': {'units': 'synthetic length', 'tolerance': 1e-6, 'phases': PHASES,
+                                     'regions': [{'label': 'lid middle', 'object': 'Skin',
+                                                  'vertices': {'path': 'keep.npz', 'key': 'mask'}}]}}
+        (self.root / 'declaration.json').write_text(json.dumps(declaration))
+        for name in ('construction.py', 'AUTHORITY.md', 'guide.npz'):
+            (self.root / name).write_text(name)
+        self.policy = standard_policy(self.root / 'declaration.json', self.root / 'requirements.json',
+                                      construction=self.root / 'construction.py', authority=[self.root / 'AUTHORITY.md'],
+                                      guide=self.root / 'guide.npz')
+
+    def test_a_trial_is_measured_by_the_declared_checks_and_retention_carries_them(self):
+        cells = self.policy.document['outcomes'][0]['cells']
+        self.assertEqual([c['id'] for c in cells], ['still_outside', 'preserved_regions', 'folds', 'reversing_vertices'])
+        self.assertEqual(cells[1]['rule'], {'maximum': 1e-6})
+        self.assertEqual((cells[1]['region'], cells[1]['pose']),
+                         ('preserved: Skin lid middle', 'declared phases 0.0, 0.25, 0.5, 0.75, 1.0'))
+        self.assertEqual((cells[0]['region'], cells[0]['pose']), ('Skin region', 'all phases'))   # others unchanged
+        mask_ref = self.policy.document['outcomes'][0]['constraints']['preserved:lid middle']
+        self.assertEqual(mask_ref, file_ref(self.root / 'keep.npz'))
+        from .checks import _array_refs                    # two regions reading two keys of one file: both bound
+        two = json.loads((self.root / 'declaration.json').read_text())
+        two['preserved']['regions'].append({'label': 'second', 'object': 'Skin', 'vertices': {'path': 'keep.npz', 'key': 'other'}})
+        self.assertEqual(set(_array_refs(two, self.root)), {'preserved:lid middle', 'preserved:second'})
+        self.assertEqual(_array_refs(two, self.root)['preserved:second'], mask_ref)
+        task = self.policy.bind_task(self.item('trial', 'appearance_edit'), stage='apply', adapter='standard')
+        prepared, consumption = self.policy.prepare(task, {})
+        self.assertIn('preserved:lid middle', prepared['payload']['required_inputs']['standard_checks'])
+        result = self.trial(hinged(), 'good'); result['preservation'] = self.policy.assess(task, result, consumption)
+        self.assertEqual(result['preservation']['status'], 'pass')
+        retain = self.item('retain', 'retention'); retain['payload']['candidate'] = result['subject']
+        retain['requires'] = {'trial': ['completed']}
+        retain = self.policy.bind_task(retain, stage='retain', adapter='standard', previous={'task': task, 'result': result})
+        self.policy.preflight(retain, {'trial': {'task': task, 'result': result}})
+        # Changed baseline poses after measurement: the carried assessment no longer matches its evidence.
+        np.savez(self.root / 'good' / 'source-evaluated.npz', **states(leaked(hinged())))
+        with self.assertRaisesRegex(ValueError, 'altered|changed'):
+            self.policy.preflight(retain, {'trial': {'task': task, 'result': result}})
+
+    def test_a_zipper_trial_fails_its_cell(self):
+        _, result = self.assess(leaked(hinged()), 'leak')                        # the middle-phase leak
+        checks = {c['cell']: c for c in result['preservation']['checks']}
+        self.assertEqual(result['preservation']['status'], 'fail')
+        self.assertEqual(checks['preserved_regions']['status'], 'fail')
+        self.assertAlmostEqual(checks['preserved_regions']['observed'], .005)
+        cell = result['preservation']['measurements']['outcomes']['standard_checks']['cells']['preserved_regions']
+        self.assertEqual({k: cell['detail']['worst'][k] for k in ('label', 'object', 'worst_vertex', 'worst_phase')},
+                         {'label': 'lid middle', 'object': 'Skin', 'worst_vertex': int(KEEP[2]), 'worst_phase': .5})
+
+    def test_a_missing_baseline_leaves_the_cell_unknown(self):
+        task = self.policy.bind_task(self.item('trial', 'appearance_edit'), stage='apply', adapter='standard')
+        _, consumption = self.policy.prepare(task, {})
+        result = self.trial(hinged(), 'alone'); (self.root / 'alone' / 'source-evaluated.npz').unlink()
+        assessment = self.policy.assess(task, result, consumption)
+        self.assertEqual(assessment['status'], 'unknown')
+        self.assertEqual({c['cell']: c['status'] for c in assessment['checks']}['preserved_regions'], 'unknown')
+
+    def test_a_changed_selection_invalidates_the_bound_policy(self):
+        task = self.policy.bind_task(self.item('trial', 'appearance_edit'), stage='apply', adapter='standard')
+        mask = np.zeros(len(REST), bool); mask[KEEP[:2]] = True
+        np.savez(self.root / 'keep.npz', mask=mask)
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            self.policy.prepare(task, {})
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            self.policy.bind_task(self.item('trial', 'appearance_edit'), stage='apply', adapter='standard')
+
+    def test_the_requirements_file_is_not_silently_replaced(self):
+        changed = json.loads((self.root / 'declaration.json').read_text()); changed['preserved']['tolerance'] = 1e-3
         (self.root / 'declaration.json').write_text(json.dumps(changed))
         with self.assertRaisesRegex(ValueError, 'different requirements'):
             standard_policy(self.root / 'declaration.json', self.root / 'requirements.json',
