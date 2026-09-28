@@ -524,7 +524,7 @@ def _support_query(support, points):
 def conform_to_surface(reference, initial, triangles, held, support_positions, support_triangles, *, units, frame,
                        relative_area_tolerance, lower=0., upper=0., support_weights=1., band_weight=1e3, iterations=50,
                        tolerance=1e-9, compressed_below=.5, project_active=True, distance_tolerance=None,
-                       position_tolerance=None):
+                       position_tolerance=None, support_domains=None, support_assignment=None, qualified_domains=None):
     """As-rigid-as-possible deformation of a patch whose free vertices are kept on (or within an offset band of) an
     arbitrary oriented triangle support surface, measured along the support's own normal.
 
@@ -544,6 +544,13 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     Unlike rigid_deform's intervals on one coordinate, the constraint does not weaken where the support turns away
     from an axis. It cannot create area: surplus material is compressed along the surface (reported), and a patch that
     is pushed past the support's open boundary slides off it (reported as beyond the boundary, not as supported).
+
+    Optional assigned mode requires all three of support_domains (one integer label per support triangle),
+    support_assignment (one domain label per candidate vertex; -1 only for unweighted/unused vertices) and
+    qualified_domains (explicit caller-qualified labels). Each used domain must be one connected support component.
+    Weighted vertices search only their assigned domain, with independent normals, throughout this same coupled solve.
+    Assignment cannot qualify anatomy or prevent boundary escape; assignment_report distinguishes measured support
+    from unknown/outside support even when the normal-band residual is zero. No raw section curve is converted here.
     """
     from scipy.sparse import coo_matrix, kron, identity
     from scipy.sparse.linalg import factorized
@@ -568,7 +575,38 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
         raise ValueError('Support weights must be finite and nonnegative')
     if not (np.isfinite(band_weight) and band_weight > 0) or not isinstance(project_active, bool):
         raise ValueError('A finite positive band_weight and a boolean project_active are required')
-    support = _qualify_support(support_positions, support_triangles, relative_area_tolerance)
+    assigned = any(v is not None for v in (support_domains, support_assignment, qualified_domains))
+    domains = {}
+    if not assigned:
+        support = _qualify_support(support_positions, support_triangles, relative_area_tolerance)
+    else:
+        if any(v is None for v in (support_domains, support_assignment, qualified_domains)):
+            raise ValueError('Assigned support needs domains, assignment and explicit qualified_domains together')
+        labels, assignment, qualified = map(np.asarray, (support_domains, support_assignment, qualified_domains))
+        sc, st = np.asarray(support_positions), np.asarray(support_triangles)
+        if (sc.ndim != 2 or sc.shape[1:] != (3,) or sc.dtype.kind not in 'fiu' or not np.isfinite(sc).all()
+                or st.ndim != 2 or st.shape[1:] != (3,) or st.dtype.kind not in 'iu' or not len(st)
+                or st.min() < 0 or st.max() >= len(sc)):
+            raise ValueError('Finite source positions and actual support triangle indices required')
+        if (labels.shape != (len(st),) or labels.dtype.kind not in 'iu' or np.any(labels < 0)
+                or assignment.shape != (n,) or assignment.dtype.kind not in 'iu' or np.any(assignment < -1)
+                or qualified.ndim != 1 or qualified.dtype.kind not in 'iu'
+                or any(np.any(v > np.iinfo(np.int64).max) for v in (labels, assignment, qualified))
+                or len(np.unique(qualified)) != len(qualified) or not np.isin(qualified, labels).all()):
+            raise ValueError('Integer triangle domains, vertex assignments and unique known qualified domain IDs required')
+        watched_ids = np.unique(tri); watched_ids = watched_ids[weight[watched_ids] > 0]
+        if not np.isin(assignment[watched_ids], qualified).all():
+            raise ValueError('Every weighted patch vertex, including held vertices, needs a qualified assigned domain')
+        for label in np.unique(assignment[watched_ids]):
+            triangle_ids = np.flatnonzero(labels == label)
+            source_ids, local = np.unique(st[triangle_ids], return_inverse=True)
+            part = _qualify_support(sc[source_ids], local.reshape(-1, 3), relative_area_tolerance)
+            if part['components'] != 1:
+                raise ValueError('Each assigned domain must be one connected component; label components separately')
+            part['original_triangle_ids'] = triangle_ids
+            domains[int(label)] = part
+        # Empty weighted scope remains ARAP, just as a zero-weight single support does.
+        support = {'size': min((d['size'] for d in domains.values()), default=1.), 'components': len(domains)}
     tol = 1e-6 * support['size'] if distance_tolerance is None else float(distance_tolerance)
     step_tol = tol if position_tolerance is None else float(position_tolerance)
     if not (np.isfinite(tol) and tol >= 0 and np.isfinite(step_tol) and step_tol >= 0):
@@ -591,9 +629,25 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
                'distance': np.full(m, np.nan), 'beyond': np.zeros(m), 'component': np.full(m, -1)}
         ids = np.flatnonzero(which)
         if len(ids):
-            q = _support_query(support, y[ids])
-            for key in out:
-                out[key][ids] = q[key]
+            if not assigned:
+                q = _support_query(support, y[ids])
+                for key in out:
+                    out[key][ids] = q[key]
+            else:
+                out['triangle'] = np.full(m, -1, np.int64)
+                for label, part in domains.items():
+                    selected = ids[assignment[used[ids]] == label]
+                    if not len(selected):
+                        continue
+                    q = _support_query(part, y[selected])
+                    if any(not np.isfinite(q[k]).all() for k in ('closest', 'normal', 'offset', 'distance', 'beyond')):
+                        raise ValueError('Assigned support query is numerically unresolved')
+                    q['component'] = np.full(len(selected), label)
+                    q['triangle'] = part['original_triangle_ids'][q['triangle']]
+                    for key in out:
+                        out[key][selected] = q[key]
+        elif assigned:
+            out['triangle'] = np.full(m, -1, np.int64)
         return out
 
     def residual(q):
@@ -736,7 +790,7 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     offset = np.full(n, np.nan); offset[used] = after['offset']
     band = np.zeros(n); band[used] = after_residual
     beyond = np.zeros(n); beyond[used] = after['beyond']
-    return {'delta': deformed - start, 'deformed': deformed, 'free_vertices': free_ids, 'held_vertices': fixed_ids,
+    result = {'delta': deformed - start, 'deformed': deformed, 'free_vertices': free_ids, 'held_vertices': fixed_ids,
             'energies': energies, 'support_offset': offset, 'band_residual': band, 'beyond_boundary': beyond,
             'public_metrics': metrics, 'warnings': warnings,
             'objective': 'As-rigid-as-possible energy of the reference shape with intrinsic cotangent weights, plus a '
@@ -746,6 +800,26 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
                       'correspondence (the closest point is not a semantic match). It cannot create area; surplus is '
                       'compressed along the surface. A folded reference keeps its folds; the support facing counts and '
                       'reversals are measures on this result, not a proof of an unfolded or self-intersection-free sheet.'}
+    if assigned:
+        from .construction_diagnostics import _revision
+        unknown = watched & ((after_residual > tol) | (after['beyond'] > tol))
+        source_triangle = np.full(n, -1, np.int64); source_triangle[used] = after['triangle']
+        result['assigned_support_triangle'] = source_triangle
+        result['assignment_report'] = {
+            'status': 'unknown' if unknown.any() else ('measured' if watched.any() else 'unmeasured'),
+            'scope': 'Weighted patch vertices, including held conflicts; unweighted free vertices have no support claim',
+            'supported_vertices': used[watched & ~unknown].tolist(), 'unknown_vertices': used[unknown].tolist(),
+            'unconstrained_free_vertices': used[is_free & ~watched].tolist(),
+            'domains': [{'id': label, 'vertices': int(np.count_nonzero(watched & (assignment[used] == label))),
+                'unknown_vertices': used[unknown & (assignment[used] == label)].tolist(),
+                'beyond_boundary_vertices': used[watched & (assignment[used] == label) & (after['beyond'] > tol)].tolist()}
+                for label in domains],
+            'input_revision': _revision(np.asarray(support_positions), np.asarray(support_triangles), labels,
+                assignment, qualified, rest, start, tri, mask, weight, low, high),
+            'limits': 'Caller qualification is not anatomical or appearance approval. Nearest feet stay inside the '
+                      'assigned connected domain; the solve does not pull escaped material back across its boundary. '
+                      'Zero normal-band residual alone is insufficient. No coverage, collision or retention verdict.'}
+    return result
 
 
 def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis=1, depth_samples=None, depth_map=None,

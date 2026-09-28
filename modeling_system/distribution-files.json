@@ -114,6 +114,7 @@
     "store.py",
     "study.py",
     "study_extract.py",
+    "test_assigned_support.py",
     "test_atomic_repair.py",
     "test_audit_contracts.py",
     "test_bake.py",

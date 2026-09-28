@@ -423,3 +423,69 @@ It approves nothing:
 - It is a projection test, not 3D collision: crossing edges can belong to sheets separated in depth.
 - A clean outer loop does not qualify interior held handles, a second boundary, the rigid layout or the later depth and
   rest blending. After the layout, check `plane_flips_after` and look at the result.
+
+## Fit explicitly assigned support domains together
+
+When nearby support sheets serve different material regions, a globally closest
+foot can select the wrong sheet. Optional assigned mode in `conform_to_surface`
+keeps the same coupled endpoint solve while restricting each weighted vertex's
+search to one caller-declared domain. It is also available in array preparation:
+
+```python
+result = conform_to_surface(reference, initial, actual_triangles, held,
+    combined_support_positions, combined_support_triangles,
+    units='m', frame='shared evaluated coordinates', relative_area_tolerance=1e-12,
+    lower=-0.0002, upper=0.0002, support_weights=weights,
+    support_domains=triangle_domain_ids,
+    support_assignment=vertex_domain_ids,
+    qualified_domains=[10, 20], distance_tolerance=1e-8)
+```
+
+The three assignment arguments must be supplied together:
+
+- `support_domains`: one nonnegative integer label per support triangle. Keep
+  the actual bounded support triangles, with any exclusions already removed.
+- `support_assignment`: one integer domain label per candidate vertex. Every
+  weighted face-owning vertex, including a held one, needs a qualified assignment.
+  Use `-1` only where no support is consumed (unweighted or outside the patch).
+- `qualified_domains`: distinct known domain IDs explicitly qualified by the
+  caller for this use. Missing/unqualified assignments refuse before solving.
+  This declaration does not authenticate source authority or appearance.
+
+Each consumed domain must be one connected, consistently wound, nondegenerate
+support component. Label separate components separately; do not rely on nearest
+selection between them. Normals and boundary edges are computed independently
+per domain, even if domains share vertices, overlap or use opposite orientations.
+Every initial/iterative/final-projection query obeys the same assignment. The
+patch remains one coupled ARAP solve, including edges between differently
+assigned vertices; there are no sequential independent fits to overwrite one
+another. Closest point within a domain is still not anatomical point correspondence.
+
+A transported-section constraint can use this route only when the caller has
+actually constructed and qualified its bounded triangulated support surface.
+The tool does not invent a ribbon, depth or correspondence from a raw 1D curve.
+Keep an inferred section-derived support labelled inferred in the private source
+ledger; numeric assignment does not promote it to accepted anatomy. Conflicting
+constraints, bad reference folds and unsupported transitions remain modeling work.
+
+The existing band energy and projection are unchanged. They do **not** force
+material back inside an open support boundary. Zero normal-band residual may
+coexist with positive `beyond_boundary`; the existing `unsupported_after` already
+counts those free vertices. Inspect both quantities, convergence and held conflicts.
+Assigned mode additionally returns:
+
+- `assigned_support_triangle`: original row index in the supplied support
+  triangle array per measured vertex, `-1` for unmeasured vertices.
+- `assignment_report`: supported and unknown weighted vertex IDs, separate
+  unconstrained free IDs, per-domain escape/unknown lists, and an input-array
+  revision. `unknown` includes band residual or boundary escape beyond tolerance,
+  including held conflicts. No weighted scope reports `unmeasured`.
+
+`measured` refers only to the declared weighted support checks. It is not a
+coverage, collision, eye-clearance, likeness, solve-convergence or retention pass.
+Keep unweighted/inferred regions visible; no support claim applies there. Pin
+source/candidate captures, parameters and private qualification evidence alongside
+the report. By default assigned mode uses 1e-6 of the smallest consumed domain's
+size for its shared distance tolerance; set an explicit tolerance in the declared
+units when domains differ in scale. Legacy calls without assignment arguments
+retain their previous global support search, defaults and result structure.
