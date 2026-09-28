@@ -559,7 +559,7 @@ bound also prevents an accepted straight step from crossing a collapsed UV
 triangle, even if both endpoints would be positive. Final normal projection
 cannot move ordered vertices outside this parameterization.
 
-This is a **bounded source-cell mode**, not a general sliding chart solver.
+The default `ordered_cell_mode="fixed"` is a **bounded source-cell mode**.
 Cells never change automatically. A vertex at a source triangle corner may have
 only a narrow allowed direction; a desired move across that cell edge requires
 the caller to revise its qualified correspondence/construction. Material indices
@@ -608,3 +608,83 @@ the report. By default assigned mode uses 1e-6 of the smallest consumed domain's
 size for its shared distance tolerance; set an explicit tolerance in the declared
 units when domains differ in scale. Legacy calls without assignment arguments
 retain their previous global support search, defaults and result structure.
+
+### Allow interior UV coordinates to cross source cells
+
+Pass `ordered_cell_mode="chart"` with the same seven-field `ordered_charts`
+declaration to release the per-vertex cell restriction. The supplied cells and
+barycentrics then describe the **initial** correspondence. The fitter optimizes
+interior UV positions, locates them in the actual selected source triangles, and
+uses each triangle's exact piecewise affine XYZ lift in the existing coupled
+ARAP objective. It never retriangulates the source, chooses a nearest XYZ sheet,
+or changes the declared support owner. A closed-pose support still needs these
+disk charts; this option does not parameterize a closed manifold.
+
+The full initial chart boundary and held interior positions remain fixed. The
+same connected UV area constraints are solved during optimization and protected
+along accepted straight **UV** advances; XYZ paths bend at source-cell edges.
+This releases artificial cell-edge stops while preserving the declared material
+footprint. The surface is fixed, so this cannot supply missing area or repair a
+defective source construction.
+
+In chart mode, every initial chart vertex, including fixed vertices, must match
+its supplied source lift within the smaller of `distance_tolerance` and
+`128 * machine_epsilon * max(source_chart_extent, max_abs_source_coordinate)`.
+The reported `source_realization_tolerance` is in the supplied XYZ units. A wider
+normal band does not relax this requirement. Free ordered vertices are
+reconstructed from their current barycentrics, with no initial residual carried
+along. Fixed XYZ values remain exactly initial, including any admitted roundoff;
+they are never silently snapped. Construct a feasible initial correspondence
+explicitly when changing the source. The default fixed-cell mode retains its
+previous distance-tolerance and residual behavior.
+
+The constrained inner solve evaluates a piecewise smooth objective and its
+active-cell Jacobian. Source edges are nonsmooth, so local searches may block or
+reach their iteration limit. On shared UV edges, location prefers the supplied
+initial cell when incident, otherwise the lowest original source-triangle ID.
+Only barycentric roundoff up to `1e-12` is clamped. Outside-chart optimizer trial
+points use an affine extension of their initial cell solely to define the trial
+objective; an outside state is never accepted. At most 24 backtracks after the
+analytic UV-area bound check source membership, finite values, endpoint facing,
+and nonincrease of the actual piecewise objective. A local failure is not proof
+of impossible anatomy or a globally infeasible layout.
+
+Chart mode also refuses an initial candidate face, or backtracks a proposed
+endpoint, when its actual XYZ triangle is degenerate or faces against the source
+facet at its mapped UV centroid. The report gives original candidate and source
+triangle IDs for these finite witnesses (`reasons`, `rejected_lifted_facing` in
+steps, and `lifted_facing_conflicts`). Degeneracy uses double area divided by the
+source chart extent squared, with threshold `1e-14`; normalized normal dot must
+exceed `1e-12`. This conservative centroid test is **not** source self-intersection
+qualification, complete physical face coverage, or a continuous 3D no-fold proof.
+In particular, a source with crossed quads can have perfectly valid UV order.
+Repair and qualify that construction before using it as a consequential target.
+Native tessellation, contacts, attachments, affected in-betweens and appearance
+still require their own checks; no standard threshold or retention rule changes.
+
+Read final correspondence from the report, never from the initial cell arrays:
+
+```python
+result = conform_to_surface(
+    reference, initial, triangles, held, support_positions, support_triangles,
+    **assigned_parameters, ordered_charts=charts, ordered_cell_mode="chart",
+)
+report = result["ordered_report"]
+final_cells = initial_cells.copy()
+final_barycentrics = initial_barycentrics.copy()
+for chart in report["charts"]:
+    ids = chart["vertices"]  # row order for every per-vertex report array
+    final_cells[ids] = chart["source_triangle_ids"]
+    final_barycentrics[ids] = chart["barycentric"]
+```
+
+`assigned_parameters` contains the required units/frame, relative area tolerance,
+assigned source labels/owners/qualification and chosen numerical limits from the
+full example above. Arrays outside selected charts retain their caller values
+and have no chart-order claim. `initial_source_triangle_ids` and
+`changed_cell_vertices` compare final owners with initial owners; they do not
+count every cell traversed. The input revision binds mode, chart arrays, source
+geometry/topology, reference/initial geometry, held set, support ownership,
+weights, area bounds and solver numerics. Save the result and exact inputs with
+private source-qualification evidence. `feasible=true` remains a bounded
+numerical statement; `converged` does not approve a requested modeling outcome.

@@ -525,7 +525,7 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
                        relative_area_tolerance, lower=0., upper=0., support_weights=1., band_weight=1e3, iterations=50,
                        tolerance=1e-9, compressed_below=.5, project_active=True, distance_tolerance=None,
                        position_tolerance=None, support_domains=None, support_assignment=None, qualified_domains=None,
-                       ordered_charts=None, ordered_max_iterations=100):
+                       ordered_charts=None, ordered_max_iterations=100, ordered_cell_mode='fixed'):
     """As-rigid-as-possible deformation of a patch whose free vertices are kept on (or within an offset band of) an
     arbitrary oriented triangle support surface, measured along the support's own normal.
 
@@ -558,6 +558,9 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     cells, enforcing positive mapped face area and the explicitly fixed initial UV footprint boundary. Chart vertices
     must initially realize their source coordinates within distance_tolerance; zero must lie in their normal band.
     Held positions stay exact. See the operator page for the bounded disk/cell contract and blocked-step semantics.
+    With ordered_cell_mode='chart', interior UV coordinates may cross actual source cells in the same declared disk.
+    Their piecewise source lifts are exact; initial and fixed positions must realize correspondence within roundoff.
+    Fixed boundaries and connected UV area bounds remain in force. This does not qualify a self-crossing 3D source.
     """
     from scipy.sparse import coo_matrix, kron, identity
     from scipy.sparse.linalg import factorized
@@ -631,11 +634,14 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     stiffness3 = kron(laplacian[free][:, free], identity(3), format='csr')
     position_in_free = np.full(m, -1, np.int64); position_in_free[free] = np.arange(len(free))
     order = None
+    if ordered_cell_mode not in ('fixed', 'chart') or (ordered_cell_mode == 'chart' and ordered_charts is None):
+        raise ValueError('ordered_cell_mode must be fixed or chart; chart mode requires ordered_charts')
     if ordered_charts is not None:
         if not assigned:
             raise ValueError('Ordered source charts require explicit assigned support domains')
-        from .ordered_fitting import OrderedFit
-        order = OrderedFit(ordered_charts, rest, start, tri, used, free, mask, sc.astype(float), st,
+        from .ordered_fitting import OrderedFit, ChartOrderedFit
+        order_type = ChartOrderedFit if ordered_cell_mode == 'chart' else OrderedFit
+        order = order_type(ordered_charts, rest, start, tri, used, free, mask, sc.astype(float), st,
             labels, assignment, qualified, low, high, weight, tol, ordered_max_iterations)
 
     def query(y, which):
@@ -867,11 +873,17 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
                 'relative_area_tolerance': float(relative_area_tolerance), 'tolerance': float(tolerance),
                 'band_weight': float(band_weight), 'compressed_below': float(compressed_below),
                 'position_tolerance': step_tol, 'project_active': project_active}}
+        if ordered_cell_mode == 'chart':
+            revision['cell_mode'] = ordered_cell_mode
         result['ordered_report']['input_revision'] = hashlib.sha256(
             json.dumps(revision, sort_keys=True, allow_nan=False).encode()).hexdigest()
         result['objective'] = ('Intrinsic-cotangent ARAP with ordered chart interiors parameterized by variable '
             'barycentrics inside explicit source cells, connected face area lower bounds and fixed chart boundaries; '
             'unlisted weighted free vertices retain the closest-support normal-band penalty; held positions exact')
+        if ordered_cell_mode == 'chart':
+            result['objective'] = ('Intrinsic-cotangent ARAP with interior UV variables and exact piecewise lifts across '
+                'actual declared source-chart triangles, connected UV area lower bounds and fixed boundary/held positions; '
+                'unlisted free vertices retain the coupled ARAP and weighted closest-support normal-band objective')
         result['assignment_report']['limits'] = ('Ordered vertices use declared source cells and barycentrics; '
             'unlisted weighted vertices use their assigned closest support. Unknown includes invalid ordered '
             'correspondence. Source ownership/support measurements do not certify connected order, coverage, '

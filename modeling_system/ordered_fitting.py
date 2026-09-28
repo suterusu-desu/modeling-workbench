@@ -1,4 +1,4 @@
-"""Caller-declared source cells inside the coupled surface fit (no native IO)."""
+"""Caller-declared source cells/charts inside the coupled surface fit (no native IO)."""
 import numpy as np
 from .source_coverage import _edges, _ids, _area, _polygon_area, _digest
 from .triangle_contact import _cross, _overlap
@@ -106,13 +106,14 @@ class OrderedFit:
     area roots additionally keep every accepted straight advancement feasible.
     """
     def __init__(self, charts, rest, start, triangles, used, free, held, source, source_triangles,
-                 labels, assignment, qualified, low, high, weight, tolerance, max_iterations):
+                 labels, assignment, qualified, low, high, weight, tolerance, max_iterations, cell_mode='fixed'):
         from scipy.sparse import coo_matrix
         if not isinstance(charts, (list, tuple)) or not charts:
             raise ValueError('ordered_charts requires a nonempty list of explicit chart declarations')
         if type(max_iterations) is not int or not 1 <= max_iterations <= 1000:
             raise ValueError('ordered_max_iterations must be an integer in [1, 1000]')
         self.max_iterations = max_iterations
+        self.cell_mode = cell_mode
         self.charts, self.reasons, self.steps = [], [], []
         self.blocked = False
         self.initial = np.asarray(start, float)[used].copy()
@@ -191,6 +192,7 @@ class OrderedFit:
                     'held_vertices': vertices[(error > tolerance) & held[vertices].astype(bool)].tolist()})
             mutable = ~(held[vertices].astype(bool) | np.isin(vertices, boundary))
             self.charts.append(dict(vertices=vertices, ct=ct, uv=uv, cells=cells, bary=b, refs=refs[vertices].copy(),
+                source_ids=st, source_corners=source[source_triangles[st]], source_uv_faces=source_faces,
                 uv_source=uv_source, uv_origin=uv_origin, uv_scale=uv_scale, sign=float(np.sign(source_area[0])),
                 area=areas, ratio=float(ratio), boundary=boundary, mutable=mutable, maximum_initial_distance=float(error.max()),
                 hashes={k: _digest(spec[k]) for k in required if k not in ('minimum_area_ratio', 'boundary_mode')}))
@@ -199,15 +201,25 @@ class OrderedFit:
         self.variables = 0
         for chart in self.charts:
             chart['columns'] = np.full((len(chart['vertices']), 2), -1, int)
+            uv_cells = chart['uv_source'][chart['cells']]
+            chart['uv_jac'] = uv_cells[:, 1:]-uv_cells[:, :1]
+            if cell_mode == 'chart':
+                chart['uv_jac'] = np.broadcast_to(np.eye(2), chart['uv_jac'].shape).copy()
             for k in np.flatnonzero(chart['mutable']):
                 v = chart['vertices'][k]; col = self.variables; self.variables += 2
                 chart['columns'][k] = (col, col+1)
                 cell = source[chart['cells'][k]]
                 jac = (cell[1:] - cell[0]).T
+                if cell_mode == 'chart':
+                    jac = jac @ np.linalg.inv((uv_cells[k, 1:]-uv_cells[k, 0]).T)
                 for a in range(3):
                     for b in range(2):
                         rows.append(3*free_lookup[int(v)]+a); columns.append(col+b); values.append(jac[a, b])
-                lower.extend(-chart['bary'][k, 1:]); upper.extend(1-chart['bary'][k, 1:])
+                if cell_mode == 'fixed':
+                    lower.extend(-chart['bary'][k, 1:]); upper.extend(1-chart['bary'][k, 1:])
+                else:
+                    uv = chart['uv'][chart['vertices']]
+                    lower.extend(uv.min(0)-uv[k]); upper.extend(uv.max(0)-uv[k])
         for k, f in enumerate(free):
             if self.owner[used[f]] < 0:
                 for a in range(3):
@@ -226,9 +238,11 @@ class OrderedFit:
         for k in np.flatnonzero(chart['mutable']):
             d = z[chart['columns'][k]]
             bary[k, 1:] += d; bary[k, 0] -= d.sum()
-            cell = chart['uv_source'][chart['cells'][k]]
-            uv[chart['vertices'][k]] += d @ (cell[1:]-cell[0])
+            uv[chart['vertices'][k]] += d @ chart['uv_jac'][k]
         return uv, bary
+
+    def addresses(self, chart, z):
+        return chart['refs'], self.coordinates(chart, z)[1]
 
     def query(self, positions, which, domains, assignment, out):
         """Use the declared cell and current barycentrics, never infer a nearest foot."""
@@ -237,10 +251,10 @@ class OrderedFit:
             ids = local[chart['vertices']]; selected = which[ids]
             if not selected.any():
                 continue
-            _, bary = self.coordinates(chart, self.z); bary = bary[selected]
+            refs, bary = self.addresses(chart, self.z); bary = bary[selected]
             ids = ids[selected]
             part = domains[int(assignment[chart['vertices'][0]])]
-            face_ids = np.searchsorted(part['original_triangle_ids'], chart['refs'][selected])
+            face_ids = np.searchsorted(part['original_triangle_ids'], refs[selected])
             corners = part['triangles'][face_ids]
             closest = np.einsum('nk,nkd->nd', bary, part['positions'][corners])
             normal = np.einsum('nk,nkd->nd', bary, part['vertex_normal'][corners])
@@ -250,14 +264,14 @@ class OrderedFit:
             offset = positions[ids]-closest
             out['closest'][ids] = closest; out['normal'][ids] = normal
             out['offset'][ids] = np.sum(offset*normal, axis=1); out['distance'][ids] = np.linalg.norm(offset, axis=1)
-            out['triangle'][ids] = chart['refs'][selected]
+            out['triangle'][ids] = refs[selected]
             out['component'][ids] = assignment[chart['vertices'][selected]]
 
     def constraints(self, z, jacobian=False):
         result, jac = [], []
         for chart in self.charts:
             uv, bary = self.coordinates(chart, z)
-            for k in np.flatnonzero(chart['mutable']):
+            for k in (np.flatnonzero(chart['mutable']) if self.cell_mode == 'fixed' else []):
                 result.append(bary[k, 0])
                 if jacobian:
                     row = np.zeros(self.variables); row[chart['columns'][k]] = -1.; jac.append(row)
@@ -273,8 +287,7 @@ class OrderedFit:
                     for v, g in zip(face, gradients):
                         k = vertex_lookup[int(v)]
                         if chart['mutable'][k]:
-                            cell = chart['uv_source'][chart['cells'][k]]
-                            row[chart['columns'][k]] += (cell[1:]-cell[0]) @ g * chart['sign']/area
+                            row[chart['columns'][k]] += chart['uv_jac'][k] @ g * chart['sign']/area
                     jac.append(row)
         return np.asarray(jac) if jacobian else np.asarray(result)
 
@@ -283,7 +296,7 @@ class OrderedFit:
         # Remove only simplex roundoff from a solver proposal before finding the
         # common feasible step; an outward 1e-17 at one cell corner must not lock
         # every other variable in the coupled patch.
-        for chart in self.charts:
+        for chart in (self.charts if self.cell_mode == 'fixed' else []):
             for k in np.flatnonzero(chart['mutable']):
                 cols = chart['columns'][k]
                 b = chart['bary'][k, 1:] + target[cols]
@@ -345,10 +358,11 @@ class OrderedFit:
     def report(self, converged):
         rows = []
         for index, chart in enumerate(self.charts):
-            uv, bary = self.coordinates(chart, self.z)
+            uv, _ = self.coordinates(chart, self.z)
+            refs, bary = self.addresses(chart, self.z)
             ratios = _area(uv[self.triangles[chart['ct']]])*chart['sign']/chart['area'] if self.initial_valid else None
             rows.append({'chart': index, 'candidate_triangle_ids': chart['ct'].tolist(),
-                'vertices': chart['vertices'].tolist(), 'source_triangle_ids': chart['refs'].tolist(),
+                'vertices': chart['vertices'].tolist(), 'source_triangle_ids': refs.tolist(),
                 'barycentric': bary.tolist(), 'uv': (uv[chart['vertices']]*chart['uv_scale']+chart['uv_origin']).tolist(),
                 'fixed_boundary_vertices': chart['boundary'].tolist(), 'minimum_area_ratio': chart['ratio'],
                 'minimum_area_ratio_after': float(ratios.min()) if ratios is not None else None,
@@ -370,3 +384,188 @@ class OrderedFit:
                 'faces are enforced along accepted straight advances. Actual 3D triangle interiors, cross-chart joins, '
                 'collisions, appearance and swept motion require separate checks. A blocked local solve is not a proof '
                 'of global infeasibility. Initial source residuals within distance_tolerance are retained exactly.'}
+
+
+class ChartOrderedFit(OrderedFit):
+    """Piecewise-affine source lifts of constrained UV variables across actual cells.
+
+    The declared disk, footprint, held set and area constraints are unchanged.
+    No closest-XYZ correspondence or replacement triangulation is constructed.
+    """
+    def __init__(self, *args, **kwargs):
+        from scipy.sparse import coo_matrix
+        super().__init__(*args, **kwargs, cell_mode='chart')
+        self.local = np.full(len(self.owner), -1, int)
+        self.local[self.used] = np.arange(len(self.used))
+        self.free_lookup = {int(self.used[f]): k for k, f in enumerate(self.free)}
+        chart_columns = sum(2*int(c['mutable'].sum()) for c in self.charts)
+        m = self.map.tocoo(); keep = m.col >= chart_columns
+        self.unordered_map = coo_matrix((m.data[keep], (m.row[keep], m.col[keep])), shape=m.shape).tocsr()
+        for index, c in enumerate(self.charts):
+            uv = c['source_uv_faces']; xyz = c['source_corners']
+            c['inverse'] = np.linalg.inv(np.transpose(uv[:, 1:]-uv[:, :1], (0, 2, 1)))
+            c['lift_jac'] = np.transpose(xyz[:, 1:]-xyz[:, :1], (0, 2, 1)) @ c['inverse']
+            c['preferred'] = np.array([int(np.flatnonzero(c['source_ids'] == r)[0]) for r in c['refs']])
+            c['xyz_scale'] = float(np.linalg.norm(np.ptp(xyz.reshape(-1, 3), axis=0)))
+            magnitude = max(c['xyz_scale'], float(np.max(abs(xyz))))
+            c['realization_tolerance'] = min(self.tolerance, 128*np.finfo(float).eps*magnitude)
+            lifted = np.einsum('nk,nkd->nd', c['bary'], xyz[c['preferred']])
+            errors = np.linalg.norm(self.initial[self.local[c['vertices']]]-lifted, axis=1)
+            bad = errors > c['realization_tolerance']
+            if bad.any():
+                self.reasons.append({'chart': index, 'reason': 'chart mode requires initial exact source lifts within roundoff',
+                    'vertices': c['vertices'][bad].tolist(), 'maximum_distance': float(errors.max()),
+                    'fixed_vertices': c['vertices'][bad & ~c['mutable']].tolist()})
+        self.initial_valid = not self.reasons
+        if self.initial_valid:
+            conflicts = self.lifted_conflicts(self.z, self.initial)
+            if conflicts:
+                self.reasons.append({'reason': 'initial lifted triangle facing is reversed or degenerate',
+                                     'charts': conflicts})
+                self.initial_valid = False
+
+    @staticmethod
+    def locate(c, points, preferred=None):
+        """Actual UV triangle lookup; outside rows are trial-only affine extensions.
+
+        Edge ties prefer the initial cell if still incident, then the smallest
+        original triangle ID. The 1e-12 simplex allowance is roundoff only.
+        """
+        refs = np.empty(len(points), int); bary = np.empty((len(points), 3)); inside = np.zeros(len(points), bool)
+        for begin in range(0, len(points), 128):
+            end = min(begin+128, len(points)); p = points[begin:end]
+            ab = np.einsum('tij,ntj->nti', c['inverse'], p[:, None]-c['source_uv_faces'][None, :, 0])
+            b = np.concatenate((1-ab.sum(2, keepdims=True), ab), axis=2)
+            valid = (b.min(2) >= -1e-12) & (b.max(2) <= 1+1e-12)
+            found = valid.any(1)
+            chosen = np.argmin(np.where(valid, c['source_ids'][None], np.iinfo(np.int64).max), axis=1)
+            if preferred is not None:
+                pref = preferred[begin:end]
+                chosen = np.where(valid[np.arange(len(p)), pref] | ~found, pref, chosen)
+            selected = b[np.arange(len(p)), chosen]
+            # Never carry small negative barycentrics into accepted lifts.
+            selected[found] = np.maximum(selected[found], 0)
+            selected[found] /= selected[found].sum(1)[:, None]
+            refs[begin:end] = chosen; bary[begin:end] = selected; inside[begin:end] = found
+        return refs, bary, inside
+
+    def addresses(self, chart, z):
+        uv, _ = self.coordinates(chart, z)
+        cells, bary, _ = self.locate(chart, uv[chart['vertices']], chart['preferred'])
+        fixed = ~chart['mutable']
+        cells[fixed] = chart['preferred'][fixed]; bary[fixed] = chart['bary'][fixed]
+        return chart['source_ids'][cells], bary
+
+    def lift(self, z, jacobian=False):
+        from scipy.sparse import coo_matrix
+        result = self.initial.copy()
+        result[self.free] = (self.base+self.unordered_map @ z).reshape(-1, 3)
+        rows, cols, values = [], [], []
+        valid = True
+        for c in self.charts:
+            uv, _ = self.coordinates(c, z)
+            cells, bary, inside = self.locate(c, uv[c['vertices']], c['preferred'])
+            valid = valid and bool(inside.all())
+            lifted = np.einsum('nk,nkd->nd', bary, c['source_corners'][cells])
+            for k in np.flatnonzero(c['mutable']):
+                v = c['vertices'][k]
+                result[self.local[v]] = lifted[k]
+                if jacobian:
+                    jac = c['lift_jac'][cells[k]]
+                    for a in range(3):
+                        for b in range(2):
+                            rows.append(3*self.free_lookup[int(v)]+a)
+                            cols.append(c['columns'][k, b]); values.append(jac[a, b])
+        matrix = (self.unordered_map + coo_matrix((values, (rows, cols)), shape=self.map.shape).tocsr()
+                  if jacobian else None)
+        return result, matrix, valid
+
+    def lifted_conflicts(self, z, positions):
+        """Finite endpoint facing test, not a 3D intersection/coverage proof."""
+        conflicts = []
+        for index, c in enumerate(self.charts):
+            uv, _ = self.coordinates(c, z)
+            faces = self.triangles[c['ct']]
+            cells, _, inside = self.locate(c, uv[faces].mean(1))
+            p = positions[self.local[faces]]/c['xyz_scale']
+            q = c['source_corners'][cells]/c['xyz_scale']
+            normal = np.cross(p[:, 1]-p[:, 0], p[:, 2]-p[:, 0])
+            support = np.cross(q[:, 1]-q[:, 0], q[:, 2]-q[:, 0])
+            length = np.linalg.norm(normal, axis=1)
+            facing = np.sum(normal*support, axis=1)/np.maximum(length*np.linalg.norm(support, axis=1), 1e-300)
+            bad = (~inside) | (length <= 1e-14) | (facing <= 1e-12)
+            if bad.any():
+                conflicts.append({'chart': index, 'triangle_ids': c['ct'][bad].tolist(),
+                    'centroid_source_triangle_ids': c['source_ids'][cells[bad]].tolist(),
+                    'normal_dot': facing[bad].tolist()})
+        return conflicts
+
+    def solve(self, system, load, x):
+        from scipy.optimize import minimize
+        if not self.variables or not np.isfinite(system.data).all() or not np.isfinite(load).all():
+            self.blocked = True
+            self.steps.append({'solver_success': False, 'reason': 'no movable variables or nonfinite coupled objective'})
+            return x.copy(), False
+        # Center the quadratic around the initial positions to avoid cancellation
+        # for charts translated far from the origin. The additive constant is irrelevant.
+        force = load.ravel()-system @ self.base
+        def objective(z):
+            positions, jac, _ = self.lift(z, True)
+            delta = positions[self.free].ravel()-self.base
+            residual = system @ delta-force
+            return ((.5*float(delta @ (system @ delta))-float(force @ delta))/self.scale**2,
+                    np.asarray(jac.T @ residual)/self.scale**2)
+        old = self.z.copy(); old_energy = objective(old)[0]
+        solved = minimize(objective, old, jac=True, method='SLSQP', bounds=list(zip(self.lower, self.upper)),
+            constraints={'type': 'ineq', 'fun': self.constraints, 'jac': lambda z: self.constraints(z, True)},
+            options={'maxiter': self.max_iterations, 'ftol': 1e-13})
+        finite = bool(np.isfinite(solved.x).all())
+        proposed, fraction = self.advance(solved.x) if finite else (old, 0.)
+        accepted = False; conflicts = []; result = x.copy(); backtracks = 0
+        # Area feasibility holds on every prefix of advance(). Endpoint source
+        # location, physical facing and the actual piecewise objective are checked
+        # again; outside-chart objective extensions are never accepted.
+        for backtracks in range(25 if finite else 0):
+            candidate, _, inside = self.lift(proposed)
+            feasible = (inside and np.isfinite(candidate).all() and self.constraints(proposed).min() >= -1e-10)
+            bad = self.lifted_conflicts(proposed, candidate) if feasible else []
+            if bad and not conflicts:
+                conflicts = bad
+            energy = objective(proposed)[0] if feasible and not bad else np.inf
+            if np.isfinite(energy) and energy <= old_energy+1e-12*max(1., abs(old_energy)):
+                accepted = True; self.z = proposed; result = candidate; break
+            proposed = old+.5*(proposed-old); fraction *= .5
+        move = float(np.max(abs(result-x)))
+        settled = bool(solved.success and accepted and fraction == 1.)
+        self.blocked = not settled and move <= self.tolerance
+        self.steps.append({'solver_success': bool(solved.success), 'solver_status': int(solved.status),
+            'solver_message': str(solved.message), 'solver_iterations': int(solved.nit),
+            'accepted': accepted, 'fraction': float(fraction) if accepted else 0., 'backtracks': backtracks,
+            'maximum_coordinate_move': move, 'minimum_constraint_slack': float(self.constraints(self.z).min()),
+            'objective_before': float(old_energy), 'objective_after': float(objective(self.z)[0]),
+            'rejected_lifted_facing': conflicts})
+        return result, settled
+
+    def report(self, converged):
+        result = super().report(converged)
+        result['cell_mode'] = 'chart'
+        result['numerics'].update({'lifted_normal_dot_minimum': 1e-12, 'normalized_lifted_double_area_minimum': 1e-14,
+                                  'maximum_backtracks': 24})
+        for c, row in zip(self.charts, result['charts']):
+            refs = np.asarray(row['source_triangle_ids'])
+            row['initial_source_triangle_ids'] = c['refs'].tolist()
+            row['changed_cell_vertices'] = c['vertices'][refs != c['refs']].tolist()
+            row['fixed_vertices'] = c['vertices'][~c['mutable']].tolist()
+            row['source_realization_tolerance'] = c['realization_tolerance']
+        result['lifted_facing_conflicts'] = (self.lifted_conflicts(self.z, self.lift(self.z)[0])
+                                           if self.initial_valid else None)
+        result['limits'] = ('Explicit source UV chart and fixed initial footprint only, within reported numerical tolerances. '
+            'Interiors can cross actual source cells via piecewise affine lifts; fixed boundary/held XYZ stays bitwise initial, '
+            'with its realization checked at roundoff tolerance. Free ordered vertices use exact reported barycentric lifts. '
+            'Positive connected UV area holds along accepted straight UV advances, not Cartesian chords. '
+            'The finite endpoint triangle-facing test compares each candidate normal to its UV-centroid source facet; '
+            'it is not a collision, 3D coverage, continuous 3D no-fold, source validity, anatomy or appearance proof. '
+            'A self-crossing source is not repaired by UV order. Source edges make the local objective nonsmooth; '
+            'blocked or iteration-limited searches do not prove global infeasibility. Changed cells count final owners '
+            'versus initial owners, not all traversed cells. Cross-chart joins, native tessellation and swept motion need separate checks.')
+        return result

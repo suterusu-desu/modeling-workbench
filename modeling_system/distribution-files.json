@@ -120,6 +120,7 @@
     "test_audit_contracts.py",
     "test_bake.py",
     "test_bounded_reads.py",
+    "test_chart_fitting.py",
     "test_checks.py",
     "test_concurrency.py",
     "test_construction_diagnostics.py",
