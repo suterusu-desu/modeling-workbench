@@ -141,6 +141,7 @@
     "test_motion_paths.py",
     "test_native_bootstrap.py",
     "test_native_bridge.py",
+    "test_native_poses.py",
     "test_native_recipes.py",
     "test_native_timing.py",
     "test_operating_session.py",

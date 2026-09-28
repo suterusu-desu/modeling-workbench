@@ -679,6 +679,92 @@ class PreservedRegionTests(unittest.TestCase):
         self.assertNotIn('preserved_regions', applicable_checks({'object': 'Skin', 'region': [0]}))
 
 
+class PolygonPreservationTests(unittest.TestCase):
+    """Same ordered polygons, different diagonals: position identity and tessellation are distinct evidence."""
+
+    def setUp(self):
+        self.declaration = {'object': 'Panel', 'region': [0, 1, 2, 3], 'preserved': {
+            'units': 'synthetic length', 'tolerance': 1e-6, 'phases': [0., .5, 1.],
+            'regions': [{'object': 'Panel', 'vertices': [0, 1]}]}}
+        co = np.array([[0., 0., 0.], [2., 0., 0.], [2., 2., 0.], [0., 2., 0.]])
+        self.poses = {}
+        for g in (0., .5, 1.):
+            obj = {'co': co + [0., 0., g],
+                   'tri': np.array([[0, 1, 2], [0, 2, 3]]) if g == 0 else np.array([[0, 1, 3], [1, 2, 3]]),
+                   'loops': np.array([0, 1, 2, 3]), 'polygon_starts': np.array([0]),
+                   'polygon_lengths': np.array([4]), 'triangle_polygon': np.array([0, 0])}
+            self.poses.update({f'{g}::Panel::{k}': v for k, v in obj.items()})
+
+    def check(self, candidate, baseline=None):
+        result = run_checks(self.declaration, candidate, self.poses if baseline is None else baseline)
+        return next(c for c in result['checks'] if c['id'] == 'preserved_regions')
+
+    def test_native_diagonals_remain_intact_and_preservation_measures_positions(self):
+        original = deepcopy(self.poses)
+        result = self.check(self.poses)
+        self.assertEqual((result['status'], result['observed']), ('pass', 0.))
+        self.assertEqual(result['detail']['regions'][0]['correspondence']['kind'], 'recorded_polygon_loops')
+        self.assertFalse(np.array_equal(self.poses['0.0::Panel::tri'], self.poses['1.0::Panel::tri']))
+        for key in original:
+            np.testing.assert_array_equal(original[key], self.poses[key])
+        candidate = deepcopy(self.poses); candidate['0.5::Panel::co'][1] += [0., .003, .004]
+        result = self.check(candidate)
+        self.assertEqual(result['status'], 'fail'); self.assertAlmostEqual(result['observed'], .005)
+        self.assertEqual((result['detail']['worst']['worst_vertex'], result['detail']['worst']['worst_phase']), (1, .5))
+        candidate = deepcopy(self.poses); candidate['0.5::Panel::co'][2] += [.01, 0., 0.]
+        # An allowed neighbor edit can also change the diagonal at this same pose relative to the baseline.
+        candidate['0.5::Panel::tri'] = np.array([[0, 1, 2], [0, 2, 3]])
+        before_tri = candidate['0.5::Panel::tri'].copy()
+        self.assertEqual(self.check(candidate)['status'], 'pass')
+        np.testing.assert_array_equal(candidate['0.5::Panel::tri'], before_tri)
+        np.testing.assert_array_equal(self.poses['0.5::Panel::tri'], original['0.5::Panel::tri'])
+
+    def test_legacy_retriangulation_is_unknown_and_partial_witness_never_falls_back(self):
+        from .checks import POLYGON_WITNESS
+        legacy = {k: v for k, v in self.poses.items() if k.rsplit('::', 1)[-1] not in POLYGON_WITNESS}
+        self.assertEqual(self.check(legacy, legacy)['status'], 'unknown')
+        stable = {k: (self.poses['0.0::Panel::tri'] if k.endswith('::tri') else v) for k, v in legacy.items()}
+        self.assertEqual(self.check(stable, stable)['status'], 'pass')
+        partial = deepcopy(stable); partial['0.0::Panel::loops'] = self.poses['0.0::Panel::loops']
+        self.assertEqual(self.check(partial, partial)['status'], 'unknown')
+        self.assertEqual(self.check(self.poses, legacy)['status'], 'unknown')
+        for field in POLYGON_WITNESS:
+            broken = deepcopy(self.poses); del broken[f'0.5::Panel::{field}']
+            self.assertEqual(self.check(broken)['status'], 'unknown')
+
+    def test_malformed_stale_and_different_connectivity_cannot_pass(self):
+        variants = [('loops', [0, 1, 2, 4]), ('loops', [0, 1, 1, 3]),
+                    ('loops', np.array([0, 1, 2, 2**64-1], dtype=np.uint64)),
+                    ('polygon_starts', [1]), ('polygon_lengths', [3]), ('polygon_lengths', [5]),
+                    ('triangle_polygon', [0]), ('triangle_polygon', [0, 1]), ('triangle_polygon', [0., 0.]),
+                    ('loops', [0, 2, 1, 3]),  # stale polygon loops contradict actual phase triangles
+                    ('tri', [[0, 1, 3], [0, 1, 3]])]  # duplicate triangles, same shape/count
+        for field, value in variants:
+            broken = deepcopy(self.poses); broken[f'0.5::Panel::{field}'] = np.asarray(value)
+            with self.subTest(field=field, value=value):
+                self.assertEqual(self.check(broken, broken)['status'], 'unknown')
+        # A valid but different polygon boundary is also not the accepted correspondence.
+        changed = deepcopy(self.poses)
+        for g in (0., .5, 1.):
+            changed[f'{g}::Panel::loops'] = np.array([3, 2, 1, 0])
+            changed[f'{g}::Panel::tri'] = changed[f'{g}::Panel::tri'][:, ::-1]
+        self.assertEqual(self.check(changed)['status'], 'unknown')
+        phase_changed = deepcopy(self.poses)
+        phase_changed['0.5::Panel::loops'] = changed['0.5::Panel::loops']
+        phase_changed['0.5::Panel::tri'] = changed['0.5::Panel::tri']
+        self.assertEqual(self.check(phase_changed, phase_changed)['status'], 'unknown')
+
+    def test_ngon_and_multiple_polygon_ownership(self):
+        from .checks import _polygon_witness
+        obj = {'co': np.zeros((6, 3)), 'loops': np.array([0, 1, 2, 3, 4, 4, 3, 5]),
+               'polygon_starts': np.array([0, 5]), 'polygon_lengths': np.array([5, 3]),
+               'triangle_polygon': np.array([0, 1, 0, 0]),
+               'tri': np.array([[0, 1, 2], [4, 3, 5], [0, 2, 3], [0, 3, 4]])}
+        self.assertIsNone(_polygon_witness(obj, 6)[1])
+        obj['triangle_polygon'] = np.array([0, 0, 1, 0])  # right counts, wrong ownership
+        self.assertIsNotNone(_polygon_witness(obj, 6)[1])
+
+
 class StandardPolicyTests(unittest.TestCase):
     """The declaration becomes a PreservationPolicy that measures a native trial's saved poses."""
 
@@ -807,6 +893,30 @@ class PreservedPolicyTests(StandardPolicyTests):
         assessment = self.policy.assess(task, result, consumption)
         self.assertEqual(assessment['status'], 'unknown')
         self.assertEqual({c['cell']: c['status'] for c in assessment['checks']}['preserved_regions'], 'unknown')
+
+    def test_polygon_witness_is_measured_and_changed_witness_stales_retention(self):
+        task = self.policy.bind_task(self.item('trial', 'appearance_edit'), stage='apply', adapter='standard')
+        _, consumption = self.policy.prepare(task, {})
+        result = self.trial(hinged(), 'polygons')
+        arrays = states(hinged())
+        for g in PHASES:
+            for key, value in {'tri': TRI, 'loops': TRI.ravel(), 'polygon_starts': np.arange(len(TRI)) * 3,
+                               'polygon_lengths': np.full(len(TRI), 3), 'triangle_polygon': np.arange(len(TRI))}.items():
+                arrays[f'{g}::Skin::{key}'] = value
+        for name in ('evaluated.npz', 'source-evaluated.npz'):
+            np.savez(self.root / 'polygons' / name, **arrays)
+        result['preservation'] = self.policy.assess(task, result, consumption)
+        self.assertEqual(result['preservation']['status'], 'pass')
+        measured = result['preservation']['measurements']['outcomes']['standard_checks']['cells']['preserved_regions']
+        self.assertEqual(measured['detail']['regions'][0]['correspondence']['kind'], 'recorded_polygon_loops')
+        retain = self.item('retain', 'retention'); retain['payload']['candidate'] = result['subject']
+        retain['requires'] = {'trial': ['completed']}
+        retain = self.policy.bind_task(retain, stage='retain', adapter='standard', previous={'task': task, 'result': result})
+        self.policy.preflight(retain, {'trial': {'task': task, 'result': result}})
+        arrays['0.5::Skin::loops'] = arrays['0.5::Skin::loops'][::-1]
+        np.savez(self.root / 'polygons' / 'source-evaluated.npz', **arrays)
+        with self.assertRaisesRegex(ValueError, 'altered|changed'):
+            self.policy.preflight(retain, {'trial': {'task': task, 'result': result}})
 
     def test_a_changed_selection_invalidates_the_bound_policy(self):
         task = self.policy.bind_task(self.item('trial', 'appearance_edit'), stage='apply', adapter='standard')

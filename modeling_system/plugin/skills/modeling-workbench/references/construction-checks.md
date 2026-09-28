@@ -7,10 +7,13 @@ into numbers. Numbers can reject a candidate; they never approve its appearance,
 
 ## Poses
 
-Saved poses are arrays named `<phase>::<object>::co` (vertex positions) and `<phase>::<object>::tri` (triangles; only
-the rest phase's are needed), in one .npz file or one mapping. Phases are numbers and the lowest, 0, is the rest pose.
+Saved poses are arrays named `<phase>::<object>::co` (vertex positions) and `<phase>::<object>::tri` (triangles), in one
+.npz file or one mapping. Native captures keep the actual evaluated triangles at **every** pose: deforming quads and
+ngons can change their tessellation. Fold tracking and other existing rest-triangle checks need only rest triangles;
+collision queries must use the relevant pose's triangles. Phases are numbers and the lowest, 0, is the rest pose.
 `load_states(path)` reads them in phase order. A native trial saves the candidate's poses (`evaluated.npz`) and the
-source's (`source-evaluated.npz`) beside the saved candidate file.
+source's (`source-evaluated.npz`) beside the saved candidate file. New native captures also save ordered polygon
+connectivity at each pose for the regional correspondence check below; `load_states` keeps these fields.
 
 ## The declaration
 
@@ -207,9 +210,22 @@ baseline at every saved phase found it, mid-motion only. `preserved` declares th
    absolute, never an allowance over the baseline, and `limits` cannot change it.
 5. **Correspondence.** Vertex index `i` must be the same material in both captures.
    - The check needs finite real positions with one vertex count across the declared phases of both files.
-   - Every triangle array saved for the object, at any phase in either file, must be nonempty, integer, in range and
-     identical. It is usually saved at rest only, and that is what gets compared.
-   - Missing or differing positions or topology leave the check unknown.
+   - New `native_poses.evaluate` captures include four arrays per object and pose, taken from the same evaluated mesh:
+     `loops` (ordered polygon vertex IDs), `polygon_starts` and `polygon_lengths` (contiguous ranges into `loops`),
+     and `triangle_polygon` (the owning polygon of each pose-native triangle).
+   - Ordered polygon connectivity must agree across both files and all saved poses. Every witness must be complete,
+     integer, nonempty and in range, with at least three distinct vertices per polygon. Each polygon's native triangles
+     must use its vertices, number n-2, and reproduce its directed boundary with paired interior edges. This catches a
+     stale or contradictory witness while allowing different valid diagonals. It is a connectivity check, not a
+     geometric collision or non-overlap certificate.
+   - If **either** file has any witness field, every saved capture of that object in both files needs the complete
+     witness and native triangles. A partial or malformed witness never falls back to triangle-only evidence.
+   - Without any witness, the existing triangle-only contract remains: every saved triangle array must be nonempty,
+     integer, in range and identical across the files and saved poses. Legacy native captures with changing diagonals
+     remain unknown; acquire new captures. Do not delete phase triangles, substitute rest triangulation, or infer a
+     witness from triangle counts to turn them into a pass.
+   - Missing or differing positions or connectivity leave the check unknown. `detail.regions[].correspondence` reports
+     `recorded_polygon_loops` or `identical_triangles`, so the evidence used is explicit.
    - Equal topology does not prove vertex identity after an arbitrary reindexing: use source-corresponding captures of
      one mesh. Nothing is remapped.
 6. **Read the report.** The row's `observed` is the largest distance over all regions. `detail.worst` gives the region
@@ -227,12 +243,16 @@ baseline at every saved phase found it, mid-motion only. `preserved` declares th
      dependency hashes all carry it. A changed selection or declaration refuses the bound task. The measured candidate
      and baseline pose files are the assessment's evidence, and a changed one fails re-verification at retention. The
      measurement receipt keeps the check's detail (worst location, phases, regions).
+     Witness arrays are inside those same hashed capture files; editing one invalidates the assessment.
    - `trials.Trials` pins the declaration and selection files before a trial starts (in the job's dependency hashes),
      rechecks them before measuring, and at retention rechecks them with the measured pose files. Inputs changed
      during or after the trial refuse retention, whatever `waive_checks` says. A `preserved` block added to the
      declaration while a trial runs is not measured; run a new trial.
    - These pins prove the bytes did not change. They do not prove the baseline is the accepted state or that a label is
      right: that stays the owner's source record.
+   - Independent native reopen compares a new capture's polygon witness and native triangles at the **same** pose,
+     alongside position tolerance. It does not require triangles from different poses to agree. A legacy capture with
+     no witness keeps its former position-only reopen contract, explicitly labelled in the receipt.
 
 Errors and unknowns:
 - A malformed declaration, selection or phase spelling refuses with an error on both routes.
@@ -260,7 +280,7 @@ remain possible through a hand-written adapter when a question is not a standard
 
 ## Limits
 
-- Sampled phases do not certify the motion between them; triangles are the rest phase's. A preserved region that
+- Sampled phases do not certify the motion between them; existing fold checks track rest triangles. A preserved region that
   matches at every declared phase can still differ between them.
 - Clearance uses the obstacle's envelope seen from its centre. Near the obstacle's outline the envelope is uncertain,
   and a point that crosses it can read a small false shortfall; confirm a reported penetration against the surface.

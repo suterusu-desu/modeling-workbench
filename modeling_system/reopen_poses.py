@@ -4,7 +4,8 @@ Runs inside the isolated runner's Blender on a copy of the candidate file (JOB, 
 evaluates the same objects at the same poses as the trial and compares them with the trial's `evaluated.npz`
 (`JOB['candidate_evaluated']`). Writes `reopen-evaluated.npz` and `verification.json`: status passed when every
 position agrees within `JOB['tolerance']` (default 1e-6), the number of comparisons, the largest difference and the
-candidate's hash (`JOB['candidate_sha256']`).
+candidate's hash (`JOB['candidate_sha256']`). When the saved capture includes a polygon witness, its witness and
+native triangles must also reproduce exactly at each corresponding pose. Legacy captures are compared by position only.
 """
 import importlib.util
 import json
@@ -24,12 +25,24 @@ with np.load(JOB['candidate_evaluated']) as saved:
     missing = [k for k in keys if k not in saved.files]
     shape = [k for k in keys if k in saved.files and saved[k].shape != again[k].shape]
     differences = {k: float(np.abs(saved[k] - again[k]).max()) for k in keys if k in saved.files and k not in shape}
+    # New captures also reproduce their per-pose topology. This does not compare one pose's tessellation with another.
+    witness_fields = ('loops', 'polygon_starts', 'polygon_lengths', 'triangle_polygon')
+    witnessed = any(k.rsplit('::', 1)[-1] in witness_fields for k in saved.files)
+    topology_changed = []
+    if witnessed:
+        expected = {k for k in again if k.rsplit('::', 1)[-1] in (*witness_fields, 'tri')}
+        recorded = {k for k in saved.files if k.rsplit('::', 1)[-1] in (*witness_fields, 'tri')}
+        topology_changed = sorted(expected ^ recorded)
+        topology_changed += sorted(k for k in expected & recorded
+                                   if saved[k].dtype.kind not in 'iu' or not np.array_equal(saved[k], again[k]))
 largest = max(differences.values(), default=float('inf'))
 tolerance = float(JOB.get('tolerance', 1e-6))
-passed = not missing and not shape and bool(differences) and largest <= tolerance
+passed = not missing and not shape and not topology_changed and bool(differences) and largest <= tolerance
 (OUT_DIR / 'verification.json').write_text(json.dumps({
     'status': 'passed' if passed else 'failed', 'comparisons': len(differences), 'maximum': largest,
     'tolerance': tolerance, 'missing': missing, 'shape_changed': shape,
+    'polygon_witness': 'compared per pose' if witnessed else 'not recorded in source; positions only',
+    'topology_changed': topology_changed,
     'worst': max(differences, key=differences.get) if differences else None,
     'candidate': {'path': JOB['input'], 'sha256': JOB['candidate_sha256']}}, indent=1), encoding='utf-8')
 first = next(iter(JOB['poses']))

@@ -57,9 +57,12 @@ REVERSAL_SHARE = .02                # progress falling by more than this share o
 MOVER_SHARE = .2                    # vertices whose end chord exceeds this share of the largest are followed for reversals
 
 
+POLYGON_WITNESS = ('loops', 'polygon_starts', 'polygon_lengths', 'triangle_polygon')
+
+
 def load_states(source):
-    """Poses from an .npz path or a mapping of `<phase>::<object>::co|tri` arrays: {phase: {object: {'co', 'tri'}}},
-    ordered by phase value. Poses already in that nested form are returned in phase order."""
+    """Poses from an .npz path or `<phase>::<object>::field` arrays, retaining co, tri and polygon witness fields.
+    Returns {phase: {object: {field: array}}}, ordered by phase value; already nested poses are sorted likewise."""
     if isinstance(source, dict) and source and all(isinstance(v, dict) for v in source.values()):
         try:
             return dict(sorted(source.items(), key=lambda item: float(item[0])))
@@ -70,7 +73,7 @@ def load_states(source):
     states = {}
     for key in keys:
         parts = key.split('::')
-        if len(parts) != 3 or parts[2] not in ('co', 'tri'):
+        if len(parts) != 3 or parts[2] not in ('co', 'tri', *POLYGON_WITNESS):
             continue
         try:
             value = float(parts[0])
@@ -700,6 +703,88 @@ def _topology(states, name):
     return first.astype(np.int64), None
 
 
+def _polygon_witness(obj, count):
+    """Validate ordered polygon loops and their own pose's tessellation. No geometric collision claim is made."""
+    if any(key not in obj for key in ('co', 'tri', *POLYGON_WITNESS)):
+        return None, 'incomplete polygon witness (positions, native triangles and all four witness arrays required)'
+    if np.asarray(obj['co']).shape != (count, 3):
+        return None, 'polygon witness positions differ in vertex count or shape'
+    arrays = []
+    for key in POLYGON_WITNESS:
+        a = np.asarray(obj[key])
+        if (a.ndim != 1 or a.dtype.kind not in 'iu' or not len(a)
+                or int(a.min()) < 0 or int(a.max()) > np.iinfo(np.int64).max):
+            return None, f'polygon witness {key} needs nonempty nonnegative integer rows'
+        arrays.append(a.astype(np.int64))
+    loops, starts, lengths, owners = arrays
+    if (len(starts) != len(lengths) or np.any(lengths < 3)
+            or sum(map(int, lengths)) != len(loops)
+            or not np.array_equal(starts, np.r_[0, np.cumsum(lengths[:-1])])):
+        return None, 'polygon witness starts/lengths must partition the loops into polygons of at least three vertices'
+    if loops.max() >= count:
+        return None, 'polygon witness loops index past the vertices'
+    tri, why = _topology({'pose': {'object': obj}}, 'object')
+    if why or tri.max() >= count:
+        return None, 'polygon witness native triangles: ' + (why or 'indices exceed the vertex count')
+    if len(owners) != len(tri) or owners.max() >= len(starts):
+        return None, 'polygon witness triangle_polygon must name one in-range polygon per native triangle'
+    counts = np.bincount(owners, minlength=len(starts))
+    if not np.array_equal(counts, lengths - 2):
+        return None, 'polygon witness needs exactly n-2 native triangles per n-vertex polygon'
+    order = np.argsort(owners, kind='stable'); at = 0
+    for polygon, (start, length) in enumerate(zip(starts, lengths)):
+        vertices = list(map(int, loops[start:start + length])); vertex_set = set(vertices)
+        if len(vertex_set) != length:
+            return None, 'polygon witness repeats a vertex within a polygon'
+        boundary = {}
+        for a, b in zip(vertices, vertices[1:] + vertices[:1]):
+            boundary[min(a, b), max(a, b)] = 1 if a < b else -1
+        edges = {}
+        for t in tri[order[at:at + counts[polygon]]]:
+            a, b, c = map(int, t)
+            if len({a, b, c}) != 3 or not {a, b, c} <= vertex_set:
+                return None, 'native triangle vertices do not belong to their witnessed polygon'
+            for x, y in ((a, b), (b, c), (c, a)):
+                key = min(x, y), max(x, y)
+                uses, direction = edges.get(key, (0, 0))
+                edges[key] = uses + 1, direction + (1 if x < y else -1)
+        at += counts[polygon]
+        if (any(edges.get(key) != (1, direction) for key, direction in boundary.items())
+                or any(value != (2, 0) for key, value in edges.items() if key not in boundary)):
+            return None, 'native triangles do not tessellate the witnessed directed polygon boundary'
+    return (loops, starts, lengths), None
+
+
+def _correspondence(candidate, baseline, name, count):
+    """Stable recorded polygon loops when supplied, otherwise the strict legacy triangle contract.
+
+    Exact indexed connectivity supports a source-corresponding position comparison, not semantic identity after
+    arbitrary reindexing. A partial or bad witness never falls back to weaker evidence.
+    """
+    captures = [(what, phase, objects[name]) for what, states in (('candidate', candidate), ('baseline', baseline))
+                for phase, objects in states.items() if name in objects]
+    if any(any(key in obj for key in POLYGON_WITNESS) for _, _, obj in captures):
+        first = None
+        for what, phase, obj in captures:
+            witness, why = _polygon_witness(obj, count)
+            if why:
+                return None, f'{what} {name!r} phase {phase}: {why}'
+            if first is not None and any(not np.array_equal(a, b) for a, b in zip(first, witness)):
+                return None, f'{what} {name!r} phase {phase}: ordered polygon connectivity differs'
+            first = witness
+        return {'kind': 'recorded_polygon_loops', 'captures': len(captures), 'polygons': len(first[1]),
+                'triangles': 'phase-native; checked against each capture\'s polygon witness, never replaced'}, None
+    tri_c, why_c = _topology(candidate, name); tri_b, why_b = _topology(baseline, name)
+    if why_c or why_b:
+        return None, f'topology of {name!r}: ' + '; '.join(
+            f'{w}: {r}' for w, r in (('candidate', why_c), ('baseline', why_b)) if r)
+    if tri_c.shape != tri_b.shape or not np.array_equal(tri_c, tri_b):
+        return None, f'candidate and baseline triangles of {name!r} differ'
+    if tri_c.max() >= count:
+        return None, f'saved triangles of {name!r} index past its vertices'
+    return {'kind': 'identical_triangles', 'polygons': 'not recorded; differing tessellation requires new captures'}, None
+
+
 def _preserved(spec, cand, base_states, base, shown=20):
     """Selected vertex regions must match the accepted baseline at every declared phase: (largest distance, detail).
 
@@ -749,13 +834,9 @@ def _preserved(spec, cand, base_states, base, shown=20):
             elif not (np.isfinite(C).all() and np.isfinite(B).all()):
                 problem = f'positions of {name!r} are not all finite'
         if problem is None:
-            tri_c, why_c = _topology(cand, name); tri_b, why_b = _topology(base_states, name)
-            if why_c or why_b:
-                problem = f'topology of {name!r}: ' + '; '.join(f'{w}: {r}' for w, r in (('candidate', why_c), ('baseline', why_b)) if r)
-            elif tri_c.shape != tri_b.shape or not np.array_equal(tri_c, tri_b):
-                problem = f'candidate and baseline triangles of {name!r} differ'
-            elif len(tri_c) and tri_c.max() >= C.shape[1]:
-                problem = f'saved triangles of {name!r} index past its vertices'
+            correspondence, problem = _correspondence(cand, base_states, name, C.shape[1])
+            if problem is None:
+                row['correspondence'] = correspondence
         if problem is not None:
             row.update(status='unmeasured', reason=problem); rows.append(row); unmeasured = True
             detail['reasons'].append(f'{label}: {problem}')
@@ -867,7 +948,7 @@ def run_checks(declaration, candidate, baseline=None, *, base=None):
                          'kept inside its region, protected objects, preserved regions, clearance, folds, reversals, symmetry, how an '
                          'edge closes and how many blend shapes carry the motion',
             'limits': 'Numbers can reject a candidate, never approve its appearance. Baseline values are shown for '
-                      'comparison and do not gate. Triangles are the rest phase\'s; sampled phases do not certify the '
+                      'comparison and do not gate. Existing fold checks track rest triangles; sampled phases do not certify the '
                       'motion between them.'}
 
 

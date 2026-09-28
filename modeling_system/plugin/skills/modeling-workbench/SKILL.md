@@ -54,7 +54,9 @@ Before a planar re-layout, report its projected held boundary
 **check** - measure every candidate the same way from one declaration: rest identity, motion outside the region,
 protected objects, selected regions that must match the accepted baseline at declared phases, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and how many blend
 shapes carry the motion ([construction checks](references/construction-checks.md)); for the face, every shape, control
-and combination through the [face audit](references/face-checks.md). Diagnose persistent creases,
+and combination through the [face audit](references/face-checks.md). Native captures preserve polygon-loop correspondence
+separately from pose-native triangulation, so regional preservation can handle a deforming quad's changing diagonal.
+Diagnose persistent creases,
 crowding and section bends with [construction diagnostics](references/construction-diagnostics.md). Before
 editing for a mark seen in a render, trace its pixels to the recorded surfaces that could produce it
 ([find the geometry a visible defect belongs to](references/construction-diagnostics.md#find-the-geometry-a-visible-defect-belongs-to)).
