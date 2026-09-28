@@ -439,6 +439,24 @@ def plane(x0, x1, y0, y1, z=0., columns=9, rows=9):
 
 
 class ClosestPointTests(unittest.TestCase):
+    def test_zero_distance_vertex_query_survives_centroid_bound_roundoff(self):
+        from unittest.mock import patch
+        from scipy.spatial import cKDTree
+        class RoundedTree:
+            def __init__(self, positions): self.tree = cKDTree(positions)
+            def query(self, points): return self.tree.query(points)
+            def query_ball_point(self, points, radius):
+                # Reproduce a few ulps of cross-platform radius disagreement.
+                return self.tree.query_ball_point(points, np.asarray(radius)*(1-8*np.finfo(float).eps))
+        source = np.array([[0., 0, 0], [1, 0, 0], [.2, .2, 0], [0, 1, .3]])
+        tri = np.array([[0, 1, 2], [0, 2, 3]])
+        for scale, shift in ((1., 0.), (.001, 0.), (1., 1000.)):
+            co = source*scale+shift
+            with patch('scipy.spatial.cKDTree', RoundedTree):
+                result = closest_points(co, co, tri)
+            np.testing.assert_allclose(result['points'], co, atol=1e-12, rtol=0)
+            np.testing.assert_allclose(result['distances'], 0, atol=1e-12, rtol=0)
+
     def test_matches_an_exhaustive_search_on_random_queries(self):
         rng = np.random.default_rng(3)
         co, tri = plane(-1, 1, -1, 1, columns=7, rows=5)

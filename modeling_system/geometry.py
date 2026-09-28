@@ -98,7 +98,12 @@ def closest_points(points, positions, triangles):
     centroid = corners.mean(axis=1)
     radius = np.linalg.norm(corners - centroid[:, None], axis=2).max(axis=1)
     used = np.unique(tri)
-    bound = cKDTree(co[used]).query(Q)[0] * (1 + 1e-12) + 1e-300
+    # A query exactly at a surface vertex has a zero vertex-distance bound.
+    # Relative inflation alone then cannot cover rounding in the centroid/radius
+    # tree or the norm-minus-radius filter. Expand only the broad phase by a
+    # coordinate-scaled arithmetic allowance; candidate distances stay exact.
+    roundoff = 64*np.finfo(float).eps*np.maximum(np.max(np.abs(Q), axis=1), np.max(np.abs(co[used])))
+    bound = cKDTree(co[used]).query(Q)[0] * (1 + 1e-12) + roundoff + 1e-300
     lists = cKDTree(centroid).query_ball_point(Q, bound + radius.max())
     rows = np.repeat(np.arange(len(Q)), [len(x) for x in lists])
     cand = np.fromiter((t for x in lists for t in x), np.int64, len(rows))
