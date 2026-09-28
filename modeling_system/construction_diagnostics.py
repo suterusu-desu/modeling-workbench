@@ -3,6 +3,7 @@ from collections import defaultdict
 import hashlib
 import numpy as np
 from .geometry import validate
+from .source_coverage import source_coverage
 
 
 def _points(value):

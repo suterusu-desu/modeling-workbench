@@ -13,7 +13,7 @@ from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displa
 from .correction_scope import correction_scope
 from .motion_paths import (motion_pace, path_positions, hinge_motion, keep_clearance, end_clearance, schedule_pace,
                            shared_schedule, travel_weight, hinge_change, hinge_landing, hinge_carry, hinge_lift)
-from .construction_diagnostics import section_turns, closing_edges, line_depth
+from .construction_diagnostics import section_turns, closing_edges, line_depth, source_coverage
 from .guide_synthesis import (front_depth, behind_front, radius_map, onto_radius_map, remove_thin_relief, stationary_offset, pose_change, fit_depth_field,
                               evaluate_depth_field, change_band, band_excess, height_field_mesh, keep_in_front,
                               front_retreat, fit_band_field)
@@ -93,7 +93,7 @@ def pose_correspondence(guide_points, pose_points, pose_values):
             'limits': 'Finite saved correspondences only; smallest residual does not establish pose identity or visual acceptance.'}
 
 
-ARRAY_OPERATIONS = {'planar_fem_metric': planar_fem_metric, 'surface_fem_metric': surface_fem_metric,
+ARRAY_OPERATIONS = {'source_coverage': source_coverage, 'planar_fem_metric': planar_fem_metric, 'surface_fem_metric': surface_fem_metric,
     'relax_displacement': relax_displacement, 'rigid_deform': rigid_deform, 'conform_to_surface': conform_to_surface,
     'planar_relayout': planar_relayout, 'projected_boundary': projected_boundary,
     'correction_scope': correction_scope,

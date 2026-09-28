@@ -58,6 +58,8 @@ and combination through the [face audit](references/face-checks.md). Native capt
 separately from pose-native triangulation, so regional preservation can handle a deforming quad's changing diagonal.
 Diagnose persistent creases,
 crowding and section bends with [construction diagnostics](references/construction-diagnostics.md). Before
+judging a material redistribution from vertex feet alone, measure [source coverage](references/source-coverage.md)
+using explicit qualified correspondence; raster uncertainty and missing support remain visible. Before
 editing for a mark seen in a render, trace its pixels to the recorded surfaces that could produce it
 ([find the geometry a visible defect belongs to](references/construction-diagnostics.md#find-the-geometry-a-visible-defect-belongs-to)).
 

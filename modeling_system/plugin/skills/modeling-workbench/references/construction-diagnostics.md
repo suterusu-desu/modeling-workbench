@@ -4,6 +4,11 @@ Use these checks when an aggregate objective hides local ridges, a predicted sup
 
 ## Local shape and presentation
 
+For connected cells that may fold or lose/duplicate coverage despite supported vertices, use the separate
+[source-coverage diagnostic](source-coverage.md). It consumes explicit source-triangle/barycentric correspondence,
+actual pose triangles and qualified domains; it reports conservative UV-area intervals and sampled corresponding
+3D deviation without inferring anatomy or adding an acceptance gate.
+
 Pin the original and candidate arrays, topology, units/frame, chart correspondence, selection and viewing conditions. A common resampled chart permits a controlled comparison; it is not native subdivision or an exact native render. Keep actual native triangle sections as separate evidence. Do not compare tail counts across different sampling densities or exclusion masks as if only the surface changed.
 
 ```python
