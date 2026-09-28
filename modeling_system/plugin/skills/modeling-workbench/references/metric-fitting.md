@@ -483,6 +483,125 @@ Assigned mode additionally returns:
 
 `measured` refers only to the declared weighted support checks. It is not a
 coverage, collision, eye-clearance, likeness, solve-convergence or retention pass.
+
+## Preserve declared source-cell order during the fit
+
+Assigned ownership alone leaves tangential motion free. A vertex can remain near
+its correct support while its connected faces reverse or cross a held collar.
+For a qualified disk-shaped source chart, `conform_to_surface` can instead solve
+for explicit barycentric correspondence **during** each coupled ARAP step:
+
+```python
+result = conform_to_surface(
+    reference, initial, triangles, held, support_positions, support_triangles,
+    units="m", frame="registered frame", relative_area_tolerance=1e-12,
+    support_domains=source_domains, support_assignment=vertex_domains,
+    qualified_domains=[0, 1], support_weights=weights,
+    lower=lower, upper=upper, distance_tolerance=1e-8,
+    ordered_charts=[{
+        "support_triangle_ids": qualified_chart_faces,
+        "source_uv": source_uv,
+        "candidate_triangle_ids": connected_candidate_faces,
+        "vertex_source_triangles": declared_vertex_cells,
+        "initial_barycentric": declared_initial_barycentrics,
+        "minimum_area_ratio": 0.1,
+        "boundary_mode": "fixed",
+    }],
+    ordered_max_iterations=100, iterations=50,
+)
+```
+
+The numbers above illustrate the API; qualify tolerances and the minimum area
+ratio for the intended construction. Each chart dictionary has exactly these
+seven fields. Indices refer to the original supplied arrays, not a reindexed
+subset:
+
+- `support_triangle_ids` selects one caller-qualified source chart in one
+  assigned support domain. `source_uv` is a finite `(len(support_positions),2)`
+  chart. The selected source faces must form a consistently oriented manifold
+  disk with a simple boundary, nondegenerate UV faces and no UV overlap.
+- `candidate_triangle_ids` selects the complete connected candidate disk to
+  protect, including its boundary and incident faces within that disk. Every
+  vertex in it must have positive support weight and that same qualified owner.
+  Separate charts may not share candidate vertices; unlisted triangles,
+  cross-chart joins and unconstrained material are explicitly outside the order
+  contract. `uncovered_triangle_ids` lists them.
+- `vertex_source_triangles` is an integer array of length `len(initial)`. Each
+  selected vertex names one actual triangle in the selected source chart: its
+  **admissible cell**, not a nearest-point guess. `initial_barycentric` is a
+  finite `(len(initial),3)` array; selected rows are nonnegative and sum to one.
+  Unselected rows are ignored (use `-1` and finite zero rows).
+- `minimum_area_ratio` is strictly between `1e-6` and `1`: every selected UV
+  triangle must retain at least that fraction of its positive **initial mapped
+  area**. This is a declared compression bound, not an anatomical default.
+- `boundary_mode="fixed"` explicitly fixes the entire initial chart boundary
+  in UV and XYZ, **including vertices otherwise free in the larger patch**.
+  Existing held interior vertices also stay exact. Only chart interiors can
+  redistribute. Choose this boundary as part of the construction; do not freeze
+  a defective join merely to use this operator.
+
+The initial connected UV disk must lie entirely within the qualified source
+chart. Its fixed boundary defines the footprint preserved here; the tool does
+not assert that this is the intended whole source footprint. Initial XYZ must
+realize the supplied barycentrics within `distance_tolerance`, including held
+vertices, and their normal bands must include zero. The small initial XYZ
+residual is retained exactly, reported and never silently snapped. A new support
+pose therefore needs an explicitly constructed feasible starting correspondence;
+passing the old positions against a changed surface is not automatic transport.
+
+Interior vertices vary continuously within their declared source triangles.
+Their exact affine source lift replaces the nearest-foot normal penalty there;
+unlisted free material retains the existing normal-band/ARAP objective. The
+entire patch uses the same cotangent metric, local rotations, coupled XYZ
+objective and held positions. A constrained numerical solve changes its search
+direction under cell and face-area constraints. An analytic quadratic area
+bound also prevents an accepted straight step from crossing a collapsed UV
+triangle, even if both endpoints would be positive. Final normal projection
+cannot move ordered vertices outside this parameterization.
+
+This is a **bounded source-cell mode**, not a general sliding chart solver.
+Cells never change automatically. A vertex at a source triangle corner may have
+only a narrow allowed direction; a desired move across that cell edge requires
+the caller to revise its qualified correspondence/construction. Material indices
+are not frozen in the interior, and no nearest-point or anatomy inference chooses
+the cells. Curved triangulated sources work because each selected cell has its
+own affine 3D lift. Do not substitute coarse source triangles that change the
+qualified shape merely to make larger cells.
+
+Read `ordered_report` together with `public_metrics`, `assignment_report` and
+the actual returned geometry:
+
+- `invalid_initial`: a source realization, band or initial orientation conflict;
+  no deformation was attempted, `feasible=false`, and the initial state is
+  returned with reasons. Malformed or ambiguous chart/topology declarations
+  refuse with `ValueError`.
+- `blocked`: the local constrained search could not make an admissible useful
+  step, or there were no movable variables. The last feasible state is returned;
+  it is not a completed requested endpoint or proof of global infeasibility.
+- `iteration_limit`: finite work ended without the full convergence criteria.
+  `converged` requires successful inner optimization plus the existing outer
+  energy, position and active-set criteria. A constrained optimum need not match
+  the rest shape or achieve a desired modeling correction.
+
+Reports retain actual source triangle IDs, resulting barycentrics/UV, fixed
+boundary IDs, area-limited faces, cell-boundary vertices, inner-solver outcomes,
+accepted step fractions, numerical tolerances and a combined input revision.
+`feasible=true` describes the declared numerical chart/cell constraints only.
+Qualification uses finite clipping and boundary tests in normalized UV, not
+exact arithmetic. Each chart is bounded to 4096 source/candidate faces, two
+million containment pairs and 200000 overlap pairs; the coupled solve is bounded
+to 1500 variables and 1–1000 inner iterations per outer step.
+
+Positive connected faces and a fixed simple disk boundary preserve the declared
+piecewise-linear **UV footprint**. Actual 3D candidate edges/faces connect lifted
+vertices by straight segments; their interiors need not follow a curved source
+across its triangle edges. This does not certify actual 3D coverage, surface
+distance, absence of folds/collisions, tangent or bending quality, cross-chart
+joins, swept motion or appearance. Continue to measure
+[source coverage](source-coverage.md), the actual connected surface and the
+visible result. This option neither repairs an already reversed starting map
+nor changes native trial/retention requirements. Without `ordered_charts`, the
+existing fitter and its convergence behavior are unchanged.
 Keep unweighted/inferred regions visible; no support claim applies there. Pin
 source/candidate captures, parameters and private qualification evidence alongside
 the report. By default assigned mode uses 1e-6 of the smallest consumed domain's

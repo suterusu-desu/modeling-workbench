@@ -524,7 +524,8 @@ def _support_query(support, points):
 def conform_to_surface(reference, initial, triangles, held, support_positions, support_triangles, *, units, frame,
                        relative_area_tolerance, lower=0., upper=0., support_weights=1., band_weight=1e3, iterations=50,
                        tolerance=1e-9, compressed_below=.5, project_active=True, distance_tolerance=None,
-                       position_tolerance=None, support_domains=None, support_assignment=None, qualified_domains=None):
+                       position_tolerance=None, support_domains=None, support_assignment=None, qualified_domains=None,
+                       ordered_charts=None, ordered_max_iterations=100):
     """As-rigid-as-possible deformation of a patch whose free vertices are kept on (or within an offset band of) an
     arbitrary oriented triangle support surface, measured along the support's own normal.
 
@@ -551,6 +552,12 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     Weighted vertices search only their assigned domain, with independent normals, throughout this same coupled solve.
     Assignment cannot qualify anatomy or prevent boundary escape; assignment_report distinguishes measured support
     from unknown/outside support even when the normal-band residual is zero. No raw section curve is converted here.
+
+    Optional ordered_charts adds caller-declared source triangle cells, initial barycentric correspondence and
+    connected chart faces to assigned mode. The coupled global step solves for interior barycentrics within those
+    cells, enforcing positive mapped face area and the explicitly fixed initial UV footprint boundary. Chart vertices
+    must initially realize their source coordinates within distance_tolerance; zero must lie in their normal band.
+    Held positions stay exact. See the operator page for the bounded disk/cell contract and blocked-step semantics.
     """
     from scipy.sparse import coo_matrix, kron, identity
     from scipy.sparse.linalg import factorized
@@ -623,6 +630,13 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     solve = factorized(laplacian[free][:, free].tocsc()); coupling = laplacian[free][:, fixed]
     stiffness3 = kron(laplacian[free][:, free], identity(3), format='csr')
     position_in_free = np.full(m, -1, np.int64); position_in_free[free] = np.arange(len(free))
+    order = None
+    if ordered_charts is not None:
+        if not assigned:
+            raise ValueError('Ordered source charts require explicit assigned support domains')
+        from .ordered_fitting import OrderedFit
+        order = OrderedFit(ordered_charts, rest, start, tri, used, free, mask, sc.astype(float), st,
+            labels, assignment, qualified, low, high, weight, tol, ordered_max_iterations)
 
     def query(y, which):
         out = {'offset': np.full(m, np.nan), 'normal': np.zeros((m, 3)), 'closest': np.full((m, 3), np.nan),
@@ -637,6 +651,8 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
                 out['triangle'] = np.full(m, -1, np.int64)
                 for label, part in domains.items():
                     selected = ids[assignment[used[ids]] == label]
+                    if order is not None:
+                        selected = selected[order.owner[used[selected]] < 0]
                     if not len(selected):
                         continue
                     q = _support_query(part, y[selected])
@@ -646,6 +662,8 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
                     q['triangle'] = part['original_triangle_ids'][q['triangle']]
                     for key in out:
                         out[key][selected] = q[key]
+                if order is not None:
+                    order.query(y, which, domains, assignment, out)
         elif assigned:
             out['triangle'] = np.full(m, -1, np.int64)
         return out
@@ -656,6 +674,10 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     def constraint(q):
         # Active: outside the band along the normal. The penalty's plane: n . y = n . closest + violated bound.
         active = constrained & ((q['offset'] < low_l) | (q['offset'] > high_l))
+        if order is not None:
+            # Ordered variables already realize their declared source cells. Adding a
+            # redundant normal penalty can only amplify floating-point residuals.
+            active &= order.owner[used] < 0
         bound = np.where(q['offset'] < low_l, low_l, high_l)
         level = np.where(active, np.sum(q['normal'] * q['closest'], axis=1) + np.where(active, bound, 0.), 0.)
         return active, level
@@ -671,7 +693,7 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     initial_component = q['component'].copy()
     active, level = constraint(q)
     energies, converged, set_changes, component_changes, last_move = [], False, 0, 0, 0.
-    for _ in range(int(iterations)):
+    for _ in range(int(iterations) if order is None or order.initial_valid else 0):
         r = _arap_rotations(i, j, w, edges, x, m)
         right = _arap_right(i, j, w, edges, r, m)
         previous = x.copy()
@@ -684,10 +706,17 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
             system = stiffness3 + coo_matrix((block.ravel(), (rows.ravel(), cols.ravel())), shape=stiffness3.shape)
             load = right[free] - coupling @ x[fixed]
             load[at] += (kappa[ids] * level[ids])[:, None] * q['normal'][ids]
-            x[free] = factorized(system.tocsc())(load.ravel()).reshape(-1, 3)
+            if order is None:
+                x[free] = factorized(system.tocsc())(load.ravel()).reshape(-1, 3)
         else:
-            for k in range(3):
-                x[free, k] = solve(right[free, k] - coupling @ x[fixed, k])
+            if order is None:
+                for k in range(3):
+                    x[free, k] = solve(right[free, k] - coupling @ x[fixed, k])
+            else:
+                system, load = stiffness3, right[free] - coupling @ x[fixed]
+        inner_settled = True
+        if order is not None:
+            x, inner_settled = order.solve(system, load, x)
         energies.append(energy(x, _arap_rotations(i, j, w, edges, x, m), q, active, level))
         last_move = float(np.linalg.norm(x - previous, axis=1).max())
         fresh = query(x, watched)
@@ -696,17 +725,21 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
         now, level = constraint(q)
         changed = not np.array_equal(now, active); set_changes += int(changed); active = now
         # Closest points can keep sliding on an energy plateau: with a support the last step must be small too.
-        if (not changed and len(energies) > 1
+        if (inner_settled and not changed and len(energies) > 1
                 and abs(energies[-2] - energies[-1]) <= tolerance * max(energies[-2], 1e-300)
                 and (not constrained.any() or last_move <= step_tol)):
             converged = True; break
+        if order is not None and order.blocked:
+            break
     if not np.isfinite(x).all():
         raise ValueError('Surface-constrained deformation did not produce finite positions; qualify the held set')
     penalty_residual = float(residual(q)[constrained].max()) if constrained.any() else 0.
     projection_changes, projection_moves = 0, 0.
-    if project_active:
+    if project_active and (order is None or order.initial_valid):
         for _ in range(3):
             active_now, _level = constraint(q)
+            if order is not None:
+                active_now &= order.owner[used] < 0
             if not active_now.any():
                 break
             bound = np.where(q['offset'] < low_l, low_l, high_l)
@@ -746,7 +779,8 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     switched = int(np.count_nonzero(c & (after['component'] != initial_component)))
     metrics = {'free_vertices': int(len(free_ids)), 'held_vertices': int(len(fixed_ids)),
                'support_vertices': int(c.sum()), 'unconstrained_free_vertices': int((is_free & ~c).sum()),
-               'iterations': len(energies), 'converged': converged, 'energy_first': energies[0], 'energy_last': energies[-1],
+               'iterations': len(energies), 'converged': converged, 'energy_first': energies[0] if energies else None,
+               'energy_last': energies[-1] if energies else None,
                'last_step_max_move': last_move, 'position_tolerance': step_tol, 'clamped_weights': clamped,
                'band_active': int(active.sum()), 'projection_max_move': projection_moves,
                'band_set_changes': set_changes, 'band_penalty_residual': penalty_residual, 'band_projected': project_active,
@@ -783,7 +817,8 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     if held_conflict.any():
         warnings.append('Held vertices lie off their support band; they keep their exact positions')
     if not converged:
-        warnings.append('Iteration limit reached before the band set, energy and positions settled')
+        warnings.append(('Iteration limit reached' if order is None else 'Solve stopped') +
+                        ' before the band set, energy and positions settled')
     if measured.sum() < len(tri):
         warnings.append('Support facing measured on %d of %d patch triangles (the rest have a vertex with zero weight)'
                         % (int(measured.sum()), len(tri)))
@@ -803,6 +838,8 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
     if assigned:
         from .construction_diagnostics import _revision
         unknown = watched & ((after_residual > tol) | (after['beyond'] > tol))
+        if order is not None:
+            unknown |= watched & (order.owner[used] >= 0) & ((after['distance'] > tol) | (not order.initial_valid))
         source_triangle = np.full(n, -1, np.int64); source_triangle[used] = after['triangle']
         result['assigned_support_triangle'] = source_triangle
         result['assignment_report'] = {
@@ -819,6 +856,31 @@ def conform_to_surface(reference, initial, triangles, held, support_positions, s
             'limits': 'Caller qualification is not anatomical or appearance approval. Nearest feet stay inside the '
                       'assigned connected domain; the solve does not pull escaped material back across its boundary. '
                       'Zero normal-band residual alone is insufficient. No coverage, collision or retention verdict.'}
+    if order is not None:
+        result['ordered_report'] = order.report(converged)
+        import hashlib
+        import json
+        revision = {'assigned_input': result['assignment_report']['input_revision'],
+            'charts': [{k: c[k] for k in ('array_sha256', 'minimum_area_ratio')} for c in result['ordered_report']['charts']],
+            'numerics': result['ordered_report']['numerics'], 'boundary_mode': 'fixed',
+            'fit_parameters': {'units': units, 'frame': frame, 'iterations': int(iterations),
+                'relative_area_tolerance': float(relative_area_tolerance), 'tolerance': float(tolerance),
+                'band_weight': float(band_weight), 'compressed_below': float(compressed_below),
+                'position_tolerance': step_tol, 'project_active': project_active}}
+        result['ordered_report']['input_revision'] = hashlib.sha256(
+            json.dumps(revision, sort_keys=True, allow_nan=False).encode()).hexdigest()
+        result['objective'] = ('Intrinsic-cotangent ARAP with ordered chart interiors parameterized by variable '
+            'barycentrics inside explicit source cells, connected face area lower bounds and fixed chart boundaries; '
+            'unlisted weighted free vertices retain the closest-support normal-band penalty; held positions exact')
+        result['assignment_report']['limits'] = ('Ordered vertices use declared source cells and barycentrics; '
+            'unlisted weighted vertices use their assigned closest support. Unknown includes invalid ordered '
+            'correspondence. Source ownership/support measurements do not certify connected order, coverage, '
+            'collision, appearance or retention; read ordered_report separately.')
+        result['limits'] = result['ordered_report']['limits']
+        if not order.initial_valid:
+            warnings.append('Invalid initial ordered correspondence; no deformation was attempted')
+        elif order.blocked:
+            warnings.append('Ordered constrained step blocked; returned state is not a completed requested fit')
     return result
 
 
