@@ -757,7 +757,7 @@ class ModelingService:
                 'public_metrics':result['public_metrics'],'limits':result['limits']}
 
     def construct(self, operation: str, inputs: str, output: str, arguments: dict | None = None) -> dict:
-        """Run one packaged construction or diagnostic array operation (hinge_landing, hinge_lift, hinge_carry, hinge_change, path_positions, keep_clearance, end_clearance, closing_edges, line_depth, section_turns, compare_stretch, rigid_deform, conform_to_surface, relax_displacement and the other ArrayPreparation operations). Array arguments come from the inputs .npz by name, other arguments from `arguments`; array results are written to a new output .npz and everything else is returned."""
+        """Run one packaged construction or diagnostic array operation (hinge_landing, hinge_lift, hinge_carry, hinge_change, path_positions, keep_clearance, end_clearance, closing_edges, line_depth, section_turns, compare_stretch, rigid_deform, conform_to_surface, relax_displacement, projected_boundary and the other ArrayPreparation operations). Array arguments come from the inputs .npz by name, other arguments from `arguments`; array results are written to a new output .npz and everything else is returned."""
         import numpy as np
         from .preparation import ARRAY_OPERATIONS
         if operation not in ARRAY_OPERATIONS: raise ValueError('Unknown construction operation: '+operation)

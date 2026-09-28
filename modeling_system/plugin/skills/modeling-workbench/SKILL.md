@@ -48,6 +48,8 @@ a candidate; approval comes from looking at the whole motion.
 roll, clearance, attached parts carried on the edge ([motion paths](references/motion-paths.md)); bake it to the fewest
 blend shapes plus a clip curve, write the Unity .anim and round-trip the FBX ([bake](references/bake.md)). Deformers and guide
 volume fits are bounded clean-up of a surface, not the way to create motion ([metric fitting](references/metric-fitting.md)).
+Before a planar re-layout, report its projected held boundary
+([check the projected boundary](references/metric-fitting.md#check-the-projected-boundary-before-the-layout)).
 
 **check** - measure every candidate the same way from one declaration: rest identity, motion outside the region,
 protected objects, clearance, folds, reversals, symmetry, how an edge closes, the closed line's depth and how many blend

@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 from scipy.sparse import coo_matrix, diags
 from .metric_fitting import (planar_fem_metric, surface_fem_metric, relax_displacement, rigid_deform, conform_to_surface,
-                             planar_relayout, smooth_region)
+                             planar_relayout, projected_boundary, smooth_region)
 from .geometry import closest_points, nearest_surface
 from .preparation import ArrayPreparation
 
@@ -786,6 +786,223 @@ class PlanarRelayoutTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class ProjectedBoundaryTests(unittest.TestCase):
+    """Boundary loops of a patch in a projection plane (x right, z up; y is the depth the projection drops)."""
+    units = {'units': 'synthetic length', 'frame': 'synthetic orthonormal'}
+
+    @staticmethod
+    def fan(ring, centre, depth=None):
+        """A disc: one centre vertex (index 0) joined to a counter-clockwise ring (indices 1..m)."""
+        ring = np.asarray(ring, float); xz = np.r_[[centre], ring]
+        y = np.zeros(len(xz)) if depth is None else np.r_[0., depth]
+        m = len(ring)
+        return np.c_[xz[:, 0], y, xz[:, 1]], np.array([[0, 1 + k, 1 + (k + 1) % m] for k in range(m)])
+
+    @staticmethod
+    def grid(n):
+        x, z = np.meshgrid(np.arange(n, dtype=float), np.arange(n, dtype=float))
+        positions = np.c_[x.ravel(), np.zeros(n * n), z.ravel()]
+        index = np.arange(n * n).reshape(n, n)
+        return positions, grid_triangles(n, n), index
+
+    def report(self, positions, triangles, **options):
+        return projected_boundary(positions, triangles, **self.units, **options)
+
+    def test_a_convex_loop_and_a_simple_reflex_loop(self):
+        square = self.report(*self.fan([[0, 0], [1, 0], [1, 1], [0, 1]], [.5, .5]))
+        loop = square['loops'][0]
+        self.assertEqual(loop['vertices'], [1, 2, 3, 4]); self.assertEqual(loop['orientation'], 'counterclockwise')
+        self.assertAlmostEqual(loop['signed_area'], 1.); self.assertEqual(loop['turning_number'], 1)
+        self.assertEqual(loop['reflex_corners'], []); self.assertEqual(loop['convex_corners'], 4)
+        ell = self.report(*self.fan([[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]], [.5, .5]))
+        corners = ell['loops'][0]['reflex_corners']
+        self.assertEqual([c['vertex'] for c in corners], [4])            # the inner corner of the L, ring point (1, 1)
+        self.assertAlmostEqual(corners[0]['domain_angle_degrees'], 270.)
+        metrics = ell['public_metrics']
+        self.assertEqual((metrics['crossings'], metrics['touches'], metrics['reflex_corners']), (0, 0, 1))
+        self.assertEqual(ell['loops'][0]['interior_angles'], 'defined on the domain side')
+
+    def test_a_projected_bow_tie_crosses_and_leaves_interior_angles_undefined(self):
+        # The ring's far end twists: the two sheets are 0.5 apart in depth, and cross only in the projection.
+        positions, triangles = self.fan([[0, 0], [2, 2], [2, 0], [0, 2]], [1, .5], depth=[0, .5, .5, 0])
+        result = self.report(positions, triangles)
+        self.assertEqual(result['public_metrics']['crossings'], 1)
+        crossing = result['crossings'][0]
+        self.assertEqual(sorted(tuple(e['edge']) for e in crossing['edges']), [(1, 2), (3, 4)])
+        np.testing.assert_allclose(crossing['point'], [1, 1])
+        loop = result['loops'][0]
+        self.assertEqual(loop['turning_number'], 0); self.assertIsNone(loop['reflex_corners'])
+        self.assertTrue(loop['interior_angles'].startswith('undefined'))
+        self.assertIn('crossing', loop['issues'])
+
+    def test_touches_overlaps_backtracking_and_collapsed_edges(self):
+        touch = self.report(*self.fan([[0, 0], [4, 0], [4, 4], [2, 0], [0, 4]], [1, 2]))
+        self.assertEqual(touch['public_metrics']['crossings'], 0)
+        self.assertEqual(sorted(tuple(t['edges'][1]['edge']) for t in touch['touches']), [(3, 4), (4, 5)])
+        self.assertTrue(all(t['edges'][0]['edge'] == [1, 2] for t in touch['touches']))
+        overlap = self.report(*self.fan([[0, 0], [4, 0], [4, 2], [3, 0], [1, 0], [0, 2]], [2, 1.5]))
+        self.assertEqual(len(overlap['collinear_overlaps']), 1)
+        self.assertAlmostEqual(overlap['collinear_overlaps'][0]['overlap_length'], 2.)
+        back = self.report(*self.fan([[0, 0], [2, 0], [1, 0], [1, 2]], [.5, 1]))
+        self.assertEqual([b['vertex'] for b in back['adjacent_overlaps']], [2])   # (2, 0) folds back along (0,0)-(2,0)
+        collapsed = self.report(*self.fan([[0, 0], [1, 0], [1, 0], [1, 1], [0, 1]], [.5, .5], depth=[0, 0, .3, 0, 0]))
+        self.assertEqual([c['edge'] for c in collapsed['collapsed_edges']], [[2, 3]])
+        self.assertIsNone(collapsed['loops'][0]['reflex_corners'])
+        # Ordinary adjacent edges of a clean loop are never reported.
+        clean = self.report(*self.fan([[0, 0], [1, 0], [1, 1], [0, 1]], [.5, .5]))
+        self.assertEqual(clean['touches'] + clean['adjacent_overlaps'] + clean['collapsed_edges'], [])
+
+    def test_separate_components_holes_and_pinched_vertices(self):
+        a, ta = self.fan([[0, 0], [1, 0], [1, 1], [0, 1]], [.5, .5])
+        b, tb = self.fan([[3, 0], [4, 0], [4, 1], [3, 1]], [3.5, .5])
+        two = self.report(np.r_[a, b], np.r_[ta, tb + len(a)])
+        self.assertEqual((two['public_metrics']['components'], two['public_metrics']['loops']), (2, 2))
+        self.assertEqual([loop['inside_loops'] for loop in two['loops']], [[], []])
+        # An annulus: a 4x4 grid without its middle quad. The hole is a second loop of the same component; seen from
+        # the material its four corners are reflex, which an outer convex loop says nothing about.
+        positions, triangles, index = self.grid(4)
+        hole = [r for r, t in enumerate(triangles) if set(t) <= set(index[1:3, 1:3].ravel())]
+        ring = self.report(positions, np.delete(triangles, hole, axis=0))
+        self.assertEqual((ring['public_metrics']['components'], ring['public_metrics']['loops']), (1, 2))
+        outer, inner = sorted(ring['loops'], key=lambda loop: -abs(loop['signed_area']))
+        self.assertEqual((outer['orientation'], inner['orientation']), ('counterclockwise', 'clockwise'))
+        self.assertEqual(inner['inside_loops'], [outer['loop']]); self.assertEqual(outer['inside_loops'], [])
+        self.assertEqual(outer['reflex_corners'], []); self.assertEqual(len(inner['reflex_corners']), 4)
+        self.assertEqual(sorted(inner['vertices']), sorted(index[1:3, 1:3].ravel().tolist()))
+        # Two discs sharing one ring vertex: the loops split there instead of tracing a figure of eight.
+        c, tc = self.fan([[1, 1], [2, 1], [2, 2], [1, 2]], [1.5, 1.5])
+        shared = np.r_[a, c[[0, 2, 3, 4]]]
+        tc = np.where(tc == 1, 3, np.where(tc == 0, 5, tc + 4))           # c's first ring point is a's point (1, 1)
+        pinch = self.report(shared, np.r_[ta, tc])
+        self.assertEqual(pinch['pinched_vertices'], [3])
+        self.assertEqual(pinch['public_metrics']['loops'], 2)
+        self.assertEqual(sorted(len(loop['vertices']) for loop in pinch['loops']), [4, 4])
+        self.assertEqual(pinch['public_metrics']['ambiguous_vertices'], 0)
+        # Two simple loops that cross each other: neither is called a hole of the other.
+        d, td = self.fan([[.5, .5], [1.5, .5], [1.5, 1.5], [.5, 1.5]], [1, 1])
+        crossing = self.report(np.r_[a, d], np.r_[ta, td + len(a)])
+        self.assertEqual(crossing['public_metrics']['crossings'], 2)
+        self.assertEqual([loop['inside_loops'] for loop in crossing['loops']], [[], []])
+        self.assertEqual([loop['nesting_unresolved_with'] for loop in crossing['loops']], [[1], [0]])
+
+    def test_the_free_domain_is_what_planar_relayout_re_lays(self):
+        positions, triangles, index = self.grid(7)
+        free = np.zeros(len(positions), bool); free[index[2:5, 2:5].ravel()] = True
+        patch = self.report(positions, triangles)
+        self.assertEqual(patch['public_metrics']['domain'], 'the supplied patch')
+        self.assertEqual(len(patch['loops'][0]['vertices']), 24)             # the outer perimeter of the patch
+        domain = self.report(positions, triangles, free=free)
+        loop = domain['loops'][0]
+        # The held ring around the free block; two of its corners lie only on triangles without a free vertex.
+        ring = set(index[1:6, 1:6].ravel().tolist()) - set(index[2:5, 2:5].ravel().tolist())
+        self.assertLessEqual(set(loop['vertices']), ring); self.assertEqual(len(loop['vertices']), 14)
+        self.assertEqual(ring - set(loop['vertices']), {int(index[1, 5]), int(index[5, 1])})
+        self.assertFalse(free[loop['vertices']].any())
+        self.assertEqual(domain['public_metrics']['interior_held_vertices'], 0)
+        # A held handle inside the free region is not on any loop: it is reported, not qualified.
+        handle = free.copy(); handle[index[3, 3]] = False
+        held_inside = self.report(positions, triangles, free=handle)
+        self.assertEqual(held_inside['interior_held_vertices'], [int(index[3, 3])])
+        rim = free.copy(); rim[index[0, 3]] = True
+        self.assertEqual(self.report(positions, triangles, free=rim)['free_on_patch_boundary'], [int(index[0, 3])])
+        with self.assertRaisesRegex(ValueError, 'belong to the patch'):     # as planar_relayout, no silent subset
+            self.report(np.r_[positions, [[9., 9, 9]]], triangles, free=np.r_[np.flatnonzero(free), len(positions)])
+
+    def test_malformed_topology_is_reported_and_malformed_arrays_refuse(self):
+        positions, triangles = self.fan([[0, 0], [1, 0], [1, 1], [0, 1]], [.5, .5])
+        fin = self.report(np.r_[positions, [[.5, 1, .5]]], np.r_[triangles, [[0, 1, 5]]])   # a third face on edge (0, 1)
+        self.assertEqual(fin['nonmanifold_edges'], [[0, 1]])
+        flipped = triangles.copy(); flipped[0] = flipped[0, ::-1]
+        wound = self.report(positions, flipped)
+        self.assertEqual(wound['public_metrics']['inconsistent_edges'], 2)
+        self.assertGreater(wound['public_metrics']['open_chains'], 0)
+        for bad, message in ((np.r_[triangles, triangles[:1]], 'Duplicate'), (np.r_[triangles, [[1, 1, 2]]], 'repeats'),
+                             (triangles + 10, 'indexing')):
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                self.report(positions, bad)
+        with self.assertRaisesRegex(ValueError, 'orthonormal'):
+            self.report(positions, triangles, plane_basis=[[1, 0, 0], [1, 0, 0]])
+        with self.assertRaisesRegex(ValueError, 'orthonormal'):
+            self.report(positions, triangles, plane_basis=[[1 + 1e-6, 0, 0], [0, 0, 1]])
+        with self.assertRaisesRegex(ValueError, 'integer axes'):
+            self.report(positions, triangles, plane_axes=(0, 2.5))
+        # A closed part touching the ring at one vertex: its boundary degree stays 2, yet it has two triangle fans.
+        tetra = np.array([[1., .3, 0], [1., .6, .3], [1.3, .5, 0]])
+        closed = np.array([[1, 6, 5], [1, 7, 6], [1, 5, 7], [5, 6, 7]])
+        touching = self.report(np.r_[positions, tetra], np.r_[triangles, closed])
+        self.assertEqual(touching['multi_fan_vertices'], [1]); self.assertEqual(touching['pinched_vertices'], [])
+        self.assertEqual(sorted(c['euler_characteristic'] for c in touching['components']), [1, 2])
+        alone = self.report(np.r_[positions, tetra], closed)
+        self.assertEqual(alone['public_metrics']['loops'], 0); self.assertIn('no boundary', alone['warnings'][0])
+        # A sheet seen edge on: the boundary has no span in this plane.
+        edge_on = self.report(np.array([[1., 0, .5], [0, 0, 0], [0, 0, 1], [0, 0, 2]]),
+                              np.array([[0, 1, 2], [0, 2, 3]]), plane_axes=(0, 1), tolerance=1e-12)
+        self.assertEqual(edge_on['public_metrics']['collapsed_edges'], 2)
+        self.assertIsNone(edge_on['loops'][0]['reflex_corners'])
+        with self.assertRaisesRegex(ValueError, 'units and frame'):
+            projected_boundary(positions, triangles, units='', frame='f')
+
+    def test_scale_translation_tolerance_and_supplied_indexing(self):
+        # A vertex 1e-3 from a non-adjacent edge (a near touch); the patch sits among unused vertices at shifted IDs.
+        ring = [[0, 0], [4, 0], [4, 4], [2, 1e-3], [0, 4]]
+        positions, triangles = self.fan(ring, [1, 2])
+        offset = 7; big = np.zeros((offset + len(positions) + 3, 3)); big[offset:offset + len(positions)] = positions
+        base = self.report(big, triangles + offset)
+        self.assertEqual(base['public_metrics']['touches'], 0)
+        self.assertEqual(base['loops'][0]['vertices'], [8, 9, 10, 11, 12])
+        self.assertAlmostEqual(base['public_metrics']['tolerance'], 1e-9 * np.hypot(4, 4))
+        near = self.report(big, triangles + offset, tolerance=2e-3)
+        self.assertEqual(near['public_metrics']['touches'], 2)
+        self.assertEqual(sorted(e['triangle'] for t in near['touches'] for e in t['edges'] if e['edge'] == [8, 9]), [0, 0])
+        for scale, shift in ((1e-3, 1e6), (1e3, -5e4)):
+            moved = big * scale + [shift, 3., shift]
+            same = self.report(moved, triangles + offset)
+            self.assertEqual(same['public_metrics']['touches'], 0)
+            self.assertEqual(same['loops'][0]['vertices'], base['loops'][0]['vertices'])
+            self.assertAlmostEqual(same['loops'][0]['signed_area'] / scale ** 2, base['loops'][0]['signed_area'], places=6)
+            self.assertEqual(self.report(moved, triangles + offset, tolerance=2e-3 * scale)['public_metrics']['touches'], 2)
+        # The same patch turned into another plane, read through an explicit basis, gives the same loop.
+        turn = np.linalg.qr(np.array([[.3, -.8, .5], [.9, .2, -.1], [.1, .6, .8]]))[0]
+        turned = self.report(big @ turn.T, triangles + offset, plane_basis=(turn @ np.eye(3)[[0, 2]].T).T)
+        self.assertAlmostEqual(turned['loops'][0]['signed_area'], base['loops'][0]['signed_area'])
+
+    def test_classification_does_not_depend_on_the_coordinate_scale(self):
+        # A random star-shaped ring: products of orientation determinants underflow at tiny scales, sign tests do not.
+        rng = np.random.default_rng(205)
+        angle = np.sort(rng.uniform(0, 2 * np.pi, 8)); radius = rng.uniform(.1, 2, 8)
+        positions, triangles = self.fan(np.c_[radius * np.cos(angle), radius * np.sin(angle)], [0, 0])
+        keys = ('crossings', 'touches', 'collinear_overlaps', 'collapsed_edges', 'reflex_corners')
+        base = self.report(positions, triangles)
+        counts = [base['public_metrics'][k] for k in keys]
+        self.assertEqual(counts, [0, 0, 0, 0, 3])
+        for scale in (1e-90, 1e90):
+            scaled = self.report(positions * scale, triangles)
+            self.assertEqual([scaled['public_metrics'][k] for k in keys], counts)
+            self.assertAlmostEqual(scaled['loops'][0]['signed_area'] / scale ** 2, base['loops'][0]['signed_area'])
+            json.dumps(scaled, allow_nan=False)
+        with self.assertRaisesRegex(ValueError, 'supported range'):
+            self.report(positions * 1e200, triangles)
+        with self.assertRaisesRegex(ValueError, 'below 1e150'):
+            self.report(positions, triangles, tolerance=1e308)
+
+    def test_preparation_route(self):
+        # A crossing loop: undefined values must travel as nulls through the JSON report.
+        positions, triangles = self.fan([[0, 0], [2, 2], [2, 0], [0, 2]], [1, .5], depth=[0, .5, .5, 0])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / 'source.npz'
+            np.savez(source, positions=positions, triangles=triangles)
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            item = {'reads': {'geometry': digest}, 'workbench': {'profile': 'analysis'},
+                    'payload': {'operation': 'projected_boundary', 'parameters': dict(self.units),
+                                'inputs': {name: {'path': str(source), 'sha256': digest, 'array': name}
+                                           for name in ('positions', 'triangles')}}}
+            result = ArrayPreparation(root / 'output')(item, {'attempt_key': 'ordinary'})
+            self.assertEqual(result['status'], 'completed')
+            self.assertEqual(result['summary']['crossings'], 1)
+            detail = json.loads(Path(result['prepared']['result.json']['path']).read_text())
+            self.assertIsNone(detail['loops'][0]['reflex_corners'])
 
 
 class SmoothRegionTests(unittest.TestCase):

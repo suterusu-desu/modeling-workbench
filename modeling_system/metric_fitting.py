@@ -888,6 +888,425 @@ def planar_relayout(positions, triangles, free, *, plane_axes=(0, 2), depth_axis
                       'that of the field. No guide is fitted unless the depth map is a guide.'}
 
 
+def projected_boundary(positions, triangles, *, units, frame, free=None, plane_axes=(0, 2), plane_basis=None,
+                       tolerance=None, relative_tolerance=1e-9):
+    """Report the boundary loops of a triangle patch as seen in a projection plane, before a planar re-layout.
+
+    With `free` (the mask or indices given to planar_relayout) the domain is the triangles incident to a free vertex:
+    the influence domain of the layout, in which only the free vertices move. Its boundary is the held boundary those
+    vertices are laid out against; held vertices inside that domain are listed separately (no loop check covers them).
+    Without `free` the supplied patch's own boundary is analysed. Boundary edges are directed along their triangle's winding and traced into loops through the triangle
+    fans, so a pinched vertex splits loops instead of joining a figure of eight. Every edge pair is classified once
+    (proper crossing, touch, collinear overlap, adjacent backtracking) and corners are measured from the ordered loop.
+    One length `tolerance` (default `relative_tolerance` times the projected boundary's bounding-box diagonal) decides
+    every near case. Predicates run on coordinates centred in 3D and normalized by the boundary's span, with sign
+    tests; a span outside 1e-150 to 1e150 refuses. A projection test only: it reports geometry and approves nothing.
+    """
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    P, tri = np.asarray(positions), np.asarray(triangles)
+    if (P.ndim != 2 or P.shape[1:] != (3,) or P.dtype.kind not in 'fiu' or not np.isfinite(P).all()
+            or tri.ndim != 2 or tri.shape[1:] != (3,) or tri.dtype.kind not in 'iu' or not len(tri)
+            or tri.min() < 0 or tri.max() >= len(P)):
+        raise ValueError('Finite (N, 3) positions and triangles indexing them are required')
+    if not isinstance(units, str) or not units.strip() or not isinstance(frame, str) or not frame.strip():
+        raise ValueError('Explicit units and frame are required')
+    P, tri = P.astype(float), tri.astype(np.int64)
+    if ((tri[:, 0] == tri[:, 1]) | (tri[:, 1] == tri[:, 2]) | (tri[:, 0] == tri[:, 2])).any():
+        raise ValueError('A triangle repeats a vertex; remove index-degenerate triangles')
+    if len(np.unique(np.sort(tri, axis=1), axis=0)) != len(tri):
+        raise ValueError('Duplicate triangles do not define a boundary')
+    basis_tolerance = 1e-9                           # orthonormality of plane_basis: absolute, dimensionless
+    if plane_basis is not None:
+        basis = np.asarray(plane_basis, float)
+        if (basis.shape != (2, 3) or not np.isfinite(basis).all()
+                or np.abs(basis @ basis.T - np.eye(2)).max() > basis_tolerance):
+            raise ValueError('plane_basis must be two orthonormal in-plane axes, shape (2, 3), within 1e-9')
+        plane = {'basis': basis.tolist(), 'basis_tolerance': basis_tolerance}
+    else:
+        axes = list(plane_axes)
+        if (len(axes) != 2 or not all(isinstance(a, (int, np.integer)) and not isinstance(a, bool) for a in axes)
+                or axes[0] == axes[1] or not all(a in (0, 1, 2) for a in axes)):
+            raise ValueError('plane_axes must be two distinct integer axes among 0, 1 and 2')
+        axes = [int(a) for a in axes]; basis = np.eye(3)[axes]; plane = {'axes': axes}
+    if not (np.isfinite(relative_tolerance) and 0 < relative_tolerance < 1):
+        raise ValueError('Require 0 < relative_tolerance < 1')
+    if tolerance is not None and not (np.isfinite(tolerance) and 0 <= tolerance < 1e150):
+        raise ValueError('A nonnegative tolerance below 1e150 (a length in the given units) is required')
+
+    n = len(P); used = np.zeros(n, bool); used[tri.ravel()] = True
+    free_mask = None
+    if free is not None:
+        f = np.asarray(free)
+        free_mask = np.zeros(n, bool)
+        if f.dtype == bool:
+            if f.shape != (n,):
+                raise ValueError('A boolean free mask needs one flag per position')
+            free_mask[:] = f
+        else:
+            if f.dtype.kind not in 'iu' or f.ndim != 1 or (len(f) and (f.min() < 0 or f.max() >= n)):
+                raise ValueError('Free vertices must be a boolean mask or valid indices')
+            free_mask[f] = True
+        if not free_mask.any() or (free_mask & ~used).any():
+            raise ValueError('Free vertices must belong to the patch (as for planar_relayout)')
+        domain_ids = np.flatnonzero(free_mask[tri].any(axis=1))
+    else:
+        domain_ids = np.arange(len(tri))
+    D = tri[domain_ids]
+
+    def undirected(t):
+        e = np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]])
+        owner = np.tile(np.arange(len(t)), 3)
+        unique, inverse, counts = np.unique(np.sort(e, axis=1), axis=0, return_inverse=True, return_counts=True)
+        return e, owner, unique, inverse.ravel(), counts
+
+    e, owner, unique, inverse, counts = undirected(D)
+    forward = np.where(e[:, 0] < e[:, 1], 1, -1)
+    direction_sum = np.bincount(inverse, weights=forward, minlength=len(unique))
+    nonmanifold = unique[counts > 2]
+    inconsistent = unique[(counts == 2) & (direction_sum != 0)]
+    boundary_rows = np.flatnonzero(counts[inverse] == 1)
+    half = {(int(a), int(b)): int(domain_ids[o]) for (a, b), o in zip(e, owner)}
+    boundary = {(int(e[r, 0]), int(e[r, 1])): int(domain_ids[owner[r]]) for r in boundary_rows}
+    third = {}
+    for t in domain_ids.tolist():
+        a, b, c = (int(v) for v in tri[t])
+        third[(t, a, b)] = c; third[(t, b, c)] = a; third[(t, c, a)] = b
+
+    # Components: triangles joined through shared edges (a pinched vertex does not join them).
+    pairs = []
+    order = np.argsort(inverse, kind='stable'); starts = np.r_[0, np.cumsum(counts)[:-1]]
+    rows_sorted = owner[order]
+    for k in np.flatnonzero(counts > 1):
+        group = rows_sorted[starts[k]:starts[k] + counts[k]]
+        pairs += [(group[0], g) for g in group[1:]]
+    pairs = np.array(pairs, np.int64).reshape(-1, 2)
+    graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(len(D), len(D)))
+    _, triangle_component = connected_components(graph, directed=False)
+    # Fans: a vertex's incident triangles joined through the edges at that vertex. More than one fan is a nonmanifold
+    # vertex whatever its boundary degree (for example a closed part touching the patch at one vertex).
+    corner = {(int(r), int(v)): 3 * int(r) + k for r in range(len(D)) for k, v in enumerate(D[r])}
+    links = []
+    for k in np.flatnonzero(counts > 1):
+        group = rows_sorted[starts[k]:starts[k] + counts[k]]
+        for v in unique[k]:
+            links += [(corner[(int(group[0]), int(v))], corner[(int(g), int(v))]) for g in group[1:]]
+    links = np.array(links, np.int64).reshape(-1, 2)
+    _, fan = connected_components(coo_matrix((np.ones(len(links)), (links[:, 0], links[:, 1])),
+                                             shape=(3 * len(D), 3 * len(D))), directed=False)
+    vertex_fans = {}
+    for (r, v), node in corner.items():
+        vertex_fans.setdefault(v, set()).add(int(fan[node]))
+    multi_fan = sorted(v for v, fans in vertex_fans.items() if len(fans) > 1)
+    component_detail = []
+    for cid in range(int(triangle_component.max()) + 1):
+        rows = D[triangle_component == cid]
+        edges_c = np.unique(np.sort(np.r_[rows[:, [0, 1]], rows[:, [1, 2]], rows[:, [2, 0]]], axis=1), axis=0)
+        component_detail.append({'component': cid, 'triangles': int(len(rows)),
+                                 'euler_characteristic': int(len(np.unique(rows)) - len(edges_c) + len(rows))})
+
+    # Loops: follow each boundary half-edge to the next one around its end vertex through the triangle fan.
+    outgoing = {}
+    for (a, b) in boundary:
+        outgoing.setdefault(a, []).append((a, b))
+    degree = np.zeros(n, np.int64)
+    for (a, b) in boundary:
+        degree[a] += 1; degree[b] += 1
+    pinched = np.flatnonzero((degree >= 4) & (degree % 2 == 0))
+    branched = np.flatnonzero(degree % 2 == 1)
+    ambiguous = set()
+
+    def successor(h):
+        a, b = h
+        options = outgoing.get(b, [])
+        if len(options) == 1:
+            return options[0]
+        t = boundary[h]; c = third[(t, a, b)]
+        for _ in range(len(D) + 1):                     # rotate about b: (b, c) in t, then its twin's triangle
+            if (b, c) in boundary:
+                return (b, c)
+            twin = half.get((c, b))
+            if twin is None or twin == t:
+                break
+            t, c = twin, third[(twin, c, b)]
+        ambiguous.add(b)
+        return options[0] if options else None
+
+    used_half, loops, chains = set(), [], []
+    for start in sorted(boundary):
+        if start in used_half:
+            continue
+        path, h = [], start
+        while h is not None and h not in used_half:
+            used_half.add(h); path.append(h); h = successor(h)
+        (loops if h == start else chains).append(path)
+
+    all_boundary = sorted({v for path in loops + chains for h in path for v in h})
+    # Translate in 3D before projecting (large offsets would otherwise cost precision), then measure the plane span.
+    anchor = P[all_boundary] if all_boundary else P[np.unique(D)]
+    centre3 = (anchor.min(axis=0) + anchor.max(axis=0)) / 2
+    Q = (P - centre3) @ basis.T
+    centre = centre3 @ basis.T                        # plane coordinates of the local origin, for reported points
+    if all_boundary:
+        box = Q[all_boundary]; diagonal = float(np.hypot(*(box.max(axis=0) - box.min(axis=0))))
+    else:
+        diagonal = 0.
+    if diagonal and not 1e-150 < diagonal < 1e150:
+        raise ValueError('The projected boundary spans %g units: outside the supported range 1e-150 to 1e150; '
+                         'rescale the positions' % diagonal)
+    tolerance_given = float(tolerance) if tolerance is not None else float(relative_tolerance) * diagonal
+    # Predicates run in coordinates normalized by the boundary's span; lengths and areas are reported in caller units.
+    unit = diagonal if diagonal else 1.
+    Q = Q / unit
+    tol = tolerance_given / unit
+
+    # Edge table over loops and open chains: (vertex a, vertex b, owner triangle, loop or chain id, position).
+    edges = []
+    for kind, groups in (('loop', loops), ('chain', chains)):
+        for g, path in enumerate(groups):
+            for k, (a, b) in enumerate(path):
+                edges.append((a, b, boundary[(a, b)], kind, g, k, len(path)))
+    E = len(edges)
+    A = np.array([Q[x[0]] for x in edges]).reshape(-1, 2); B = np.array([Q[x[1]] for x in edges]).reshape(-1, 2)
+    length = np.linalg.norm(B - A, axis=1)
+    collapsed = length <= tol
+
+    def cross2(u, v):
+        return u[..., 0] * v[..., 1] - u[..., 1] * v[..., 0]
+
+    def side(a, b, p):
+        # signed distance of p from the line a -> b (left positive); None when the edge is collapsed
+        ab = b - a; ln = float(np.hypot(*ab))
+        return None if ln <= tol or ln == 0 else float(cross2(ab, p - a)) / ln
+
+    def point_segment(p, a, b):
+        ab = b - a; ln2 = float(ab @ ab)
+        t = 0. if ln2 == 0 else min(max(float((p - a) @ ab) / ln2, 0.), 1.)
+        return float(np.linalg.norm(p - (a + t * ab)))
+
+    def ident(i):
+        a, b, t, kind, g, k, _ = edges[i]
+        return {'edge': [a, b], 'triangle': t, kind: g, 'position': k}
+
+    def plane_point(p):
+        return (p * unit + centre).tolist()
+
+    lo = np.minimum(A, B) - tol; hi = np.maximum(A, B) + tol
+    vertices_of = [set(x[:2]) for x in edges]
+    crossings, touches, overlaps, backtracks = [], [], [], []
+    involved = {}                                     # (kind, id) -> set of issue names
+
+    def mark(i, name):
+        involved.setdefault(edges[i][3:5], set()).add(name)
+
+    for i in range(E):
+        if i + 1 >= E:
+            break
+        near = np.flatnonzero((lo[i + 1:, 0] <= hi[i, 0]) & (hi[i + 1:, 0] >= lo[i, 0])
+                              & (lo[i + 1:, 1] <= hi[i, 1]) & (hi[i + 1:, 1] >= lo[i, 1])) + i + 1
+        for j in near:
+            shared = vertices_of[i] & vertices_of[j]
+            if shared:                                   # adjacent edges: only folding back is an issue
+                if collapsed[i] or collapsed[j]:
+                    continue
+                s = next(iter(shared))
+                u = B[i] if edges[i][0] == s else A[i]; w = B[j] if edges[j][0] == s else A[j]
+                if point_segment(u, Q[s], w) <= tol or point_segment(w, Q[s], u) <= tol:
+                    backtracks.append({'vertex': s, 'edges': [ident(i), ident(j)]})
+                    mark(i, 'adjacent_overlap'); mark(j, 'adjacent_overlap')
+                continue
+            d1, d2 = side(A[i], B[i], A[j]), side(A[i], B[i], B[j])
+            d3, d4 = side(A[j], B[j], A[i]), side(A[j], B[j], B[i])
+            proper = (None not in (d1, d2, d3, d4) and (d1 > 0) != (d2 > 0) and (d3 > 0) != (d4 > 0)
+                      and min(abs(d1), abs(d2), abs(d3), abs(d4)) > tol)
+            if proper:
+                r = d1 / (d1 - d2)
+                crossings.append({'edges': [ident(i), ident(j)], 'point': plane_point(A[j] + r * (B[j] - A[j]))})
+                mark(i, 'crossing'); mark(j, 'crossing'); continue
+            c1, c2 = cross2(B[i] - A[i], A[j] - A[i]), cross2(B[i] - A[i], B[j] - A[i])
+            c3, c4 = cross2(B[j] - A[j], A[i] - A[j]), cross2(B[j] - A[j], B[i] - A[j])
+            meets = np.sign(c1) * np.sign(c2) <= 0 and np.sign(c3) * np.sign(c4) <= 0 and not (c1 == c2 == 0 and max(
+                point_segment(A[j], A[i], B[i]), point_segment(B[j], A[i], B[i]),
+                point_segment(A[i], A[j], B[j]), point_segment(B[i], A[j], B[j])) > 0)
+            distance = 0. if meets else min(point_segment(A[j], A[i], B[i]), point_segment(B[j], A[i], B[i]),
+                                            point_segment(A[i], A[j], B[j]), point_segment(B[i], A[j], B[j]))
+            if distance > tol:
+                continue
+            flat = (None not in (d1, d2) and max(abs(d1), abs(d2)) <= tol) or \
+                   (None not in (d3, d4) and max(abs(d3), abs(d4)) <= tol)
+            span = 0.
+            if flat and not (collapsed[i] and collapsed[j]):
+                k = i if length[i] >= length[j] else j; o = j if k == i else i
+                axis = (B[k] - A[k]) / length[k]
+                t0, t1 = sorted([float((A[o] - A[k]) @ axis), float((B[o] - A[k]) @ axis)])
+                span = min(t1, float(length[k])) - max(t0, 0.)
+            if span > tol:
+                overlaps.append({'edges': [ident(i), ident(j)], 'overlap_length': span * unit})
+                mark(i, 'collinear_overlap'); mark(j, 'collinear_overlap')
+            else:
+                touches.append({'edges': [ident(i), ident(j)], 'distance': distance * unit,
+                                'segments_meet': bool(meets)})
+                mark(i, 'touch'); mark(j, 'touch')
+    collapsed_list = [dict(ident(i), length=float(length[i]) * unit) for i in np.flatnonzero(collapsed)]
+    for i in np.flatnonzero(collapsed):
+        mark(i, 'collapsed_edge')
+
+    loop_reports = []
+    for g, path in enumerate(loops):
+        verts = [a for a, _ in path]
+        X = Q[verts]; m = len(verts)
+        area = float(0.5 * np.sum(cross2(X, np.roll(X, -1, axis=0))))
+        perimeter = float(np.linalg.norm(np.roll(X, -1, axis=0) - X, axis=1).sum())
+        sides = []
+        for (a, b) in path:
+            s = side(Q[a], Q[b], Q[third[(boundary[(a, b)], a, b)]])
+            sides.append(0 if s is None or abs(s) <= tol else (1 if s > 0 else -1))
+        sides = np.array(sides)
+        left, right = int((sides > 0).sum()), int((sides < 0).sum())
+        majority = 1 if left >= right else -1
+        turns, deviation = [], []
+        for k in range(m):
+            p, v, q = X[k - 1], X[k], X[(k + 1) % m]
+            e1, e2 = v - p, q - v
+            ok = np.hypot(*e1) > tol and np.hypot(*e2) > tol
+            turns.append(float(np.degrees(np.arctan2(cross2(e1, e2), e1 @ e2))) if ok else None)
+            chord = q - p; cl = float(np.hypot(*chord))
+            deviation.append(float(abs(cross2(chord, v - p))) / cl if cl > tol else float(np.hypot(*e1)))
+        defined_turns = None not in turns
+        turning = round(sum(turns) / 360.) if defined_turns else None
+        issues = sorted(involved.get(('loop', g), set()))
+        own = [x for x in crossings + touches + overlaps + backtracks
+               if all(y.get('loop') == g for y in x['edges'])]
+        reasons = []
+        if own or any(collapsed[i] for i in range(E) if edges[i][3:5] == ('loop', g)):
+            reasons.append('the loop is not simple in this projection')
+        if set(verts) & set(pinched.tolist()) or set(verts) & ambiguous:
+            reasons.append('the loop passes a pinched vertex')
+        if abs(area) <= tol * perimeter:              # area threshold: the tolerance times the perimeter (length^2)
+            reasons.append('the loop encloses no area beyond the tolerance')
+        if right and left or (sides == 0).any():
+            reasons.append('the domain lies on both sides of the loop, or on none, somewhere along it')
+        if turning not in (1, -1):
+            reasons.append('the turning number is not +1 or -1')
+        report = {'loop': g, 'vertices': verts, 'edges': [list(h) for h in path],
+                  'triangles': [boundary[h] for h in path], 'component': int(triangle_component[
+                      int(np.flatnonzero(domain_ids == boundary[path[0]])[0])]),
+                  'signed_area': area * unit ** 2, 'area_tolerance': tol * perimeter * unit ** 2, 'orientation': 'counterclockwise' if area > tol * perimeter else
+                  ('clockwise' if area < -tol * perimeter else 'degenerate'), 'perimeter': perimeter * unit,
+                  'turning_number': turning, 'domain_side_edges': {'left': left, 'right': right,
+                                                                   'degenerate': int((sides == 0).sum())},
+                  'issues': issues, 'simple': not own and 'collapsed_edge' not in issues and not
+                  (set(verts) & (set(pinched.tolist()) | ambiguous))}
+        if not reasons:
+            # The angle on the domain (material) side; at a hole loop that is outside the hole polygon.
+            interior = [180. - t * majority for t in turns]
+            corners = [{'vertex': verts[k], 'domain_angle_degrees': interior[k], 'deviation': deviation[k] * unit}
+                       for k in range(m) if deviation[k] > tol]
+            report.update(interior_angles='defined on the domain side',
+                          reflex_corners=sorted([c for c in corners if c['domain_angle_degrees'] > 180],
+                                                key=lambda c: -c['domain_angle_degrees']),
+                          convex_corners=sum(1 for c in corners if c['domain_angle_degrees'] < 180),
+                          straight_corners=m - len(corners))
+        else:
+            local = [{'vertex': verts[k], 'turn_degrees': turns[k], 'deviation': deviation[k] * unit}
+                     for k in range(m) if turns[k] is not None and deviation[k] > tol and turns[k] * majority < 0]
+            report.update(interior_angles='undefined: ' + '; '.join(reasons), reflex_corners=None,
+                          local_turns_against_domain=sorted(local, key=lambda c: -abs(c['turn_degrees'])))
+        loop_reports.append(report)
+
+    def inside(p, poly):
+        x, y = p; hit = False
+        for (x1, y1), (x2, y2) in zip(poly, np.roll(poly, -1, axis=0)):
+            if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+                hit = not hit
+        return hit
+    # Nesting only between simple loops that neither cross nor touch each other; otherwise it is left unresolved.
+    contact = set()
+    for x in crossings + touches + overlaps + backtracks:
+        ids = [y.get('loop') for y in x['edges']]
+        if None not in ids and ids[0] != ids[1]:
+            contact.add(frozenset(ids))
+    simple_polys = {r['loop']: Q[r['vertices']] for r in loop_reports if r['interior_angles'].startswith('defined')}
+    for r in loop_reports:
+        g = r['loop']
+        if g in simple_polys:
+            others = [o for o in simple_polys if o != g and frozenset((g, o)) not in contact]
+            r['inside_loops'] = [o for o in others if inside(Q[r['vertices'][0]], simple_polys[o])]
+            r['nesting_unresolved_with'] = sorted(o for o in range(len(loops))
+                                                  if o != g and (o not in simple_polys or frozenset((g, o)) in contact))
+        else:
+            r['inside_loops'] = None
+            r['nesting_unresolved_with'] = sorted(o for o in range(len(loops)) if o != g)
+    chain_reports = [{'chain': g, 'vertices': [path[0][0]] + [b for _, b in path], 'edges': [list(h) for h in path],
+                      'triangles': [boundary[h] for h in path]} for g, path in enumerate(chains)]
+
+    patch_boundary = set()
+    if free_mask is not None:
+        _, _, all_unique, _, all_counts = undirected(tri)
+        patch_boundary = set(all_unique[all_counts == 1].ravel().tolist())
+    domain_vertices = np.unique(D)
+    on_loops = set(all_boundary)
+    interior_held = ([int(v) for v in domain_vertices if not free_mask[v] and v not in on_loops]
+                     if free_mask is not None else [])
+    free_on_boundary = sorted(int(v) for v in np.flatnonzero(free_mask) if v in patch_boundary) if free_mask is not None else []
+    defined = [r for r in loop_reports if r['reflex_corners'] is not None]
+    warnings = []
+    if not loops and not chains:
+        warnings.append('The domain has no boundary: it is closed, so there is no held loop to report')
+    elif diagonal == 0.:
+        warnings.append('The projected boundary has zero span: every boundary edge collapses in this plane')
+    if multi_fan:
+        warnings.append('Vertices with more than one triangle fan: the domain is not a manifold surface there')
+    metrics = {'domain': 'triangles incident to a free vertex (only free vertices move)' if free_mask is not None
+               else 'the supplied patch',
+               'domain_triangles': int(len(D)), 'components': int(triangle_component.max()) + 1,
+               'loops': len(loops), 'open_chains': len(chains), 'boundary_edges': E,
+               'crossings': len(crossings), 'touches': len(touches), 'collinear_overlaps': len(overlaps),
+               'adjacent_overlaps': len(backtracks), 'collapsed_edges': int(collapsed.sum()),
+               'pinched_vertices': int(len(pinched)), 'branched_vertices': int(len(branched)),
+               'multi_fan_vertices': len(multi_fan),
+               'ambiguous_vertices': len(ambiguous), 'nonmanifold_edges': int(len(nonmanifold)),
+               'inconsistent_edges': int(len(inconsistent)),
+               'simple_loops': sum(1 for r in loop_reports if r['simple']),
+               'loops_with_interior_angles': len(defined),
+               'reflex_corners': sum(len(r['reflex_corners']) for r in defined),
+               'local_turns_against_domain': sum(len(r.get('local_turns_against_domain', [])) for r in loop_reports),
+               'interior_held_vertices': len(interior_held), 'free_on_patch_boundary': len(free_on_boundary),
+               'tolerance': tolerance_given, 'tolerance_source': 'given' if tolerance is not None else 'relative to the boundary size',
+               'relative_tolerance': float(relative_tolerance), 'boundary_diagonal': diagonal,
+               'units': units, 'frame': frame}
+    result = {'public_metrics': metrics, 'plane': plane, 'warnings': warnings, 'components': component_detail,
+            'loops': loop_reports, 'open_chains': chain_reports, 'multi_fan_vertices': multi_fan,
+            'crossings': crossings, 'touches': touches, 'collinear_overlaps': overlaps, 'adjacent_overlaps': backtracks,
+            'collapsed_edges': collapsed_list, 'pinched_vertices': pinched.tolist(), 'branched_vertices': branched.tolist(),
+            'ambiguous_vertices': sorted(ambiguous), 'nonmanifold_edges': nonmanifold.tolist(),
+            'inconsistent_edges': inconsistent.tolist(), 'interior_held_vertices': interior_held,
+            'free_on_patch_boundary': free_on_boundary,
+            'conventions': 'Plane coordinates are (positions @ basis.T): first axis right, second up; counterclockwise '
+                           'is positive area. Edges run along their triangle\'s winding. A turn is positive to the left; '
+                           'the interior angle is measured on the side where the owning triangles lie. Every near case '
+                           'uses the one length tolerance.',
+            'limits': 'A projection test of the analysed domain\'s boundary, not 3D collision: projected crossings can be '
+                      'separate sheets. No crossings and few reflex corners do not make a layout injective: that also '
+                      'depends on the whole graph, held interior handles, every boundary, the rigid layout and later '
+                      'depth or rest blending. Every decision (crossing, touch, straight or reflex corner) is made '
+                      'within the declared tolerance in floating point: a clear report means compatible within that '
+                      'tolerance, not exact convexity or simplicity.'}
+
+    def finite(value):
+        if isinstance(value, float):
+            return np.isfinite(value)
+        if isinstance(value, dict):
+            return all(finite(v) for v in value.values())
+        if isinstance(value, (list, tuple)):
+            return all(finite(v) for v in value)
+        return True
+    if not finite(result):
+        raise ValueError('The report would contain nonfinite values: coordinates or tolerance outside the supported range')
+    return result
+
+
 def smooth_region(positions, triangles, *, held=None, weights=None, iterations=10, lam=.5, mu=-.53):
     """Taubin smoothing of a mesh region: each pass moves every point toward the mean of its edge neighbours by `lam`
     times its weight, then back by `mu`, which smooths lumps without shrinking the surface.

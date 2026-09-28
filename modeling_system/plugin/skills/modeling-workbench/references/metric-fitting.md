@@ -327,3 +327,99 @@ In real use a closed lid corner whose material collapsed along an unsupported ho
 repairs (rigid and similar deformation from rest, relaxation, thin-plate depth fills, harmonic 3D layouts, smoothing,
 depth-only fairing). A uniform layout of that block in the front view, where it was not folded, with depth from the
 surrounding retained skin, removed the line and left the guide depth fit unchanged.
+
+### Check the projected boundary before the layout
+
+Tutte's theorem makes a harmonic layout with positive weights injective under several premises: the domain is a
+triangulated disc, its whole boundary is held on a convex polygon (no interior edge joining two boundary vertices on
+one straight side), and every interior vertex is free. `projected_boundary(positions, triangles, free=...,
+plane_axes=..., units=..., frame=...)` (also an `ArrayPreparation` / `construct` operation) measures the boundary part
+of those premises, and reports what it sees of the rest (loops, components, handles, topology), before
+`planar_relayout` runs. It does not establish the whole premise. Give it the same positions, triangles, free set and plane as the layout. `plane_basis` (two
+orthonormal in-plane axes, shape (2, 3), checked to 1e-9 independently of the geometric tolerance) replaces
+`plane_axes` for any other direction.
+
+```python
+import numpy as np
+from modeling_system.metric_fitting import projected_boundary
+
+n = 7                                                      # a 7 x 7 sheet in the x-z plane, free 3 x 3 block inside
+x, z = np.meshgrid(np.arange(n, dtype=float), np.arange(n, dtype=float))
+positions = np.c_[x.ravel(), np.zeros(n * n), z.ravel()]
+index = np.arange(n * n).reshape(n, n)
+a, b, c, d = index[:-1, :-1].ravel(), index[:-1, 1:].ravel(), index[1:, 1:].ravel(), index[1:, :-1].ravel()
+triangles = np.r_[np.c_[a, b, c], np.c_[a, c, d]]
+free = np.zeros(n * n, bool); free[index[2:5, 2:5].ravel()] = True
+
+report = projected_boundary(positions, triangles, free=free, plane_axes=(0, 2), units="m", frame="object")
+report["public_metrics"]      # loops, crossings, touches, overlaps, reflex corners, interior held vertices, tolerance
+report["loops"][0]["vertices"], report["loops"][0]["reflex_corners"]
+```
+
+- **Domain.** With `free`, the analysed domain is the triangles incident to a free vertex. That is the layout's
+  influence domain, in which only the free vertices move, and its boundary is the held boundary they are laid out
+  against. Without `free` it is the supplied patch's own perimeter. A larger surrounding patch is not the constrained
+  boundary, so pass `free`.
+  - Free IDs outside the patch refuse, as they do in `planar_relayout`.
+  - `interior_held_vertices` lists held vertices inside that domain (fixed handles); no loop check covers them.
+  - `free_on_patch_boundary` lists free vertices that `planar_relayout` would refuse.
+- **Loops.** Boundary edges run along their triangle's winding and are traced through the triangle fans, so a pinched
+  vertex splits two loops instead of making a figure of eight. Each loop gives, in the supplied indexing:
+  - its vertices in order, its edges and each edge's owning triangle, and its component;
+  - its signed area (counterclockwise positive in the plane of the first and second axis), perimeter and turning
+    number;
+  - which side the domain lies on, taken per edge from the owning triangle;
+  - the other loops it lies inside (holes). Nesting is decided only between simple loops that neither cross nor touch
+    each other; any other pair is listed in `nesting_unresolved_with`.
+- **Interactions.** Every boundary edge pair, within and between loops, is classified once:
+  - `crossings`: a proper crossing, with its point;
+  - `touches`: non-adjacent edges within the tolerance, marked `segments_meet` when they actually meet;
+  - `collinear_overlaps`: collinear edges overlapping, with the overlap length;
+  - `adjacent_overlaps`: consecutive edges folding back over each other;
+  - `collapsed_edges`: edges no longer than the tolerance.
+  Ordinary neighbouring edges are never reported. Each entry names both source edges, their owning triangles and
+  loops.
+- **Corners.** Corners come from the ordered loop only. `domain_angle_degrees` is measured on the domain (material)
+  side, and a corner whose vertex lies within the tolerance of its neighbours' chord is straight. At a hole loop the
+  material side is outside the hole polygon, so a square hole has four reflex corners.
+  - `reflex_corners` are claimed only for a loop that is simple, encloses area (more than the tolerance times its
+    perimeter), has the domain on one side and turns once.
+  - Otherwise `interior_angles` gives the reason it is undefined, and `local_turns_against_domain` lists the local
+    turns instead. Those are a diagnostic, not polygon corners.
+- **Topology.** Duplicate triangles, triangles that repeat a vertex, bad indices and an empty domain refuse. The report
+  lists instead:
+  - nonmanifold and inconsistently wound edges;
+  - pinched, branched and ambiguous vertices;
+  - vertices with more than one triangle fan, even at an ordinary boundary degree (a closed part touching the patch);
+  - open chains;
+  - per component, its triangle count and Euler characteristic (1 for a disc).
+  `warnings` names a domain with no boundary at all and a boundary with zero span in the plane: neither is a clean
+  polygon.
+- **Tolerance.** One length in the caller's units decides every near case. `tolerance` gives it directly; otherwise it
+  is `relative_tolerance` (default 1e-9) times the projected boundary's bounding-box diagonal. The report states which,
+  with units and frame. Positions are translated to the boundary's centre in 3D before projecting, and the
+  predicates run in coordinates normalized by the boundary's span, using sign tests rather than products. That
+  reduces cancellation and underflow; it cannot recover precision already lost in the supplied positions, and the
+  predicates are floating point, not exact. A span outside 1e-150 to 1e150, a tolerance of 1e150 or more, or any
+  input that would make a reported value nonfinite refuses. Near cases are reported against
+  the tolerance, not decided, and the input is never snapped or changed.
+
+Read the whole report before choosing the layout, not one count:
+- The boundary is compatible with the convex-boundary premise, within the declared tolerance, only when all of these
+  hold: one loop and one component with Euler characteristic 1; interior angles defined for that loop; no crossings,
+  touches, overlaps, collapsed edges or open chains; no nonmanifold, inconsistent, pinched, branched, ambiguous or
+  multi-fan entries; no interior held vertices and no free vertices on the patch boundary; no reflex corners; and no
+  warnings. Zero reflex corners with undefined interior angles says nothing about the corners. Every decision is made
+  within the tolerance, so a clear report is not exact convexity: a turn or crossing smaller than the tolerance is
+  classified as straight or as a touch.
+- Reflex corners on a simple loop describe a legitimate nonconvex boundary; the harmonic premise is then not met. What
+  to do is the caller's choice. No other layout is guaranteed injective there either.
+- Crossings mean the held boundary is not a simple curve in this plane, and no injective layout of a disc has that
+  boundary in this plane. A different qualified projection, a constructed boundary or a changed domain may each be
+  the answer; this report does not choose.
+- Several loops or a pinched vertex mean the domain is not one disc, and the premise does not apply as stated.
+
+It approves nothing:
+- It is a projection test, not 3D collision: crossing edges can belong to sheets separated in depth.
+- A clean outer loop does not qualify interior held handles, a second boundary, the rigid layout or the later depth and
+  rest blending. After the layout, check `plane_flips_after` and look at the result.
