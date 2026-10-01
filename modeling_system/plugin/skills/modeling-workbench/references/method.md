@@ -1,5 +1,10 @@
 # Retained method
 
+Start with [one useful correction cycle](useful-workflow.md) for the current
+practical route and the distinction between demonstrated local gains, unproven
+methods and known failures. The detailed evidence/recovery steps below support
+that cycle; they are not an obligatory orchestration sequence for every edit.
+
 The unit of work is a recoverable modeling decision: a quality question, exact state, evidence, intended form, intervention, comparison and retained lesson. The method applies across characters; anatomy, artistic decisions and actual scene mechanisms must be supplied and verified for each one. A new character is not a renamed old binding.
 
 ## Orient and bind

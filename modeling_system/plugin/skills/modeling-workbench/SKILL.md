@@ -5,6 +5,13 @@ description: Operate the local modeling workbench for a character in Blender - s
 
 ## The loop
 
+Start with [one useful correction cycle](references/useful-workflow.md). Its core
+is the observed successful guide/depth/section shape fit and construction-first
+motion work, supported by source/realization/recovery checks. It distinguishes
+local demonstrated gains, a useful diagnosis, unproven repair proposals and known
+failure patterns. Read the current project page and only the pages needed for the
+next concrete edit; the remaining verbs below are tools for that cycle.
+
 The owner's loop: discover the problem area; inspect it and feed the inspection into image generation; pair it with
 all of the character's references (everything, including manga and anime art: "the soul of the character"); the new
 image reveals the inspected area with the character's likeness; generate a mesh to fit that likeness; register it onto
@@ -43,6 +50,11 @@ a pose onto the accepted neutral with a tolerance band: [guide synthesis](refere
 live bridge, overlap renders, motion videos (normal speed, then slow; several columns for variants), landmark-aligned
 overlays on drawings ([guides and display](references/guide-and-show.md)) and matched review sheets. Numbers can reject
 a candidate; approval comes from looking at the whole motion.
+
+When user feedback changes the interpretation, use [visual correction feedback](references/visual-feedback.md)
+to preserve the exact target words and marked inspection region, proposed method and preserved features,
+labelled baseline/trial comparison, and version-specific correction history. Its optional local UI uses the
+existing service/store; it neither controls Blender nor adds a mandatory modeling approval gate.
 
 **construct** - build the mechanism: hinged lid landing on the opposing lid (still or lifted in the middle), one-pace
 roll, clearance, attached parts carried on the edge ([motion paths](references/motion-paths.md)); bake it to the fewest

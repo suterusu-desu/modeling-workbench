@@ -539,6 +539,20 @@
         "execution": "Plain Python calls; native effects only through the sole owner",
         "judgment": "The owner chooses the mechanism and judges the watched motion"
       }
+    },
+    {
+      "name": "Useful modeling workflow and durable visual correction feedback",
+      "route": "visual-feedback-ui / visual_feedback_*",
+      "implementation": "curated method route + existing core + manually started loopback UI",
+      "verification": "Focused source-bound correction, matching, explicit user fact and recoverable archive contracts; actual headless browser create-review-correct-reopen workflow verified privately. Curated local modeling evidence does not prove cross-character transfer or a new native repair.",
+      "control": {
+        "lanes": [
+          "diagnosis",
+          "review"
+        ],
+        "execution": "Existing ModelingService, Store and Ledger; no native effects",
+        "judgment": "Explicit dated user wording and agreement; independent technical/visual/retained/owner acceptance facts"
+      }
     }
   ],
   "limits": [

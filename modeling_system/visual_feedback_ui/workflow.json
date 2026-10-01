@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "purpose": "Improve the character with one understandable, recoverable correction at a time.",
+  "evidence_scope": "These approaches summarize observed development results and useful safeguards. A local success is not proof of quality on another character; no preset supplies anatomy, approval or native authorization.",
+  "cycle": [
+    {"title": "Make the visible target clear", "instruction": "Mark what looks wrong on the actual image. Keep the user's exact words, accepted appearance and features to preserve together."},
+    {"title": "Choose the construction that fits the problem", "instruction": "Use qualified spatial support for shape. For motion, build a coherent mechanism first. Diagnose uncertainty only when the answer changes the next edit."},
+    {"title": "Build one recoverable comparison", "instruction": "The modeling owner makes an isolated trial. Compare the approved baseline and trial at the same view and pose, including the whole character, joins and affected motion."},
+    {"title": "Keep only the supported gain", "instruction": "Correct misunderstandings visibly. Check actual native results, reopen consequential changes, and retain useful outcomes with their limits. Technical checks and target agreement do not approve appearance."}
+  ],
+  "methods": [
+    {
+      "id": "supported-shape-fit",
+      "title": "Fit intended shape with spatial support",
+      "status": "Demonstrated local shape gains",
+      "basis": "Early overlapped guide/depth/section fits improved likeness; anatomically consistent supported guides produced a later owner-recognized improvement. Scoped rest smoothing was also accepted.",
+      "when": "The intended static form is clear and useful registered guide/depth/section support exists.",
+      "method": "Register the useful guide to justified stationary anchors. Name supported and excluded surfaces; constrain the local edit with the same registration, depth and corresponding sections used in review. Preserve connected transitions and inspect the actual resulting surface, not only a smooth displacement field.",
+      "limits": "Guide endpoints do not establish coherent motion. A previous accepted smoothing result does not prove a new bump/strain repair. Rejected guide depth is not a fitting target.",
+      "operations": ["query_geometry", "qualify_guide", "register_guide", "construct", "Trials.trial", "Trials.reopen", "Trials.retain"],
+      "reference": "Use accepted identity artwork and locally qualified registered support. Show useful appearance images separately from geometry authority."
+    },
+    {
+      "id": "coherent-motion",
+      "title": "Build motion as a connected mechanism",
+      "status": "Demonstrated local motion gain",
+      "basis": "A connected construction with shared timing replaced accumulated pose corrections and produced an owner-recognized improvement. Subsequent carried attachments and compact baked motion were verified in that development case.",
+      "when": "Motion folds, sinks, zips or disrupts a feature despite improved endpoint scores.",
+      "method": "Study how a suitable reference constructs the moving feature. Adapt its mechanism to the character's anatomy, moving band, landing and attached parts, using one shared timing. Fit a few meaningful parameters with qualified posed guides; change construction or correspondence when recurring failures persist.",
+      "limits": "Reference anatomy, hinge versus slide, lower-feature travel and shape count are character-specific. Independent per-phase fields and added correction layers are known failure patterns, not recommended motion construction.",
+      "operations": ["study_blink", "construct", "check_candidate", "native_capture_motion", "bake_poses", "Trials.trial", "Trials.reopen", "Trials.retain"],
+      "reference": "Show measured construction references alongside current character identity and qualified pose support. A reference avatar teaches mechanics, not replacement proportions."
+    },
+    {
+      "id": "visible-defect-diagnosis",
+      "title": "Find what causes the visible defect",
+      "status": "Demonstrated diagnosis; repair still needs proof",
+      "basis": "Source-bound coverage and realization checks caught omitted controls and canceled edits. Matched geometry/normal/lighting checks later distinguished a sampled geometric surface problem from ordinary normal recalculation.",
+      "when": "A bump, band or gap may come from geometry, shading, correspondence, occlusion or an edit that never reached the displayed mesh.",
+      "method": "Trace the marked pixels to the actual displayed/evaluated surface. Reproduce the saved baseline, then change one diagnostic condition that distinguishes the suspected causes. Check local depth/sections and corresponding native topology where relevant. Use the answer to select the smallest justified construction change.",
+      "limits": "A dark band is not automatically a geometric ridge. Normal recalculation is not a universal cure. Material stretch is not simulated tissue stress, and a seam/return should not be flattened as interior roughness.",
+      "operations": ["query_pixel", "query_geometry", "capture_view_bundle", "isolated_blender", "check_candidate"],
+      "reference": "Use matched bare-surface and complete-feature captures, plus qualified local appearance cues. Keep supported, excluded and unknown guide portions visible."
+    }
+  ],
+  "experimental": [
+    {"title": "Unqualified local guide transfer or a new fairing recipe", "status": "Promising only where evidence supports it", "instruction": "Show built alternatives, exact source support and affected motion. Do not turn a smooth reference patch or synthetic score into accepted geometry."},
+    {"title": "Recurring pose patches, metric-only retention and contour drift", "status": "Known failure patterns", "instruction": "Stop equivalent sweeps. Revisit the construction and the user's actual target. Keep failed trials as history rather than default recommendations."}
+  ]
+}

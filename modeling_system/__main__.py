@@ -8,8 +8,14 @@ parser.add_argument('--store',help='Optional explicit evidence store; default co
 parser.add_argument('--workspace')
 parser.add_argument('operation')
 parser.add_argument('--input',help='JSON arguments file; preserves exact paths and parameters')
+parser.add_argument('--port',type=int,default=8765,help='Loopback port for visual-feedback-ui')
 args=parser.parse_args()
 try:
+    if args.operation=='visual-feedback-ui':
+        if not args.workspace:raise ValueError('visual-feedback-ui requires an explicit private --workspace')
+        from .visual_feedback_server import serve
+        serve(args.workspace,args.store,args.port)
+        raise SystemExit(0)
     payload=json.loads(Path(args.input).read_text(encoding='utf-8')) if args.input else {}
     aliases={'inspect':'inspect_situation','import-scene':'import_scene','query':'query_geometry'}
     if args.operation=='query' and 'parameters' not in payload:

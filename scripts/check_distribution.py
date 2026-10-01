@@ -27,7 +27,10 @@ for p in files:
     rel=p.relative_to(root)
     if (len(rel.parts)==1 and rel.as_posix() not in allowed_files) or (len(rel.parts)>1 and rel.parts[0] not in allowed_roots):
         errors.append((rel,'outside source inventory'));continue
-    if p.suffix not in ('.py','.md','.json','.toml','.txt','.yml','.yaml','') and p.name not in allowed_files:
+    ui_source = rel.as_posix() in {'modeling_system/visual_feedback_ui/index.html',
+                                  'modeling_system/visual_feedback_ui/app.js',
+                                  'modeling_system/visual_feedback_ui/style.css'}
+    if p.suffix not in ('.py','.md','.json','.toml','.txt','.yml','.yaml','') and p.name not in allowed_files and not ui_source:
         errors.append((rel,'unsupported source file type'));continue
     if p.name in ('modeling-workspace.json','.mcp.json') or any(x in rel.parts for x in ('migration','evidence','bound-authority','assets','checkpoints')):
         errors.append((rel,'private workspace material'));continue

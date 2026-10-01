@@ -22,7 +22,8 @@ class UnconfiguredNative:
 
 READ_OPERATIONS={'capabilities','runtime_status','inspect_situation','inspect_workflow','read_record',
                  'retrieve_experience','decision_workspace','semantic_impact','inspect_operations','package_readiness',
-                 'evidence_manifest','operation_context','select_generation_route','operating_protocol','inspect_operating_session'}
+                 'evidence_manifest','operation_context','select_generation_route','operating_protocol','inspect_operating_session',
+                 'visual_feedback_read','visual_feedback_summary'}
 
 
 class ModelingService:
@@ -828,6 +829,79 @@ class ModelingService:
         """Compose a matched review sheet: one labeled row per entry ({label, images: [path or null, ...]}), one headed column per state or view, every source pinned by hash, unmatched sizes reported."""
         from .review_sheets import compose_review_sheet
         return compose_review_sheet(rows,columns,output,title=title)
+
+    def _visual_feedback(self):
+        from .visual_feedback import VisualFeedback
+        return VisualFeedback(self.store, self.ledger)
+
+    def visual_feedback_create(self, title: str, idempotency_key: str) -> dict:
+        """Open an optional durable visual feedback board; no native effects or approval gate."""
+        return self._visual_feedback().create(title, idempotency_key)
+
+    def visual_feedback_image(self, board: str, expected_revision: str, image_path: str, metadata: dict) -> dict:
+        """Pin inspection/reference/result image bytes and exact source/version/date/camera/display_state/pose descriptors; no native authentication."""
+        return self._visual_feedback().image(board, expected_revision, image_path, metadata)
+
+    def visual_feedback_target(self, board: str, expected_revision: str, image: str, label: str, wording: str,
+                               date: str, source: str, region: list[float], target_id: str | None = None,
+                               supersedes: str | None = None) -> dict:
+        """Mark a region on a pinned image and retain exact dated user wording; revisions preserve their predecessors."""
+        return self._visual_feedback().target(board, expected_revision, image, label, wording, date, source, region, target_id, supersedes)
+
+    def visual_feedback_plan(self, board: str, expected_revision: str, target: str, interpretation: str,
+                             preserved_features: list[str], method: str, expected_appearance: str,
+                             references: list[str] | None = None, supersedes: str | None = None) -> dict:
+        """Record interpretation, preserved features, operation and expected appearance with independently qualified reference roles."""
+        return self._visual_feedback().plan(board, expected_revision, target, interpretation, preserved_features,
+                                            method, expected_appearance, references, supersedes)
+
+    def visual_feedback_reference(self, board: str, expected_revision: str, image: str, role: str,
+                                  overall_status: str, rejection_reason: str, supported: str, excluded: str,
+                                  unknown: str, qualification: str) -> dict:
+        """Qualify a guide's local appearance role independently of its original rejection; never adopt its geometry."""
+        return self._visual_feedback().reference_role(board, expected_revision, image, role, overall_status,
+                                                     rejection_reason, supported, excluded, unknown, qualification)
+
+    def visual_feedback_compare(self, board: str, expected_revision: str, target: str, plan: str,
+                                baseline: str, trial: str, baseline_caption: str, trial_caption: str,
+                                changed: str, unchanged: str, baseline_region: list[float], trial_region: list[float],
+                                baseline_approval: dict | None = None) -> dict:
+        """Pin fixed LEFT baseline / RIGHT trial review. Unknown or different camera/state/pose/region stays visible; baseline approval needs an exact user fact."""
+        return self._visual_feedback().compare(board, expected_revision, target, plan, baseline, trial,
+            baseline_caption, trial_caption, changed, unchanged, baseline_region, trial_region, baseline_approval)
+
+    def visual_feedback_agreement(self, board: str, expected_revision: str, target: str, plan: str, fact: dict) -> dict:
+        """Retain explicit user target/interpretation agreement with wording/date/source; it is not result acceptance."""
+        return self._visual_feedback().agreement(board, expected_revision, target, plan, fact)
+
+    def visual_feedback_submit(self, board: str, expected_revision: str, comparison: str, target: str, plan: str,
+                               inspection: str, trial: str, source_version: str, result_version: str, wording: str,
+                               date: str, source: str, correction: dict | None = None, historical: bool = False) -> dict:
+        """Attach exact region/target/proposal/source/result feedback. Corrections create a visible new interpretation; stale feedback cannot apply to newer results."""
+        return self._visual_feedback().feedback(board, expected_revision, comparison, target, plan, inspection, trial,
+            source_version, result_version, wording, date, source, correction, historical)
+
+    def visual_feedback_state(self, board: str, expected_revision: str, comparison: str, facet: str,
+                              value: str, evidence: str, fact: dict | None = None) -> dict:
+        """Record independent execution/technical/visual/retention/owner-acceptance facts for an exact result; recording executes no native work."""
+        return self._visual_feedback().state_fact(board, expected_revision, comparison, facet, value, evidence, fact)
+
+    def visual_feedback_read(self, board: str | None = None, limit: int = 50) -> dict:
+        """Reopen current targets, corrected interpretations and complete provenance-linked history; historical feedback never inherits into newer results."""
+        return self._visual_feedback().read(board, limit)
+
+    def visual_feedback_presentation(self, board: str, expected_revision: str, collection: str,
+                                     record: str, archived: bool, reason: str) -> dict:
+        """Recoverably archive/restore a board or image in presentation only; all evidence/history remains retrievable and referenced images remain visible in reviews."""
+        return self._visual_feedback().presentation(board, expected_revision, collection, record, archived, reason)
+
+    def visual_feedback_summary(self, board: str) -> dict:
+        """Read a human-readable target summary with exact wording, agreement scope and retrievable history."""
+        return dict(board=board, markdown=self._visual_feedback().summary(board))
+
+    def visual_feedback_export(self, board: str, output: str) -> dict:
+        """Export a new private Markdown target summary without overwriting previous summaries."""
+        return self._visual_feedback().export(board, output)
 
 # Every public effectful/fact-producing Python method uses the same journal as
 # MCP/CLI. Reads are intentionally not recorded. Facade calls establish scope;

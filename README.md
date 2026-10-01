@@ -37,10 +37,19 @@ native work. There is no universal rig adapter or bundled character.
 
 ## Use the modeling loop
 
-The loop: inspect a problem area, generate an image of it from all of the
-character's references, generate a mesh from that image, register the mesh onto
-the character and fit to it, always shown overlapped on the live model (the
-character solid orange, the guide a blue wire cage in the same coordinates).
+Start with [one useful correction cycle](modeling_system/plugin/skills/modeling-workbench/references/useful-workflow.md):
+clarify the visible target, choose supported shape fitting or coherent motion
+construction, diagnose only uncertainty that changes the next edit, build one
+recoverable comparison, and keep the supported gain with its limits. This route
+curates observed local successes and known failures; it does not claim every
+experiment or package feature improved appearance. Tools and diagnostics serve
+that cycle. Cross-character transfer still needs evidence in the new workspace.
+
+Inspect the problem area and reuse qualified spatial support. When a named shape
+or likeness constraint is missing, generate an image using all of the character's
+references, reconstruct reviewed views into a mesh, register its useful support
+onto the character and fit to it. Show the guide overlapped on the live model
+(the character solid orange, the guide a blue wire cage in the same coordinates).
 Start from the workspace's current page (`PROJECT.md`): the mechanisms, guides
 and their roles, the last owner-approved state and the next action. Registered
 guides, depth and corresponding sections constrain the actual correction of
@@ -64,6 +73,55 @@ The [operator skill](modeling_system/plugin/skills/modeling-workbench/SKILL.md) 
 a short router: the loop, eight verbs (guide, show, construct, check, study,
 trial / reopen / retain, log, notes) and the page to read for each task. It
 carries this process to another agent without requiring conversation history.
+
+## Keep a visual correction target across sessions
+
+Start the optional local feedback UI manually, pointing at the private character
+workspace (and, optionally, its existing evidence store):
+
+```sh
+python -m modeling_system visual-feedback-ui --workspace /path/to/character --port 8765
+# equivalent: python -m modeling_system.visual_feedback_server --workspace /path/to/character
+```
+
+Open `http://127.0.0.1:8765/`. The visible workflow explains the correction cycle
+and offers evidence-informed method drafts with their applicability and limits.
+Create a board, import a source-bound inspection
+image, drag to mark a region, and save the exact dated user wording. Record the
+interpretation, features to preserve, proposed method and expected appearance.
+Qualify reference images by local role, including supported, excluded and unknown
+portions; a guide's overall rejection remains visible. Compare a labelled baseline
+on the left with an isolated trial on the right, then save feedback on those exact
+region/target/interpretation/source/result revisions. A correction creates a new
+interpretation and preserves the earlier one. Reopen the saved board or download
+its Markdown target summary. Stop the server with Ctrl+C when finished.
+
+The working view highlights the selected region's inspection, current comparison
+and useful reference images. Other saved images and exact provenance stay in
+expandable views; correction history has its own tab. Archive incidental images
+or finished boards to reduce clutter, then restore them from the archive when
+needed. Archiving only changes presentation: pinned bytes, references, comparisons
+and prior decisions remain recoverable. An archived image still appears wherever
+an existing target or review needs it.
+
+Images and records use the same content-addressed Workbench Store and revisioned
+Ledger as the service. The `visual_feedback_*` operations are also available through
+Python, CLI JSON input and MCP. No additional UI framework, relay, account or native
+adapter is needed. This is a standalone loopback UI; it is not embedded in Blender
+and does not edit a scene or adopt a new runtime. Keep its private store outside
+this package checkout.
+
+Matching compares recorded camera/display-state/pose/size/region descriptors,
+including the marked inspection's framing against both comparison images;
+missing information stays unknown and differences stay unmatched. Recorded source
+assertions do not authenticate native capture or live state. User agreement is an
+explicit dated fact for a target and interpretation; baseline approval and result
+acceptance require their own exact user facts. Proposed/running/built, technical
+verification, visual usefulness, retention and owner acceptance remain independent.
+The flow adds no mandatory approval gate to modeling.
+
+See [visual feedback](modeling_system/plugin/skills/modeling-workbench/references/visual-feedback.md)
+for the service record shapes and correction/reopen workflow.
 
 ## Direct operation and batching
 
