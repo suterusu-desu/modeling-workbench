@@ -120,6 +120,13 @@ acceptance require their own exact user facts. Proposed/running/built, technical
 verification, visual usefulness, retention and owner acceptance remain independent.
 The flow adds no mandatory approval gate to modeling.
 
+Review contextual eye-and-surrounding-face and whole-face pairs first. The viewer
+fits the complete source images and synchronizes LEFT/RIGHT zoom and pan; tight
+closeups are secondary and target outlines are hidden for skin assessment. Import
+broader captures of the same baseline/trial versions with camera, light, state,
+scale/framing and pose descriptors. Missing context stays explicit; existing crops
+and saved annotations are preserved.
+
 See [visual feedback](modeling_system/plugin/skills/modeling-workbench/references/visual-feedback.md)
 for the service record shapes and correction/reopen workflow.
 

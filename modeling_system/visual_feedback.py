@@ -16,6 +16,20 @@ KIND = 'visual_feedback'
 COLLECTIONS = ('images', 'targets', 'plans', 'comparisons', 'feedback',
                'agreements', 'reference_roles', 'state_facts', 'presentation_events')
 FACETS = ('execution', 'technical_verification', 'visually_useful', 'retained', 'owner_acceptance')
+VIEW_FIELDS = ('camera', 'display_state', 'pose', 'lighting', 'framing')
+
+
+def view_matching(before, after):
+    mismatched, unknown = [], []
+    for field in VIEW_FIELDS:
+        left, right = before['metadata'].get(field), after['metadata'].get(field)
+        if not left or not right:
+            unknown.append(field)
+        elif left != right:
+            mismatched.append(field)
+    if before['size'] != after['size']:
+        mismatched.append('image dimensions')
+    return mismatched, unknown
 
 
 def text(value, field):
@@ -86,15 +100,18 @@ class VisualFeedback:
     def image(self, board, expected_revision, image_path, metadata):
         value = self._board(board, expected_revision)
         allowed = {'label', 'source', 'source_version', 'captured_at', 'camera', 'display_state', 'pose',
+                   'lighting', 'framing', 'view_role',
                    'capture_record', 'image_sha256'}
         if not isinstance(metadata, dict) or set(metadata) - allowed:
             raise ValueError('Image metadata fields: ' + ', '.join(sorted(allowed)))
         for field in ('label', 'source', 'source_version', 'captured_at'):
             text(metadata.get(field), field)
         dated(metadata['captured_at'], 'captured_at')
-        for field in ('camera', 'display_state', 'pose'):
+        for field in VIEW_FIELDS:
             if metadata.get(field) is not None and not isinstance(metadata[field], (str, dict)):
                 raise ValueError(field + ' must be text, an exact descriptor, or null (unknown)')
+        if metadata.get('view_role') not in (None, 'eye_context', 'whole_face', 'detail'):
+            raise ValueError('view_role must be eye_context, whole_face, detail, or null (unknown)')
         # Decode before retention; raw source bytes remain unchanged.
         with Image.open(image_path) as image:
             if image.format not in ('PNG', 'JPEG', 'WEBP'):
@@ -188,7 +205,8 @@ class VisualFeedback:
         return row, proposal
 
     def compare(self, board, expected_revision, target, plan, baseline, trial, baseline_caption,
-                trial_caption, changed, unchanged, baseline_region, trial_region, baseline_approval=None):
+                trial_caption, changed, unchanged, baseline_region, trial_region, baseline_approval=None,
+                context_views=None):
         value = self._board(board, expected_revision)
         row, proposal = self._scope(value, target, plan)
         before = self._record(value, 'images', baseline)
@@ -197,19 +215,11 @@ class VisualFeedback:
         if baseline == trial:
             raise ValueError('An isolated trial requires a distinct image record')
         areas = [rectangle(baseline_region), rectangle(trial_region)]
-        mismatched, unknown = [], []
-        for field in ('camera', 'display_state', 'pose'):
-            left, right = before['metadata'].get(field), after['metadata'].get(field)
-            if not left or not right:
-                unknown.append(field)
-            elif left != right:
-                mismatched.append(field)
-        if before['size'] != after['size']:
-            mismatched.append('image dimensions')
+        mismatched, unknown = view_matching(before, after)
         # The marked inspection defines what these coordinates refer to. Equal
         # baseline/trial descriptors cannot qualify a region from another view.
         for side, image in (('baseline', before), ('trial', after)):
-            for field in ('camera', 'display_state', 'pose'):
+            for field in VIEW_FIELDS:
                 source, compared = inspection['metadata'].get(field), image['metadata'].get(field)
                 label = 'inspection/' + side + ' ' + field
                 if not source or not compared:
@@ -224,6 +234,38 @@ class VisualFeedback:
             mismatched.append('target annotation coordinates')
         if before['metadata']['source_version'] == after['metadata']['source_version']:
             unknown.append('distinct source/result versions (same declared version)')
+        # Broader captures stay inside this exact review, with their own matching
+        # verdict. They cannot borrow the target's coordinates from another view.
+        views, roles = [], set()
+        if context_views is not None and not isinstance(context_views, list):
+            raise ValueError('context_views must be a list of role/baseline/trial objects')
+        for view in context_views or []:
+            if not isinstance(view, dict) or set(view) != {'role', 'baseline', 'trial'}:
+                raise ValueError('Context view requires exactly role, baseline and trial')
+            role = view['role']
+            if role not in ('eye_context', 'whole_face') or role in roles:
+                raise ValueError('Use at most one eye_context and one whole_face pair')
+            roles.add(role)
+            left = self._record(value, 'images', view['baseline'])
+            right = self._record(value, 'images', view['trial'])
+            if view['baseline'] == view['trial']:
+                raise ValueError('A context trial requires a distinct image record')
+            different, missing = view_matching(left, right)
+            for side, image, primary in (('baseline', left, before), ('trial', right, after)):
+                if image['metadata']['source_version'] != primary['metadata']['source_version']:
+                    different.append(side + ' source/result version')
+                if not image['metadata'].get('pose') or not primary['metadata'].get('pose'):
+                    missing.append(side + ' primary pose')
+                elif image['metadata']['pose'] != primary['metadata']['pose']:
+                    different.append(side + ' primary pose')
+                if not image['metadata'].get('view_role'):
+                    missing.append(side + ' view extent')
+                elif image['metadata']['view_role'] != role:
+                    different.append(side + ' view extent')
+            views.append(dict(**view, matching=dict(
+                status='unmatched' if different else 'unknown' if missing else 'matched declared inputs',
+                mismatched=different, unknown=missing,
+                basis='Recorded context descriptors and exact baseline/trial versions; no native authentication or remapped target annotation')))
         match = 'unmatched' if mismatched else 'unknown' if unknown else 'matched declared inputs'
         return self._append(value, {'comparisons': [dict(target_id=row['target_id'], target=target, plan=plan,
             inspection=row['image'], source_version=row['source_version'], baseline=baseline, trial=trial,
@@ -231,6 +273,7 @@ class VisualFeedback:
             baseline_caption=text(baseline_caption, 'baseline caption'), trial_caption=text(trial_caption, 'trial caption'),
             changed=text(changed, 'changed areas'), unchanged=text(unchanged, 'unchanged areas'),
             baseline_approval=user_fact(baseline_approval) if baseline_approval is not None else None,
+            context_views=views,
             matching=dict(status=match, mismatched=mismatched, unknown=unknown,
                 basis='Exact comparison of recorded descriptors and normalized annotations; caller source assertions, not native authentication'),
             panel_order=['baseline', 'trial'])]})
@@ -371,6 +414,9 @@ class VisualFeedback:
                 lines += ['Comparison: ' + comparison['matching']['status'], 'LEFT: ' + comparison['baseline_caption'],
                           'RIGHT: ' + comparison['trial_caption'], 'Changed: ' + comparison['changed'],
                           'Unchanged: ' + comparison['unchanged'], 'Result version: ' + comparison['result_version'], '']
+                for context in comparison.get('context_views', []):
+                    lines += ['Context ' + context['role'] + ': ' + context['matching']['status'],
+                              'LEFT image: ' + context['baseline'], 'RIGHT image: ' + context['trial'], '']
         lines += ['## Retrievable history', '']
         for name in ('targets', 'plans', 'comparisons', 'feedback', 'agreements', 'reference_roles', 'state_facts', 'presentation_events'):
             for row in view[name]:

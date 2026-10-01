@@ -11,7 +11,7 @@ loopback port. No native adapter or new dependency is needed. Installation into 
 modeler's runtime is a separate guarded action.
 
 1. Create a board. Import an inspection image with a plain-language label, exact
-   source/version, capture date and camera/display-state/pose descriptors. Unknown
+   source/version, capture date and camera/light/display-state/scale/pose descriptors. Unknown
    descriptors stay unknown. Source bytes are content-pinned without modification.
 2. Drag to mark the region or enter normalized `[x,y,width,height]`. Save exact user
    wording, its date and source. Each region has its own identity; revising a region
@@ -24,9 +24,18 @@ modeler's runtime is a separate guarded action.
    evidence. This never clears its rejection or adopts its geometry.
 4. Save a fixed LEFT baseline / RIGHT isolated trial review with plain-language
    captions, changed and unchanged/unresolved areas, exact annotations and source
-   metadata. Both panels retain their date/camera/state/pose. Exact descriptor
+   metadata. Both panels retain their date/camera/light/state/scale/pose. Add an
+   **eye and surrounding face** pair and a **whole-face** pair of these same
+   baseline/trial versions. Declare each image's visible extent when importing it.
+   These broader views appear first, fitted to the entire source image; optional
+   closeups stay in a secondary expandable view. Fit, zoom and drag-to-pan controls
+   act together on LEFT and RIGHT. Target outlines are hidden during skin review
+   and can be shown without a filled overlay. No target coordinates are inferred
+   on a different camera. Missing broader captures remain visibly unavailable;
+   fitting an existing tight crop does not restore absent facial context.
+   Exact descriptor
    equality yields **matched declared inputs**, not authenticated native matching.
-   Different camera/state/pose/size/region is **unmatched**; missing descriptors or
+   Different camera/light/state/scale/pose/size/region is **unmatched**; missing descriptors or
    indistinguishable source/result versions are **unknown**. Do not imply a surface
    repair merely because a silhouette or contour changed.
 5. Save feedback on the displayed region, target/proposal revision, inspection,
@@ -68,7 +77,8 @@ updates. Python calls, CLI (`--input args.json`) and MCP expose the same operati
 - `visual_feedback_create(title, idempotency_key)` returns `board`/`revision`.
 - `visual_feedback_image(..., image_path, metadata)` pins bytes. Metadata requires
   `label`, `source`, `source_version`, `captured_at`; optional `camera`,
-  `display_state`, `pose`, existing Store `capture_record`, and `image_sha256`.
+  `display_state`, `pose`, `lighting`, `framing` (scale/crop descriptor), `view_role`
+  (`eye_context`, `whole_face`, `detail`), existing Store `capture_record`, and `image_sha256`.
   A receipt link is retrievable evidence, not inferred native authentication.
 - `visual_feedback_target(..., image, label, wording, date, source, region)` creates
   a region. Revision also requires `target_id` and current `supersedes` target record.
@@ -76,9 +86,15 @@ updates. Python calls, CLI (`--input args.json`) and MCP expose the same operati
   expected_appearance, references, supersedes)` records an interpretation/proposal.
   References are `visual_feedback_reference` record IDs, not unchecked guide geometry.
 - `visual_feedback_compare(..., target, plan, baseline, trial, baseline_caption,
-  trial_caption, changed, unchanged, baseline_region, trial_region, baseline_approval)`
+  trial_caption, changed, unchanged, baseline_region, trial_region, baseline_approval, context_views)`
   pins a review. Optional approval is `{actor:"user",wording,date,source}`; generic
   review metadata is not accepted as a user fact.
+  Optional `context_views` contains at most one `{role:"eye_context",baseline,trial}`
+  and one `{role:"whole_face",baseline,trial}`. Each pair retains its own descriptor
+  matching verdict and must name the primary baseline/trial versions and pose.
+  Different versions/light/framing remain unmatched; missing fields remain unknown.
+  Old immutable comparisons retain their original stored verdict; the browser also
+  displays missing light/framing qualification without rewriting their evidence.
 - `visual_feedback_submit(..., comparison, target, plan, inspection, trial,
   source_version, result_version, wording, date, source, correction, historical)`
   records exact-scoped feedback. Correction supplies the complete new

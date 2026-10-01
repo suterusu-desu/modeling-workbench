@@ -4,6 +4,7 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
 let board = null, regionId = null, reviewId = null, revising = null, dragStart = null;
 let feedbackDraft = null;
 let workflow = null;
+const reviewViews = new Map();
 const rows = collection => board?.[collection] || [];
 const record = id => Object.values(board || {}).flatMap(v => Array.isArray(v) ? v : []).find(v => v.record === id);
 const current = () => board?.current[regionId];
@@ -75,6 +76,7 @@ function bindForm(id, handler) {
 function chooseTab(name) {
   document.querySelectorAll('.tab').forEach(e=>e.hidden=e.id!==name+'-tab');
   document.querySelectorAll('[data-tab]').forEach(e=>e.classList.toggle('active', e.dataset.tab===name));
+  requestAnimationFrame(initializeReviewViews);
 }
 document.querySelectorAll('[data-tab]').forEach(e=>e.onclick=()=>chooseTab(e.dataset.tab));
 $('boards').onchange = async()=> { if ($('boards').value) try {regionId=null; reviewId=null; await reopen($('boards').value);message('Opened '+board.title+'.');}catch(e){message(e.message,true);} };
@@ -95,7 +97,7 @@ bindForm('upload', async form => {
   if (!file || file.size>20*1024*1024) throw Error('Choose an image smaller than 20 MiB.');
   const bytes = new Uint8Array(await file.arrayBuffer()); let binary='';
   for (let i=0;i<bytes.length;i+=8192) binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
-  const metadata = Object.fromEntries(['label','source','source_version','camera','display_state','pose'].map(k=>[k,fields[k]||null]));
+  const metadata = Object.fromEntries(['label','source','source_version','camera','display_state','pose','lighting','framing','view_role'].map(k=>[k,fields[k]||null]));
   metadata.captured_at=fields.captured_at;
   const result = await request('/api/upload',{...scope(),filename:file.name,data:btoa(binary),metadata});
   await reopen(board.board); $('target-form').elements.image.value=result.added.images[0]; updateMarkImage();
@@ -104,9 +106,9 @@ bindForm('upload', async form => {
 function options(selector, collection, label) {
   document.querySelectorAll(selector).forEach(select=>{
     const previous=Array.from(select.selectedOptions,o=>o.value);
-    select.innerHTML=collection.map(r=>`<option value="${r.record}">${esc(label(r))}</option>`).join('');
+    select.innerHTML=(select.classList.contains('context-select')?'<option value="">Not supplied</option>':'')+collection.map(r=>`<option value="${r.record}">${esc(label(r))}</option>`).join('');
     if (select.multiple) Array.from(select.options).forEach(o=>o.selected=previous.includes(o.value));
-    else if (previous.includes(select.value) || collection.some(r=>r.record===previous[0])) select.value=previous[0];
+    else if (previous[0]===''||previous.includes(select.value) || collection.some(r=>r.record===previous[0])) select.value=previous[0];
   });
 }
 function regionFields(value) {
@@ -163,10 +165,15 @@ bindForm('agreement-form',async form=>{
 });
 bindForm('compare-form',async form=>{
   if (!plan())throw Error('Record a target interpretation first.');const f=data(form);
+  const context_views=[];
+  for(const [role,prefix] of [['eye_context','eye'],['whole_face','face']]){
+    if(Boolean(f[prefix+'_baseline'])!==Boolean(f[prefix+'_trial']))throw Error('Supply both LEFT and RIGHT images for '+role.replace('_',' ')+', or leave both empty.');
+    if(f[prefix+'_baseline'])context_views.push({role,baseline:f[prefix+'_baseline'],trial:f[prefix+'_trial']});
+  }
   const result=await operation('compare',{...scope(),target:target().record,plan:plan().record,baseline:f.baseline,trial:f.trial,
     baseline_caption:f.baseline_caption,trial_caption:f.trial_caption,changed:f.changed,unchanged:f.unchanged,
     baseline_region:JSON.parse(f.baseline_region),trial_region:JSON.parse(f.trial_region),
-    baseline_approval:f.approval_wording?fact(f.approval_wording,f.approval_date,f.approval_source):null});
+    baseline_approval:f.approval_wording?fact(f.approval_wording,f.approval_date,f.approval_source):null,context_views});
   reviewId=result.added.comparisons[0];await reopen(board.board);$('compare-details').open=false;
   message('Fixed baseline-left / trial-right comparison saved. Matching reflects recorded descriptors; result approval is separate.');
 });
@@ -220,7 +227,7 @@ function provenance(row){return `<details><summary>Exact provenance and revision
 function referenceCards(refs){return `<div class="reference-cards">${refs.map(id=>{const r=record(id);return r?`<article class="card"><h3>${esc(r.role)}</h3><img src="${imageUrl(r.image)}" alt="${esc(r.role)} reference"><p><b>Overall guide:</b> ${esc(r.overall_status)} · ${esc(r.rejection_reason||'No rejection supplied')}</p><p><b>Supported:</b> ${esc(r.supported)}</p><p><b>Excluded:</b> ${esc(r.excluded)}</p><p><b>Unknown:</b> ${esc(r.unknown)}</p><p><b>Qualification:</b> ${esc(r.qualification)}</p><p class="hint">Local role only. Geometry adoption: none.</p>${provenance(r)}</article>`:'';}).join('')}</div>`;}
 function renderImages() {
   const active=current(), t=target(), p=plan(), r=record(active?.comparison);
-  const relevant=new Set([t?.image,r?.baseline,r?.trial,...(p?.references||[]).map(id=>record(id)?.image)].filter(Boolean));
+  const relevant=new Set([t?.image,r?.baseline,r?.trial,...(r?.context_views||[]).flatMap(v=>[v.baseline,v.trial]),...(p?.references||[]).map(id=>record(id)?.image)].filter(Boolean));
   const archived=new Set(board.presentation?.archived_images||[]);
   const thumbnail=i=>`<div class="saved-image"><div class="thumbnail"><img src="${imageUrl(i.record)}" alt=""><span>${esc(i.metadata.label)}</span></div><button type="button" data-image-archive="${i.record}" data-archived="${archived.has(i.record)}">${archived.has(i.record)?'Restore image':'Archive image'}</button>${archived.has(i.record)&&relevant.has(i.record)?'<p class="hint">Archived, still used by this target.</p>':''}</div>`;
   $('image-list').innerHTML=rows('images').filter(i=>relevant.has(i.record)).map(thumbnail).join('')||'<p class="hint">Mark a region to collect its current evidence here.</p>';
@@ -238,7 +245,7 @@ function renderImages() {
   // New selections favor working images. Existing referenced/selected evidence
   // remains selectable even if archived, without clearing historical bindings.
   options('.image-select',rows('images').filter(i=>!archived.has(i.record)||relevant.has(i.record)||
-    Array.from(document.querySelectorAll('.image-select')).some(s=>s.value===i.record)),i=>i.metadata.label+' · '+i.metadata.captured_at);
+    Array.from(document.querySelectorAll('.image-select')).some(s=>s.value===i.record)),i=>i.metadata.label+' · '+i.metadata.captured_at+' · '+(i.metadata.view_role?.replace('_',' ')||'extent unknown'));
 }
 function render(){
   $('archive-board').hidden=false;
@@ -263,17 +270,95 @@ function render(){
   renderComparison();renderHistory();updateMarkImage();setDates();
   if(!t)$('target-details').open=true;
 }
-function panel(imageId,caption,region,heading){
+function panel(imageId,caption,region,heading,viewing=false){
   const i=record(imageId),m=i.metadata;
-  return `<article class="panel"><div class="panel-title"><h3>${heading}</h3></div><div class="image-frame"><img src="${imageUrl(imageId)}" alt="${esc(caption)}"><svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true"><rect x="${region[0]}" y="${region[1]}" width="${region[2]}" height="${region[3]}"></rect></svg></div><div class="caption">${esc(caption)}</div><div class="meta">${esc(m.captured_at)}<br>Camera: ${esc(typeof m.camera==='object'?JSON.stringify(m.camera):m.camera||'unknown')}<br>State: ${esc(typeof m.display_state==='object'?JSON.stringify(m.display_state):m.display_state||'unknown')}<br>Pose: ${esc(typeof m.pose==='object'?JSON.stringify(m.pose):m.pose||'unknown')}</div>${provenance(i)}</article>`;
+  const annotation=region?`<svg class="target-outline" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true"><rect x="${region[0]}" y="${region[1]}" width="${region[2]}" height="${region[3]}"></rect></svg>`:'';
+  const image=`<img src="${imageUrl(imageId)}" alt="${esc(caption)}" draggable="false">${annotation}`;
+  const frame=viewing?`<div class="review-viewport" data-width="${i.size[0]}" data-height="${i.size[1]}"><div class="review-stage">${image}</div></div>`:`<div class="image-frame">${image}</div><button type="button" data-inspection-outline aria-pressed="false">Show target outline</button>`;
+  const descriptor=value=>esc(typeof value==='object'&&value!==null?JSON.stringify(value):value||'unknown');
+  return `<article class="panel"><div class="panel-title"><h3>${esc(heading)}</h3></div>${frame}<div class="caption">${esc(caption)}</div><div class="meta">${esc(m.captured_at)}<br>Version: ${esc(m.source_version)}<br>Camera: ${descriptor(m.camera)}<br>Light: ${descriptor(m.lighting)}<br>State: ${descriptor(m.display_state)}<br>Scale / framing: ${descriptor(m.framing)}<br>Pose: ${descriptor(m.pose)}</div>${provenance(i)}</article>`;
 }
+function displayMatching(pair){
+  const result={...pair.matching,mismatched:[...(pair.matching?.mismatched||[])],unknown:[...(pair.matching?.unknown||[])]};
+  // Old immutable comparisons predate explicit light/framing descriptors. Show
+  // their missing qualification without rewriting or invalidating their history.
+  for(const field of ['lighting','framing']){
+    const left=record(pair.baseline).metadata[field],right=record(pair.trial).metadata[field];
+    if(!left||!right)result.unknown.push(field);
+    else if(JSON.stringify(left)!==JSON.stringify(right))result.mismatched.push(field);
+  }
+  result.unknown=[...new Set(result.unknown)];result.mismatched=[...new Set(result.mismatched)];
+  result.status=result.mismatched.length?'unmatched':result.unknown.length?'unknown':'matched declared inputs';
+  return result;
+}
+function reviewPair(r,pair,label,key,annotations=false){
+  const match=displayMatching(pair),state=reviewViews.get(key)||{zoom:1,x:0,y:0,outlines:false};reviewViews.set(key,state);
+  const sameVersion=record(pair.baseline).metadata.source_version===record(r.baseline).metadata.source_version;
+  const left=r.baseline_approval&&sameVersion?'LEFT · Owner-approved baseline (recorded user fact)':'LEFT · Baseline — approval unknown';
+  return `<section class="review-pair" data-view-key="${esc(key)}" data-view-role="${esc(pair.role||'original')}"><h3>${esc(label)}</h3><p class="${match.status==='matched declared inputs'?'match':'warning'}"><b>${esc(match.status.toUpperCase())}</b> ${esc([...match.mismatched.map(s=>'Different: '+s),...match.unknown.map(s=>'Unknown: '+s)].join(' · '))}</p><div class="view-controls"><button type="button" data-fit-view>Fit entire image</button><label>Both panels · zoom<input type="range" data-zoom-view min="1" max="4" step="0.1" value="${state.zoom}" aria-label="${esc(label)} synchronized zoom"></label><output>${Math.round(state.zoom*100)}%</output>${annotations?'<button type="button" data-outline-view aria-pressed="false">Show target outline</button>':''}</div><p class="hint">Both panels use the same viewing zoom and pan. Drag to pan after zooming. ${annotations?'Target outline is hidden for skin review.':'Target coordinates remain on the pinned inspection; no annotation is inferred in this camera.'}</p><div class="panels">${panel(pair.baseline,r.baseline_caption,annotations?r.baseline_region:null,left,true)}${panel(pair.trial,r.trial_caption,annotations?r.trial_region:null,'RIGHT · Isolated trial',true)}</div></section>`;
+}
+function reviewEvidence(r){
+  const supplied=r.context_views||[],used=new Set(),parts=[];
+  const primaryRole=record(r.baseline).metadata.view_role;
+  for(const [role,label] of [['eye_context','Eye and surrounding face'],['whole_face','Whole face']]){
+    let pair=supplied.find(v=>v.role===role);
+    if(!pair&&primaryRole===role&&record(r.trial).metadata.view_role===role)pair={...r,role};
+    if(pair){parts.push(reviewPair(r,pair,label,r.record+':'+role,pair.baseline===r.baseline&&pair.trial===r.trial));used.add(pair.baseline+'|'+pair.trial);}
+    else parts.push(`<p class="warning" data-missing-context="${role}">${label} pair not supplied for these exact versions. A tight crop cannot establish this context. Add broader source captures without replacing the saved target or comparison history.</p>`);
+  }
+  if(!used.has(r.baseline+'|'+r.trial)){
+    const original=reviewPair(r,r,'Full original source images · recorded extent '+(primaryRole==='detail'?'closeup':primaryRole||'unknown'),r.record+':original',true);
+    if(!primaryRole&&!supplied.length)parts.push(original);
+    else parts.push(`<details class="detail-review"><summary>Optional closeup / original comparison</summary>${original}</details>`);
+  }
+  return parts.join('');
+}
+function applyReviewView(pair){
+  const state=reviewViews.get(pair.dataset.viewKey);if(!state)return;
+  const titles=Array.from(pair.querySelectorAll('.panel-title'));
+  titles.forEach(title=>title.style.minHeight='');
+  const titleHeight=Math.max(...titles.map(title=>title.offsetHeight));
+  titles.forEach(title=>title.style.minHeight=titleHeight+'px');
+  pair.classList.toggle('outlines-visible',state.outlines);
+  pair.querySelector('output').textContent=Math.round(state.zoom*100)+'%';
+  const toggle=pair.querySelector('[data-outline-view]');
+  if(toggle){toggle.setAttribute('aria-pressed',String(state.outlines));toggle.textContent=state.outlines?'Hide target outline':'Show target outline';}
+  for(const viewport of pair.querySelectorAll('.review-viewport')){
+    const stage=viewport.querySelector('.review-stage'),ratio=Number(viewport.dataset.width)/Number(viewport.dataset.height);
+    const width=Math.min(viewport.clientWidth,viewport.clientHeight*ratio),height=width/ratio;
+    stage.style.width=width+'px';stage.style.height=height+'px';
+    stage.style.transform=`translate(-50%,-50%) translate(${state.x*viewport.clientWidth}px,${state.y*viewport.clientHeight}px) scale(${state.zoom})`;
+  }
+}
+function initializeReviewViews(){
+  document.querySelectorAll('.review-pair').forEach(pair=>{
+    applyReviewView(pair);
+    pair.querySelector('[data-fit-view]').onclick=()=>{const s=reviewViews.get(pair.dataset.viewKey);Object.assign(s,{zoom:1,x:0,y:0});pair.querySelector('[data-zoom-view]').value=1;applyReviewView(pair);};
+    pair.querySelector('[data-zoom-view]').oninput=e=>{reviewViews.get(pair.dataset.viewKey).zoom=Number(e.target.value);applyReviewView(pair);};
+    const toggle=pair.querySelector('[data-outline-view]');if(toggle)toggle.onclick=()=>{const s=reviewViews.get(pair.dataset.viewKey);s.outlines=!s.outlines;applyReviewView(pair);};
+    for(const viewport of pair.querySelectorAll('.review-viewport')){
+      let start=null;
+      viewport.onpointerdown=e=>{const s=reviewViews.get(pair.dataset.viewKey);if(s.zoom<=1)return;start={px:e.clientX,py:e.clientY,x:s.x,y:s.y};viewport.setPointerCapture(e.pointerId);e.preventDefault();};
+      viewport.onpointermove=e=>{if(!start)return;const s=reviewViews.get(pair.dataset.viewKey),limit=(s.zoom-1)/2;s.x=Math.max(-limit,Math.min(limit,start.x+(e.clientX-start.px)/viewport.clientWidth));s.y=Math.max(-limit,Math.min(limit,start.y+(e.clientY-start.py)/viewport.clientHeight));applyReviewView(pair);};
+      viewport.onpointerup=viewport.onpointercancel=()=>{start=null;};
+    }
+  });
+}
+new ResizeObserver(()=>document.querySelectorAll('.review-pair').forEach(applyReviewView)).observe($('workspace'));
+document.addEventListener('toggle',event=>{if(event.target.matches('.detail-review'))initializeReviewViews();},true);
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-inspection-outline]');if(!button)return;
+  const shown=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(shown));
+  button.closest('.panel').classList.toggle('outlines-visible',shown);button.textContent=shown?'Hide target outline':'Show target outline';
+});
 function renderComparison(){
   const r=review();if(!r){$('comparison').innerHTML='<p>No comparison for this region yet. Add source-bound baseline and isolated trial images.</p>';$('feedback-scope').textContent='No comparison selected.';showFeedbackDraft();return;}
   const t=record(r.target),p=record(r.plan),active=r.record===current()?.comparison;
+  const matching=displayMatching(r);
   const state={};rows('state_facts').filter(f=>f.comparison===r.record).forEach(f=>state[f.facet]=f);
-  $('comparison').innerHTML=`${active?'':'<div class="warning">Historical comparison. This target or interpretation has changed. Feedback stays on these exact versions; a new comparison is needed for the current interpretation.</div>'}<div class="${r.matching.status==='matched declared inputs'?'match':'warning'}"><b>${esc(r.matching.status.toUpperCase())}</b><br>${esc([...r.matching.mismatched.map(s=>'Different: '+s),...r.matching.unknown.map(s=>'Unknown: '+s)].join(' · '))}<span class="hint">${esc(r.matching.basis)}</span></div><p><b>Marked target:</b> ${esc(t.wording)}<br><b>Interpretation at this review:</b> ${esc(p.interpretation)}</p><div class="panels">${panel(r.baseline,r.baseline_caption,r.baseline_region,r.baseline_approval?'LEFT · Owner-approved baseline (recorded user fact)':'LEFT · Baseline — approval unknown')}${panel(r.trial,r.trial_caption,r.trial_region,'RIGHT · Isolated trial')}</div><div class="states">${Object.entries(choices).map(([facet])=>`<div><strong>${esc(facet.replaceAll('_',' '))}</strong>${esc(state[facet]?.value||'unknown')}</div>`).join('')}</div><article class="card"><p><b>Changed:</b> ${esc(r.changed)}</p><p><b>Unchanged / unresolved:</b> ${esc(r.unchanged)}</p><p class="hint">An isolated result is not owner-approved without its own explicit user fact. Target agreement and technical verification do not imply acceptance.</p>${r.baseline_approval?`<p class="meta">Baseline user fact: ${esc(r.baseline_approval.wording)} · ${esc(r.baseline_approval.date)} · ${esc(r.baseline_approval.source)}</p>`:''}${provenance(r)}</article>`;
+  $('comparison').innerHTML=`${active?'':'<div class="warning">Historical comparison. This target or interpretation has changed. Feedback stays on these exact versions; a new comparison is needed for the current interpretation.</div>'}<div class="${matching.status==='matched declared inputs'?'match':'warning'}"><b>${esc(matching.status.toUpperCase())}</b><br>${esc([...matching.mismatched.map(s=>'Different: '+s),...matching.unknown.map(s=>'Unknown: '+s)].join(' · '))}<span class="hint">${esc(matching.basis)}</span></div><p><b>Marked target:</b> ${esc(t.wording)}<br><b>Interpretation at this review:</b> ${esc(p.interpretation)}</p>${reviewEvidence(r)}<div class="states">${Object.entries(choices).map(([facet])=>`<div><strong>${esc(facet.replaceAll('_',' '))}</strong>${esc(state[facet]?.value||'unknown')}</div>`).join('')}</div><article class="card"><p><b>Changed:</b> ${esc(r.changed)}</p><p><b>Unchanged / unresolved:</b> ${esc(r.unchanged)}</p><p class="hint">An isolated result is not owner-approved without its own explicit user fact. Target agreement and technical verification do not imply acceptance.</p>${r.baseline_approval?`<p class="meta">Baseline user fact: ${esc(r.baseline_approval.wording)} · ${esc(r.baseline_approval.date)} · ${esc(r.baseline_approval.source)}</p>`:''}${provenance(r)}</article>`;
   $('feedback-scope').innerHTML=`<strong>${esc(t.label)} · ${esc(record(r.trial).metadata.label)}</strong><br>Target revision: ${r.target.slice(0,12)} · interpretation: ${r.plan.slice(0,12)}<br>Inspection source version: ${esc(r.source_version)}<br>Result version: ${esc(r.result_version)}<br>${active?'Current exact comparison':'Historical — correction cannot activate from this review'}`;
-  showFeedbackDraft();
+  initializeReviewViews();showFeedbackDraft();
 }
 function renderHistory(){
   const entries=[];

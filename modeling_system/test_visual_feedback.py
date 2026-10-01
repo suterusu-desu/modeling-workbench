@@ -47,9 +47,12 @@ class VisualFeedbackTests(unittest.TestCase):
         return dict(actor='user', wording=wording, date='2026-01-02', source='Synthetic owner message')
 
     def add_image(self, label, version, **metadata):
-        return self.mutate('image', image_path=str(self.image), metadata=dict(label=label,
+        fields = dict(label=label,
             source='Synthetic saved capture', source_version=version, captured_at='2026-01-01T12:00:00Z',
-            camera='front-v1', display_state='bare-surface', pose='closed', **metadata))['added']['images'][0]
+            camera='front-v1', display_state='bare-surface', pose='closed',
+            lighting='fixed soft studio', framing='full frame, orthographic 1.0')
+        fields.update(metadata)
+        return self.mutate('image', image_path=str(self.image), metadata=fields)['added']['images'][0]
 
     def compare(self, **changes):
         args = dict(target=self.target, plan=self.plan, baseline=self.baseline, trial=self.trial,
@@ -98,6 +101,37 @@ class VisualFeedbackTests(unittest.TestCase):
         self.assertIn('Smooth relaxed skin', output.read_text())
         self.assertIn(self.plan, output.read_text())
         self.assertEqual(self.service.store.resolve_blob(view['images'][0]['asset']).read_bytes(), self.image.read_bytes())
+
+    def test_context_views_keep_versions_pose_light_scale_and_saved_evidence(self):
+        before = self.service._visual_feedback().read(self.board)
+        left = self.add_image('Whole face baseline', 'baseline-v1', view_role='whole_face', framing='whole face scale 3.0')
+        right = self.add_image('Whole face trial', 'trial-v1', view_role='whole_face', framing='whole face scale 3.0')
+        context = dict(role='whole_face', baseline=left, trial=right)
+        c = self.compare(context_views=[context])
+        view = self.service._visual_feedback().read(self.board)
+        pair = next(r for r in view['comparisons'] if r['record']==c)['context_views'][0]
+        self.assertEqual(pair['matching']['status'], 'matched declared inputs')
+        wrong = self.add_image('Different result/light/scale', 'trial-v2', view_role='whole_face',
+                               lighting='different lights', framing='different scale')
+        bad = self.compare(context_views=[dict(context, trial=wrong)])
+        view = self.service._visual_feedback().read(self.board)
+        match = next(r for r in view['comparisons'] if r['record']==bad)['context_views'][0]['matching']
+        self.assertEqual(match['status'], 'unmatched')
+        self.assertTrue({'lighting','framing','trial source/result version'} <= set(match['mismatched']))
+        missing = self.add_image('Unknown lighting', 'trial-v1', view_role='whole_face',
+                                 lighting=None, framing='whole face scale 3.0')
+        unknown = self.compare(context_views=[dict(context, trial=missing)])
+        self.service = ModelingService(self.root)
+        reopened = self.service._visual_feedback().read(self.board)
+        self.assertEqual(next(r for r in reopened['comparisons'] if r['record']==unknown)['context_views'][0]['matching']['status'], 'unknown')
+        self.assertEqual(reopened['targets'], before['targets'])
+        self.assertEqual(reopened['plans'], before['plans'])
+        self.assertEqual(reopened['comparisons'][0], before['comparisons'][0])
+        result = self.service.execute('visual_feedback_submit', dict(board=self.board,
+            expected_revision=self.revision, **self.feedback_args(c)))
+        self.assertEqual(result['status'], 'conflicting')
+        self.assertEqual(reopened['feedback'], [])
+        self.assertIn('Context whole_face: unknown', self.service._visual_feedback().summary(self.board))
 
     def test_stale_feedback_exact_result_binding_and_concurrent_revision(self):
         old_revision = self.revision

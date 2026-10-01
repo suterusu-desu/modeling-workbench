@@ -865,10 +865,10 @@ class ModelingService:
     def visual_feedback_compare(self, board: str, expected_revision: str, target: str, plan: str,
                                 baseline: str, trial: str, baseline_caption: str, trial_caption: str,
                                 changed: str, unchanged: str, baseline_region: list[float], trial_region: list[float],
-                                baseline_approval: dict | None = None) -> dict:
-        """Pin fixed LEFT baseline / RIGHT trial review. Unknown or different camera/state/pose/region stays visible; baseline approval needs an exact user fact."""
+                                baseline_approval: dict | None = None, context_views: list[dict] | None = None) -> dict:
+        """Pin LEFT baseline / RIGHT trial with optional eye-context/whole-face pairs of those exact versions. Different or unknown camera/light/state/scale/pose stays visible."""
         return self._visual_feedback().compare(board, expected_revision, target, plan, baseline, trial,
-            baseline_caption, trial_caption, changed, unchanged, baseline_region, trial_region, baseline_approval)
+            baseline_caption, trial_caption, changed, unchanged, baseline_region, trial_region, baseline_approval, context_views)
 
     def visual_feedback_agreement(self, board: str, expected_revision: str, target: str, plan: str, fact: dict) -> dict:
         """Retain explicit user target/interpretation agreement with wording/date/source; it is not result acceptance."""
