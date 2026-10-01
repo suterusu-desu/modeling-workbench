@@ -29,8 +29,13 @@ def make_server(service, port=8765):
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Content-Security-Policy', "default-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'")
-            self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.end_headers()
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                # A closed browser does not undo an already journaled operation.
+                # Do not retry it, send a second response, or dump private paths.
+                return
 
         def local_request(self):
             # Reject browser cross-origin writes and DNS rebinding. No relay or network exposure.
