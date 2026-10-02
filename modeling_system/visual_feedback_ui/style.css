@@ -37,3 +37,4 @@
 #workflow-methods p { font-size: 13px; }
 @media(max-width:900px) { #workflow-cycle { grid-template-columns: repeat(2,minmax(0,1fr)); } #workflow-methods { grid-template-columns: 1fr; } }
 @media(max-width:650px) { #workflow-cycle { grid-template-columns: 1fr; gap: 0; } }
+.motion-frame{position:relative;width:min(100%,calc(70vh * var(--motion-aspect)));margin-inline:auto;background:#edf0ec}.motion-frame video{display:block;width:100%;height:100%;object-fit:contain}.motion-frame svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}.motion-frame rect{fill:none;stroke:#a53c28;stroke-width:.002;pointer-events:none}.motion-controls{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.motion-controls button{font-size:13px}#motion-tool{margin-top:22px}

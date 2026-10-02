@@ -96,6 +96,25 @@ region/target/interpretation/source/result revisions. A correction creates a new
 interpretation and preserves the earlier one. Reopen the saved board or download
 its Markdown target summary. Stop the server with Ctrl+C when finished.
 
+For motion feedback, import a producer-supplied MP4 and its source metadata in the
+same correction review. Link normal/slow clips to that exact baseline/trial
+comparison, play the contextual view, step through decoded frames, pause and drag
+a region, then pin the frame to your feedback. Playback and speed selection cannot
+retarget an existing draft. A thin marking outline can be hidden; the complete
+frame fits by default. Corrections still create interpretation revisions, and
+reopening preserves the clip hash, frame, timestamp, region and original versions.
+
+Clip timing comes from decoded presentation timestamps, including variable frame
+rates. Each speed retains its own timestamps. Cross-speed correspondence requires
+the same explicit source sequence and ordered shared moment IDs; equal timestamps do not
+establish it. Moments present in only one clip remain unmapped (for example extra
+normal-speed cycles). Missing candidate, view, scale, layout or source mapping remains
+unknown; differing versions or mappings remain unmatched. A linked image is a
+provenance reference, never an inferred vertex mask or native correspondence.
+MP4 imports are bounded to 2400 frames and 128 MiB (20 MiB via browser upload).
+Decoding uses the existing bundled FFmpeg dependency. Local browser playback,
+source assertions, native motion qualification and artistic usefulness are separate.
+
 The working view highlights the selected region's inspection, current comparison
 and useful reference images. Other saved images and exact provenance stay in
 expandable views; correction history has its own tab. Archive incidental images

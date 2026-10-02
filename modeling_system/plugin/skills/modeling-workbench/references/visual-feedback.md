@@ -100,6 +100,28 @@ updates. Python calls, CLI (`--input args.json`) and MCP expose the same operati
   records exact-scoped feedback. Correction supplies the complete new
   `{interpretation,preserved_features,method,expected_appearance,references}`.
 - `visual_feedback_agreement(..., target, plan, fact)` stores the explicit user fact.
+- `visual_feedback_video(..., video_path, metadata)` pins MP4 bytes and decodes
+  actual presentation timestamps. Required metadata is `{label,source,captured_at,
+  speed_label}`. Optional descriptors are `camera,display_state,lighting,framing,
+  view_role`; versions are `baseline_version,result_version`. `layout` is
+  `baseline_left_trial_right`, `baseline_only`, `trial_only` or null. Unknowns
+  stay unknown. Optional `video_sha256` checks the supplied bytes, `related_image`
+  links an existing pinned image, and `library_identity` records an asserted exact
+  `{library_file_id,file_id,version,file_name}` without claiming remote verification.
+  For normal/slow correspondence, supply `sequence_id` and `frame_ids`: one unique
+  source moment ID per decoded frame, in the same order for both speeds.
+- `visual_feedback_motion(..., comparison, videos)` links one or two clips to the
+  current exact image comparison. It retains version/view/scale/mapping mismatches
+  and unknowns. Paired clips declare baseline LEFT/trial RIGHT; labels do not imply
+  baseline or result approval. Motion frame pose/source claims are not authenticated.
+- Optional `motion` on `visual_feedback_submit` is exactly
+  `{review,video,frame_index,timestamp_seconds,region,panel}`. `review` names the
+  motion review, `frame_index` is zero-based, timestamp must equal that decoded
+  frame's stored presentation time, and region is normalized on the complete
+  video frame. Panel is `baseline`, `trial` or `unresolved`; a known layout checks
+  the chosen side. Superseded motion reviews or comparisons require explicit
+  historical recording; they cannot update newer results. The existing correction
+  payload works with motion feedback and preserves the old interpretation.
 - `visual_feedback_state(..., comparison, facet, value, evidence, fact)` stores an
   independent reported outcome. `fact` is only for explicit owner acceptance/rejection.
 - `visual_feedback_presentation(..., collection, record, archived, reason)` appends

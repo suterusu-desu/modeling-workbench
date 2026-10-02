@@ -13,7 +13,7 @@ from .store import atomic_write, canonical
 
 
 KIND = 'visual_feedback'
-COLLECTIONS = ('images', 'targets', 'plans', 'comparisons', 'feedback',
+COLLECTIONS = ('images', 'videos', 'motion_reviews', 'targets', 'plans', 'comparisons', 'feedback',
                'agreements', 'reference_roles', 'state_facts', 'presentation_events')
 FACETS = ('execution', 'technical_verification', 'visually_useful', 'retained', 'owner_acceptance')
 VIEW_FIELDS = ('camera', 'display_state', 'pose', 'lighting', 'framing')
@@ -285,7 +285,7 @@ class VisualFeedback:
             fact=user_fact(fact), scope='Target and interpretation agreement only; no result approval')]})
 
     def feedback(self, board, expected_revision, comparison, target, plan, inspection, trial,
-                 source_version, result_version, wording, date, source, correction=None, historical=False):
+                 source_version, result_version, wording, date, source, correction=None, historical=False, motion=None):
         value = self._board(board, expected_revision)
         review = self._record(value, 'comparisons', comparison)
         for field, supplied in [('target', target), ('plan', plan), ('inspection', inspection), ('trial', trial),
@@ -303,6 +303,9 @@ class VisualFeedback:
             inspection=inspection, trial=trial, source_version=source_version, result_version=result_version,
             wording=text(wording, 'feedback wording'), date=dated(date), source=text(source, 'feedback source'),
             historical=bool(historical), interpretation_correction=bool(correction))
+        if motion is not None:
+            from .visual_feedback_video import bind_moment
+            payload['motion'] = bind_moment(self, value, comparison, motion, historical)
         records = {'feedback': [payload]}
         if correction:
             allowed = {'interpretation', 'preserved_features', 'method', 'expected_appearance', 'references'}
@@ -385,9 +388,14 @@ class VisualFeedback:
                 active['agreement'] = agreement['record']
         for feedback in rows['feedback']:
             active = current[feedback['target_id']]
+            motion_current = True
+            if feedback.get('motion'):
+                latest_motion = next((r['record'] for r in reversed(rows['motion_reviews'])
+                                      if r['comparison'] == feedback['comparison']), None)
+                motion_current = feedback['motion']['review'] == latest_motion
             feedback['applicability'] = ('current exact comparison' if not feedback['historical'] and
                 feedback['comparison'] == active['comparison'] and feedback['plan'] == active['plan'] and
-                feedback['target'] == active['target'] else 'historical only; never inherited by newer results')
+                feedback['target'] == active['target'] and motion_current else 'historical only; never inherited by newer results')
         return dict(board=board, revision=value['revision'], title=value['intent']['title'], updated=value['utc'],
                     current=current, presentation=self._presentation(value), **rows,
                     native_effects=False, mandatory_approval_gate=False)
@@ -418,7 +426,7 @@ class VisualFeedback:
                     lines += ['Context ' + context['role'] + ': ' + context['matching']['status'],
                               'LEFT image: ' + context['baseline'], 'RIGHT image: ' + context['trial'], '']
         lines += ['## Retrievable history', '']
-        for name in ('targets', 'plans', 'comparisons', 'feedback', 'agreements', 'reference_roles', 'state_facts', 'presentation_events'):
+        for name in ('targets', 'plans', 'comparisons', 'videos', 'motion_reviews', 'feedback', 'agreements', 'reference_roles', 'state_facts', 'presentation_events'):
             for row in view[name]:
                 lines += [name + ': ' + row['record'], canonical(row).decode('utf-8'), '']
         return '\n'.join(lines)

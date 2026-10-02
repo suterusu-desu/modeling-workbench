@@ -12,7 +12,7 @@ from .service import ModelingService
 
 UI = Path(__file__).with_name('visual_feedback_ui')
 OPERATIONS = {'visual_feedback_' + suffix for suffix in (
-    'create', 'image', 'target', 'plan', 'reference', 'compare', 'agreement', 'submit', 'state', 'presentation')}
+    'create', 'image', 'video', 'motion', 'target', 'plan', 'reference', 'compare', 'agreement', 'submit', 'state', 'presentation')}
 MAX_BODY = 32 * 1024 * 1024
 
 
@@ -49,6 +49,49 @@ def make_server(service, port=8765):
                 return False
             return True
 
+        def video_bytes(self, path):
+            # Browser seek needs bounded byte ranges. Resolve/hash the immutable
+            # asset before serving any range, including a reopened historical clip.
+            length = path.stat().st_size
+            start, end, status = 0, length - 1, 200
+            header = self.headers.get('Range')
+            if header:
+                import re
+                match = re.fullmatch(r'bytes=(\d*)-(\d*)', header)
+                if not match or not any(match.groups()):
+                    self.send(416, {'summary': 'Use a single byte range'})
+                    return
+                left, right = match.groups()
+                if left:
+                    start = int(left)
+                    end = min(int(right), length - 1) if right else length - 1
+                else:
+                    start = max(0, length - int(right))
+                if start >= length or end < start:
+                    self.send(416, {'summary': 'Range outside the pinned video'})
+                    return
+                status = 206
+            self.send_response(status)
+            self.send_header('Content-Type', 'video/mp4')
+            self.send_header('Content-Length', str(end - start + 1))
+            self.send_header('Accept-Ranges', 'bytes')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            if status == 206:
+                self.send_header('Content-Range', f'bytes {start}-{end}/{length}')
+            try:
+                self.end_headers()
+                with path.open('rb') as stream:
+                    stream.seek(start)
+                    remaining = end - start + 1
+                    while remaining:
+                        chunk = stream.read(min(65536, remaining))
+                        if not chunk: break
+                        self.wfile.write(chunk)
+                        remaining -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
+
         def do_GET(self):
             if not self.local_request():
                 return
@@ -66,6 +109,11 @@ def make_server(service, port=8765):
                     feedback = service._visual_feedback()
                     row = feedback._record(feedback._board(board), 'images', record)
                     self.send(200, service.store.resolve_blob(row['asset']).read_bytes(), row['media_type'])
+                elif url.path.startswith('/api/video/'):
+                    board, record = url.path[len('/api/video/'):].split('/')
+                    feedback = service._visual_feedback()
+                    row = feedback._record(feedback._board(board), 'videos', record)
+                    self.video_bytes(service.store.resolve_blob(row['asset']))
                 elif url.path in ('/', '/index.html', '/app.js', '/style.css', '/workflow.json'):
                     name = 'index.html' if url.path == '/' else url.path[1:]
                     media = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8', 'workflow.json': 'application/json; charset=utf-8'}[name]
@@ -83,16 +131,18 @@ def make_server(service, port=8765):
                 if not 0 < length <= MAX_BODY or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                     raise ValueError('Send a bounded JSON request')
                 body = json.loads(self.rfile.read(length))
-                if self.path == '/api/upload':
+                if self.path in ('/api/upload', '/api/video-upload'):
                     raw = base64.b64decode(body.pop('data'), validate=True)
                     suffix = Path(body.pop('filename')).suffix.lower()
-                    if suffix not in ('.png', '.jpg', '.jpeg', '.webp'):
+                    video = self.path == '/api/video-upload'
+                    if suffix not in (('.mp4',) if video else ('.png', '.jpg', '.jpeg', '.webp')):
                         raise ValueError('Choose a PNG, JPEG or WebP image')
                     # Transient upload bytes go into the same private store, then into content-addressed assets.
                     with tempfile.TemporaryDirectory(dir=service.store.root) as folder:
                         path = Path(folder) / ('inspection' + suffix)
                         path.write_bytes(raw)
-                        result = service.execute('visual_feedback_image', dict(body, image_path=str(path)))
+                        result = service.execute('visual_feedback_video' if video else 'visual_feedback_image',
+                            dict(body, **{('video_path' if video else 'image_path'): str(path)}))
                 elif self.path == '/api/operation':
                     operation = body['operation']
                     if operation not in OPERATIONS:

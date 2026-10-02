@@ -842,6 +842,16 @@ class ModelingService:
         """Pin inspection/reference/result image bytes and exact source/version/date/camera/display_state/pose descriptors; no native authentication."""
         return self._visual_feedback().image(board, expected_revision, image_path, metadata)
 
+    def visual_feedback_video(self, board: str, expected_revision: str, video_path: str, metadata: dict) -> dict:
+        """Pin a bounded MP4 and decoded presentation times; optional explicit source moment IDs link normal/slow playback without guessed correspondence."""
+        from .visual_feedback_video import video
+        return video(self._visual_feedback(), board, expected_revision, video_path, metadata)
+
+    def visual_feedback_motion(self, board: str, expected_revision: str, comparison: str, videos: list[str]) -> dict:
+        """Link one or two pinned clips to the exact baseline/trial comparison; missing or differing source/view/moment metadata stays unknown/unmatched."""
+        from .visual_feedback_video import motion_review
+        return motion_review(self._visual_feedback(), board, expected_revision, comparison, videos)
+
     def visual_feedback_target(self, board: str, expected_revision: str, image: str, label: str, wording: str,
                                date: str, source: str, region: list[float], target_id: str | None = None,
                                supersedes: str | None = None) -> dict:
@@ -876,10 +886,11 @@ class ModelingService:
 
     def visual_feedback_submit(self, board: str, expected_revision: str, comparison: str, target: str, plan: str,
                                inspection: str, trial: str, source_version: str, result_version: str, wording: str,
-                               date: str, source: str, correction: dict | None = None, historical: bool = False) -> dict:
+                               date: str, source: str, correction: dict | None = None, historical: bool = False,
+                               motion: dict | None = None) -> dict:
         """Attach exact region/target/proposal/source/result feedback. Corrections create a visible new interpretation; stale feedback cannot apply to newer results."""
         return self._visual_feedback().feedback(board, expected_revision, comparison, target, plan, inspection, trial,
-            source_version, result_version, wording, date, source, correction, historical)
+            source_version, result_version, wording, date, source, correction, historical, motion)
 
     def visual_feedback_state(self, board: str, expected_revision: str, comparison: str, facet: str,
                               value: str, evidence: str, fact: dict | None = None) -> dict:

@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let board = null, regionId = null, reviewId = null, revising = null, dragStart = null;
 let feedbackDraft = null;
+let motionDraft = null, motionClipId = null, motionRegion = null;
 let workflow = null;
 const reviewViews = new Map();
 const rows = collection => board?.[collection] || [];
@@ -192,6 +193,8 @@ function showFeedbackDraft() {
   $('feedback-draft-status').hidden=!changed;
   $('feedback-draft-status').textContent=changed?`This draft belongs to ${feedbackDraft.label} · ${feedbackDraft.result}. Return to that comparison to submit it, or clear the draft before writing for another result.`:'';
   $('discard-feedback-draft').hidden=!feedbackDraft;
+  $('motion-draft-scope').hidden=!motionDraft;
+  if(motionDraft){const clip=record(motionDraft.video);$('motion-draft-scope').textContent=`Pinned motion draft: ${clip?.metadata.label||motionDraft.video} · frame ${motionDraft.frame_index} · ${motionDraft.timestamp_seconds}s · ${motionDraft.panel} · region ${JSON.stringify(motionDraft.region)}. Playback and speed selection do not change this draft.`;}
 }
 function bindFeedbackDraft() {
   if (!feedbackDraft) feedbackDraft=feedbackBinding();
@@ -200,17 +203,19 @@ function bindFeedbackDraft() {
 $('feedback-form').addEventListener('input',bindFeedbackDraft);
 $('feedback-form').addEventListener('change',bindFeedbackDraft);
 $('discard-feedback-draft').onclick=()=>{
-  feedbackDraft=null;$('feedback-form').reset();$('correction-fields').hidden=true;setDates();showFeedbackDraft();
+  feedbackDraft=null;motionDraft=null;$('feedback-form').reset();$('correction-fields').hidden=true;setDates();showFeedbackDraft();
 };
 bindForm('feedback-form',async form=>{
   const r=review();if (!r)throw Error('Display a comparison first.');const f=data(form);
   const binding=feedbackBinding();
   if(feedbackDraft&&(feedbackDraft.board!==binding.board||feedbackDraft.comparison!==binding.comparison))
     throw Error('The displayed comparison changed after this draft began. Return to its original comparison or clear the draft.');
+  if(form.elements.include_motion.checked&&!motionDraft)throw Error('Pause a clip, mark its region and pin that frame first.');
   await operation('submit',{...scope(),comparison:r.record,target:r.target,plan:r.plan,inspection:r.inspection,trial:r.trial,
     source_version:r.source_version,result_version:r.result_version,wording:f.wording,date:f.date,source:f.source,
-    correction:form.elements.correct.checked?planData(form):null,historical:form.elements.historical.checked});
-  feedbackDraft=null;form.reset();setDates();await reopen(board.board);$('correction-fields').hidden=true;
+    correction:form.elements.correct.checked?planData(form):null,historical:form.elements.historical.checked,
+    motion:form.elements.include_motion.checked?motionDraft:null});
+  feedbackDraft=null;motionDraft=null;form.reset();setDates();await reopen(board.board);$('correction-fields').hidden=true;
   message('Version-bound feedback saved. A corrected interpretation is a new revision; its agreement and next comparison are explicit.');
 });
 const choices={execution:['proposed','running','built'],technical_verification:['unknown','passed','failed'],visually_useful:['unknown','yes','no'],retained:['unknown','yes','no'],owner_acceptance:['unknown','accepted','rejected']};
@@ -352,23 +357,26 @@ document.addEventListener('click',event=>{
   button.closest('.panel').classList.toggle('outlines-visible',shown);button.textContent=shown?'Hide target outline':'Show target outline';
 });
 function renderComparison(){
-  const r=review();if(!r){$('comparison').innerHTML='<p>No comparison for this region yet. Add source-bound baseline and isolated trial images.</p>';$('feedback-scope').textContent='No comparison selected.';showFeedbackDraft();return;}
+  const r=review();if(!r){$('comparison').innerHTML='<p>No comparison for this region yet. Add source-bound baseline and isolated trial images.</p>';$('feedback-scope').textContent='No comparison selected.';showFeedbackDraft();renderMotion();return;}
   const t=record(r.target),p=record(r.plan),active=r.record===current()?.comparison;
   const matching=displayMatching(r);
   const state={};rows('state_facts').filter(f=>f.comparison===r.record).forEach(f=>state[f.facet]=f);
   $('comparison').innerHTML=`${active?'':'<div class="warning">Historical comparison. This target or interpretation has changed. Feedback stays on these exact versions; a new comparison is needed for the current interpretation.</div>'}<div class="${matching.status==='matched declared inputs'?'match':'warning'}"><b>${esc(matching.status.toUpperCase())}</b><br>${esc([...matching.mismatched.map(s=>'Different: '+s),...matching.unknown.map(s=>'Unknown: '+s)].join(' · '))}<span class="hint">${esc(matching.basis)}</span></div><p><b>Marked target:</b> ${esc(t.wording)}<br><b>Interpretation at this review:</b> ${esc(p.interpretation)}</p>${reviewEvidence(r)}<div class="states">${Object.entries(choices).map(([facet])=>`<div><strong>${esc(facet.replaceAll('_',' '))}</strong>${esc(state[facet]?.value||'unknown')}</div>`).join('')}</div><article class="card"><p><b>Changed:</b> ${esc(r.changed)}</p><p><b>Unchanged / unresolved:</b> ${esc(r.unchanged)}</p><p class="hint">An isolated result is not owner-approved without its own explicit user fact. Target agreement and technical verification do not imply acceptance.</p>${r.baseline_approval?`<p class="meta">Baseline user fact: ${esc(r.baseline_approval.wording)} · ${esc(r.baseline_approval.date)} · ${esc(r.baseline_approval.source)}</p>`:''}${provenance(r)}</article>`;
   $('feedback-scope').innerHTML=`<strong>${esc(t.label)} · ${esc(record(r.trial).metadata.label)}</strong><br>Target revision: ${r.target.slice(0,12)} · interpretation: ${r.plan.slice(0,12)}<br>Inspection source version: ${esc(r.source_version)}<br>Result version: ${esc(r.result_version)}<br>${active?'Current exact comparison':'Historical — correction cannot activate from this review'}`;
-  initializeReviewViews();showFeedbackDraft();
+  initializeReviewViews();showFeedbackDraft();renderMotion();
 }
 function renderHistory(){
   const entries=[];
-  for(const collection of ['targets','plans','comparisons','feedback','agreements','reference_roles','state_facts'])for(const r of rows(collection)){
+  for(const collection of ['targets','plans','comparisons','videos','motion_reviews','feedback','agreements','reference_roles','state_facts'])for(const r of rows(collection)){
     if(r.target_id&&r.target_id!==regionId)continue;
     let content='';
     if(collection==='targets')content=`<h3>Exact target wording</h3><blockquote>${esc(r.wording)}</blockquote><p class="hint">${esc(r.label)} · ${esc(r.date)} · ${esc(r.source)}${r.supersedes?' · supersedes a prior target revision':''}</p>`;
     if(collection==='plans')content=`<h3>${r.correction_from_comparison?'Corrected interpretation':'Interpretation / method'}</h3><p>${esc(r.interpretation)}</p><p><b>Preserve:</b> ${esc(r.preserved_features.join('; '))}<br><b>Method:</b> ${esc(r.method)}<br><b>Expected:</b> ${esc(r.expected_appearance)}</p>${r.correction_wording?`<blockquote>${esc(r.correction_wording)}</blockquote>`:''}`;
     if(collection==='comparisons')content=`<h3>Baseline / trial review · ${esc(r.matching.status)}</h3><p>LEFT: ${esc(r.baseline_caption)}<br>RIGHT: ${esc(r.trial_caption)}</p>`;
     if(collection==='feedback')content=`<h3>${r.interpretation_correction?'User correction of interpretation':'Version-bound feedback'}</h3><blockquote>${esc(r.wording)}</blockquote><p class="hint">${esc(r.date)} · ${esc(r.source)}<br>${esc(r.applicability)}</p>`;
+    if(collection==='videos')content=`<h3>Pinned motion · ${esc(r.metadata.label)}</h3><p>${esc(r.metadata.speed_label)} · ${r.frame_count} decoded frames · ${esc(r.metadata.result_version||'Result version unknown')}</p>`;
+    if(collection==='motion_reviews')content=`<h3>Motion linked to exact comparison · ${esc(r.matching.status)}</h3><p>${esc(r.moment_mapping)}</p>`;
+    if(collection==='feedback'&&r.motion)content+=`<p><b>Motion:</b> ${esc(record(r.motion.video)?.metadata.label||r.motion.video)} · frame ${r.motion.frame_index} · ${r.motion.timestamp_seconds}s<br>Region ${esc(JSON.stringify(r.motion.region))} · ${esc(r.motion.panel)}<br>Source moment: ${esc(r.motion.moment_id||'unknown; no cross-speed inference')}</p>`;
     if(collection==='agreements')content=`<h3>Explicit target / interpretation agreement</h3><blockquote>${esc(r.fact.wording)}</blockquote><p class="hint">${esc(r.scope)}</p>`;
     if(collection==='reference_roles')content=`<h3>Qualified reference role · ${esc(r.role)}</h3><p>Overall: ${esc(r.overall_status)} · ${esc(r.rejection_reason)}<br>Supported: ${esc(r.supported)}<br>Excluded: ${esc(r.excluded)}<br>Unknown: ${esc(r.unknown)}</p>`;
     if(collection==='state_facts')content=`<h3>${esc(r.facet.replaceAll('_',' '))} · ${esc(r.value)}</h3><p>${esc(r.evidence)}</p>${r.fact?`<blockquote>${esc(r.fact.wording)}</blockquote>`:''}`;
@@ -378,6 +386,65 @@ function renderHistory(){
     entries.push({time:r.recorded_at,html:`<article class="history-entry ${r.correction_from_comparison||r.interpretation_correction?'corrected':''}">${status}${content}${scopeText}${provenance(r)}</article>`});
   }
   $('history').innerHTML=entries.sort((a,b)=>b.time.localeCompare(a.time)).map(e=>e.html).join('')||'<p>No history yet.</p>';
+}
+bindForm('video-upload',async form=>{
+  const file=form.elements.file.files[0];
+  if(!file||file.size>20*1024*1024)throw Error('Choose an MP4 smaller than 20 MiB; larger clips can use the service.');
+  const metadata=JSON.parse(form.elements.metadata.value),bytes=new Uint8Array(await file.arrayBuffer());let binary='';
+  for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const result=await request('/api/video-upload',{...scope(),filename:file.name,data:btoa(binary),metadata});
+  await reopen(board.board);$('motion-link').elements.first.value=result.added.videos[0];
+  message('Clip bytes and decoded frame timestamps pinned. Link the clip to the exact comparison.');
+});
+bindForm('motion-link',async form=>{
+  if(!review())throw Error('Display the exact baseline/trial comparison first.');
+  const f=data(form);await operation('motion',{...scope(),comparison:review().record,videos:[f.first,...(f.second?[f.second]:[])]});
+  await reopen(board.board);message('Motion linked to this exact comparison. Unknown and unmatched provenance remains visible.');
+});
+function activeMotion(){return rows('motion_reviews').filter(m=>m.comparison===reviewId).at(-1);}
+function renderMotion(){
+  options('.motionclip-select',rows('videos'),v=>v.metadata.label+' · '+v.metadata.speed_label+' · '+v.record.slice(0,12));
+  const m=activeMotion();
+  if(!m){$('motion-player').innerHTML='<p class="hint">No motion clip is linked to this comparison. Import a producer-supplied clip and its source metadata below. Existing image feedback remains available.</p>';return;}
+  if(!m.videos.includes(motionClipId))motionClipId=m.videos[0];
+  const clip=record(motionClipId),meta=clip.metadata;motionRegion=null;
+  const layout=meta.layout==='baseline_left_trial_right'?'LEFT · '+esc(review().baseline_caption)+' | RIGHT · '+esc(review().trial_caption):meta.layout?esc(meta.layout.replace('_only',''))+' only; other side absent':'Baseline/trial layout unknown; no side inferred';
+  $('motion-player').innerHTML=`<article class="card"><p class="${m.matching.status==='matched declared inputs'?'match':'warning'}"><b>${esc(m.matching.status.toUpperCase())}</b><br>${esc([...m.matching.mismatched.map(x=>'Different: '+x),...m.matching.unknown.map(x=>'Unknown: '+x)].join(' · '))}</p><p class="hint">${esc(m.moment_mapping)}. ${esc(m.matching.basis)}</p><label>Playback clip / speed<select id="motion-speed">${m.videos.map(id=>{const v=record(id);return `<option value="${id}">${esc(v.metadata.label)} · ${esc(v.metadata.speed_label)}</option>`;}).join('')}</select></label><p id="motion-layout">${layout}</p><p class="meta">Baseline version: ${esc(meta.baseline_version||'unknown')}<br>Trial version: ${esc(meta.result_version||'unknown')}<br>Camera / light / state / scale: ${esc([meta.camera,meta.lighting,meta.display_state,meta.framing].map(x=>typeof x==='object'?JSON.stringify(x):x||'unknown').join(' · '))}<br>Extent: ${esc(meta.view_role?.replace('_',' ')||'unknown')} · Pinned clip SHA256 ${clip.asset.sha256}</p><div class="motion-frame"><video id="motion-video" controls playsinline preload="auto" src="/api/video/${board.board}/${clip.record}" aria-label="${esc(meta.label)}"></video><svg id="motion-mark" viewBox="0 0 1 1" preserveAspectRatio="none" hidden><rect id="motion-rect" x="0" y="0" width="0" height="0"/></svg></div><div class="motion-controls"><button id="motion-fit" type="button">Fit complete frame</button><button id="motion-prev" type="button">Previous frame</button><button id="motion-next" type="button">Next frame</button><button id="motion-mark-toggle" type="button">Pause and mark this frame</button><button id="motion-pin" type="button">Pin frame + region to feedback</button></div><label>Decoded frame (zero-based)<input id="motion-frame-index" type="range" min="0" max="${clip.frame_count-1}" step="1" value="0"></label><p id="motion-time" class="scope">Waiting for decoded playback frame.</p><label>Marked side<select id="motion-panel">${meta.layout==='baseline_left_trial_right'?'<option value="trial">RIGHT · isolated trial</option><option value="baseline">LEFT · baseline</option><option value="unresolved">Side unresolved</option>':meta.layout?`<option value="${meta.layout.replace(/_only$/,'')}">${esc(meta.layout.replace(/_only$/,''))}</option>`:'<option value="unresolved">Unresolved</option>'}</select></label><p class="hint">The complete contextual frame fits by default. Marking pauses playback; a thin outline has no filled overlay. Feedback pins that exact clip/frame/region. No mark is converted into geometry.</p>${provenance(clip)}${provenance(m)}</article>`;
+  $('motion-speed').value=motionClipId;
+  const video=$('motion-video'),slider=$('motion-frame-index'),svg=$('motion-mark');let shownIndex=null,start=null;
+  // Property assignment obeys this local UI's strict self-only style policy;
+  // HTML inline style attributes are intentionally not enabled.
+  video.closest('.motion-frame').style.aspectRatio=String(clip.size[0]/clip.size[1]);
+  video.closest('.motion-frame').style.setProperty('--motion-aspect',String(clip.size[0]/clip.size[1]));
+  const indexAt=t=>{let i=0;while(i+1<clip.playback_times.length&&clip.playback_times[i+1]<=t+0.00001)i++;return i;};
+  const displayFrame=i=>{shownIndex=i;slider.value=i;$('motion-time').textContent=`Frame ${i} / ${clip.frame_count-1} · video timestamp ${clip.frame_times[i]}s · playback ${clip.playback_times[i]}s · source moment ${meta.frame_ids?.[i]||'unknown'}`;};
+  if(video.requestVideoFrameCallback){const update=(_,info)=>{if(!video.isConnected)return;displayFrame(indexAt(info.mediaTime));video.requestVideoFrameCallback(update);};video.requestVideoFrameCallback(update);}
+  else {video.addEventListener('seeked',()=>displayFrame(indexAt(video.currentTime)));video.addEventListener('timeupdate',()=>displayFrame(indexAt(video.currentTime)));}
+  const hideMark=()=>{svg.setAttribute('hidden','');video.controls=true;};
+  const seek=i=>{video.pause();hideMark();motionRegion=null;shownIndex=null;video.currentTime=clip.playback_times[Math.max(0,Math.min(clip.frame_count-1,i))]+0.000001;};
+  slider.oninput=()=>seek(Number(slider.value));$('motion-prev').onclick=()=>seek((shownIndex??Number(slider.value))-1);$('motion-next').onclick=()=>seek((shownIndex??Number(slider.value))+1);
+  $('motion-fit').onclick=()=>{video.style.objectFit='contain';hideMark();video.closest('.motion-frame').scrollIntoView({block:'center'});};
+  $('motion-mark-toggle').onclick=()=>{video.pause();const hidden=svg.hasAttribute('hidden');video.controls=!hidden;svg.toggleAttribute('hidden',!hidden);$('motion-mark-toggle').textContent=hidden?'Hide region outline':'Pause and mark this frame';};
+  video.addEventListener('play',()=>{hideMark();motionRegion=null;});
+  const point=e=>{const b=svg.getBoundingClientRect();return[Math.max(0,Math.min(1,(e.clientX-b.left)/b.width)),Math.max(0,Math.min(1,(e.clientY-b.top)/b.height))];};
+  svg.onpointerdown=e=>{if(!video.paused||shownIndex===null)return;start=point(e);svg.setPointerCapture(e.pointerId);e.preventDefault();};
+  svg.onpointermove=e=>{if(!start)return;const p=point(e);motionRegion=[Math.min(p[0],start[0]),Math.min(p[1],start[1]),Math.abs(p[0]-start[0]),Math.abs(p[1]-start[1])];['x','y','width','height'].forEach((k,i)=>$('motion-rect').setAttribute(k,motionRegion[i]));};svg.onpointerup=()=>{start=null;};
+  $('motion-pin').onclick=()=>{
+    try{
+      if(!video.paused||shownIndex===null||!motionRegion||motionRegion[2]<=0||motionRegion[3]<=0)throw Error('Pause a decoded frame and drag a region on it first.');
+      const binding=feedbackBinding();if(feedbackDraft&&(feedbackDraft.board!==binding.board||feedbackDraft.comparison!==binding.comparison))throw Error('Return to the existing draft comparison or clear that draft first.');
+      if(motionDraft)throw Error('This draft already has a pinned frame. Clear it before choosing another moment.');
+      bindFeedbackDraft();motionDraft={review:m.record,video:clip.record,frame_index:shownIndex,timestamp_seconds:clip.frame_times[shownIndex],region:[...motionRegion],panel:$('motion-panel').value};
+      $('feedback-form').elements.include_motion.checked=true;$('feedback-details').open=true;showFeedbackDraft();message('Video frame and region pinned to this feedback draft. Playback will not retarget it.');
+    }catch(e){message(e.message,true);}
+  };
+  $('motion-speed').onchange=()=>{
+    const other=record($('motion-speed').value),moment=meta.frame_ids?.[shownIndex];
+    const mapped=m.speed_matching?.mapping_allowed&&moment?other.metadata.frame_ids?.indexOf(moment):-1;
+    motionClipId=other.record;renderMotion();
+    if(mapped>=0){$('motion-video').addEventListener('loadedmetadata',()=>{$('motion-video').currentTime=other.playback_times[mapped]+0.000001;},{once:true});message('Speed changed using the same explicit source moment; each clip keeps its own timestamp.');}
+    else message('Speed changed. Moment correspondence is unknown or unmatched; no timestamp was copied.');showFeedbackDraft();
+  };
 }
 function setDates(){
   const now=new Date(), day=now.toISOString().slice(0,10);
